@@ -55,21 +55,33 @@ def move_to_device(obj, device):
 def do_train(rank, local_rank, world_size, train_config):
     device = f'cuda:{rank}'
 
+    # Compute exp_name with ablation suffixes (shared across all ranks)
+    experiment_index = len(glob(f"{train_config['train']['output_dir']}/*"))
+    model_string_name = train_config['model']['model_type'].replace("/", "-")
+    if train_config['train']['exp_name'] is None:
+        exp_name = f'{experiment_index:03d}-{model_string_name}'
+    else:
+        exp_name = train_config['train']['exp_name']
+    if not train_config['model']['params'].get('use_aux_encoder', True):
+        exp_name += '_noauxe'
+    if not train_config['model']['params'].get('use_aux_decoder', True):
+        exp_name += '_noauxd'
+    if not train_config['model']['params'].get('use_variance_guide', True):
+        exp_name += '_novarguide'
+    if not train_config['model']['params'].get('use_self_dist', True):
+        exp_name += '_noselfdist'
+    if train_config['model']['params'].get('use_text_condition', False):
+        exp_name += '_textcond'
+
     # Setup an experiment folder:
     if rank == 0:
         os.makedirs(train_config['train']['output_dir'], exist_ok=True)  # Make results folder (holds all experiment subfolders)
-        experiment_index = len(glob(f"{train_config['train']['output_dir']}/*"))
-        model_string_name = train_config['model']['model_type'].replace("/", "-")
-        if train_config['train']['exp_name'] is None:
-            exp_name = f'{experiment_index:03d}-{model_string_name}'
-        else:
-            exp_name = train_config['train']['exp_name']
         experiment_dir = f"{train_config['train']['output_dir']}/{exp_name}"  # Create an experiment folder
         checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(experiment_dir)
         logger.info(f"Experiment directory created at {experiment_dir}")
-        tensorboard_dir_log = f"{train_config['train']['output_dir']}/tensorboard_logs/{exp_name}"
+        tensorboard_dir_log = os.path.abspath(f"{train_config['train']['output_dir']}/tensorboard_logs/{exp_name}")
         os.makedirs(tensorboard_dir_log, exist_ok=True)
         writer = SummaryWriter(log_dir=tensorboard_dir_log)
 
@@ -77,7 +89,7 @@ def do_train(rank, local_rank, world_size, train_config):
         config_str=json.dumps(train_config, indent=4)
         writer.add_text('training configs', config_str, global_step=0)
 
-    checkpoint_dir = f"{train_config['train']['output_dir']}/{train_config['train']['exp_name']}/checkpoints"
+    checkpoint_dir = f"{train_config['train']['output_dir']}/{exp_name}/checkpoints"
 
     # Create model:
     params = train_config.get("model", {}).get("params", {})
@@ -301,7 +313,7 @@ def do_train(rank, local_rank, world_size, train_config):
                 avg_sdis_loss = avg_sdis_loss.item() / dist.get_world_size()
 
                 lr = opt.param_groups[0]['lr']
-                if rank == 0: 
+                if rank == 0:
                     logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f},  Dis: {avg_dis_loss:.4f}, Aux: {avg_aux_loss:.4f}, SDIS: {avg_sdis_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
                     log = {k: float(v) for k, v in log_dict.items()}
                     logger.info(json.dumps(log, indent=2))
@@ -309,6 +321,22 @@ def do_train(rank, local_rank, world_size, train_config):
                         dis_log = {k: float(v) for k, v in log_dict_disc.items()}
                         logger.info(json.dumps(dis_log, indent=2))
                     writer.add_scalar('Loss/train', avg_loss, train_steps)
+                    writer.add_scalar('Loss/aux', avg_aux_loss, train_steps)
+                    writer.add_scalar('Loss/sdis', avg_sdis_loss, train_steps)
+                    writer.add_scalar('Loss/dis', avg_dis_loss, train_steps)
+                    writer.add_scalar('Params/lr', lr, train_steps)
+                    # Log all loss components to tensorboard
+                    for k, v in log_dict.items():
+                        if isinstance(v, (int, float)):
+                            writer.add_scalar(f'Train/{k}', v, train_steps)
+                        elif isinstance(v, torch.Tensor):
+                            writer.add_scalar(f'Train/{k}', v.item(), train_steps)
+                    if train_steps > train_config['model']['params']['loss_params']['disc_start']:
+                        for k, v in log_dict_disc.items():
+                            if isinstance(v, (int, float)):
+                                writer.add_scalar(f'Train/{k}', v, train_steps)
+                            elif isinstance(v, torch.Tensor):
+                                writer.add_scalar(f'Train/{k}', v.item(), train_steps)
                 # Reset monitoring variables:
                 running_loss = 0
                 running_aux_loss = 0
@@ -317,33 +345,33 @@ def do_train(rank, local_rank, world_size, train_config):
                 log_steps = 0
                 start_time = time()
 
-                # Evaluate on validation set
-                if 'valid_path' in train_config['data']:
-                    if rank == 0: 
-                        logger.info(f"Start evaluating at step {train_steps}")
+            # Evaluate on validation set (separate from log interval)
+            eval_every = train_config['train'].get('eval_every', 2000)
+            if train_steps % eval_every == 0 and 'valid_path' in train_config['data']:
+                if rank == 0:
+                    logger.info(f"Start evaluating at step {train_steps}")
 
-                    test_loss = evaluate(model, valid_loader, device, logger if rank==0 else None, writer if rank==0 else None)
+                test_loss = evaluate(model, valid_loader, device, train_steps, logger if rank==0 else None, writer if rank==0 else None)
 
-                    if rank == 0:
-                        is_best = test_loss < best_loss
-                        best_loss = min(test_loss, best_loss)
-                        if is_best and train_steps > 0.7 * train_config['train']['max_steps']:
-                            checkpoint = {
-                                "model": model.module.get_state_dicts_for_save(),
-                                "ema": ema,
-                                "opt": opt.state_dict(),
-                                "opt_disc": opt_disc.state_dict(),
-                                "opt_aux": opt_aux.state_dict(),
-                                "scheduler": scheduler.state_dict(),
-                                "scheduler_disc": scheduler_disc.state_dict(),
-                                "config": train_config,
-                            }
-                            checkpoint_path = f"{checkpoint_dir}/best_ckpt.pt"
-                            torch.save(checkpoint, checkpoint_path)
-                            logger.info(f"Saved best checkpoint to {checkpoint_path} at step {train_steps}")
-                    #dist.barrier(device_ids=[local_rank])
-                    dist.barrier()
-                    model.train()
+                if rank == 0:
+                    is_best = test_loss < best_loss
+                    best_loss = min(test_loss, best_loss)
+                    if is_best and train_steps > 0.7 * train_config['train']['max_steps']:
+                        checkpoint = {
+                            "model": model.module.get_state_dicts_for_save(),
+                            "ema": ema,
+                            "opt": opt.state_dict(),
+                            "opt_disc": opt_disc.state_dict(),
+                            "opt_aux": opt_aux.state_dict(),
+                            "scheduler": scheduler.state_dict(),
+                            "scheduler_disc": scheduler_disc.state_dict(),
+                            "config": train_config,
+                        }
+                        checkpoint_path = f"{checkpoint_dir}/best_ckpt.pt"
+                        torch.save(checkpoint, checkpoint_path)
+                        logger.info(f"Saved best checkpoint to {checkpoint_path} at step {train_steps}")
+                dist.barrier()
+                model.train()
 
 
             # Save checkpoint:
@@ -375,7 +403,7 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info("Done!")
 
 @torch.no_grad()
-def evaluate(model, test_loader, device, logger=None, writer=None):
+def evaluate(model, test_loader, device, train_steps, logger=None, writer=None):
     model.eval()
     loss = AverageMeter()
     
@@ -407,8 +435,15 @@ def evaluate(model, test_loader, device, logger=None, writer=None):
             f"PSNR: {psnr_loss.avg:.2f} | "
             f"LPIPS: {lpips_loss.avg:.4f} | "
             f"Bpp loss: {bpp_loss.avg:.4f} | "
-            f"Aux loss: {aux_loss.avg:.2f}\n"
+            f"Aux loss: {aux_loss.avg:.2f}"
         )
+    if writer is not None:
+        writer.add_scalar('Eval/loss', all_loss.avg, train_steps)
+        writer.add_scalar('Eval/mse', mse_loss.avg, train_steps)
+        writer.add_scalar('Eval/psnr', psnr_loss.avg, train_steps)
+        writer.add_scalar('Eval/lpips', lpips_loss.avg, train_steps)
+        writer.add_scalar('Eval/bpp', bpp_loss.avg, train_steps)
+        writer.add_scalar('Eval/aux_loss', aux_loss.avg, train_steps)
 
     return all_loss.avg
     
@@ -537,11 +572,9 @@ def set_seed(seed=903):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
     os.environ["PYTHONHASHSEED"] = str(seed)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -559,9 +592,30 @@ if __name__ == "__main__":
     # read config
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/debug.yaml')
+    parser.add_argument('--use_aux_encoder', type=int, default=None,
+                        help='1 to enable ELIC aux encoder, 0 to disable. If not set, use config value.')
+    parser.add_argument('--use_aux_decoder', type=int, default=None,
+                        help='1 to enable AuxDecoder residual, 0 to disable. If not set, use config value.')
+    parser.add_argument('--use_variance_guide', type=int, default=None,
+                        help='1 to enable variance-guided reconstruction flow, 0 to use fixed flow_prediction.')
+    parser.add_argument('--use_self_dist', type=int, default=None,
+                        help='1 to enable self-distillation alignment loss, 0 to disable.')
+    parser.add_argument('--use_text_condition', type=int, default=None,
+                        help='1 to use CLIP text embedding instead of latent-conditioned guidance.')
     args = parser.parse_args()
 
     train_config = load_config(args.config)
+    # Inject auxE/auxD ablation flags from CLI (only when explicitly set)
+    if args.use_aux_encoder is not None:
+        train_config['model']['params']['use_aux_encoder'] = bool(args.use_aux_encoder)
+    if args.use_aux_decoder is not None:
+        train_config['model']['params']['use_aux_decoder'] = bool(args.use_aux_decoder)
+    if args.use_variance_guide is not None:
+        train_config['model']['params']['use_variance_guide'] = bool(args.use_variance_guide)
+    if args.use_self_dist is not None:
+        train_config['model']['params']['use_self_dist'] = bool(args.use_self_dist)
+    if args.use_text_condition is not None:
+        train_config['model']['params']['use_text_condition'] = bool(args.use_text_condition)
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()

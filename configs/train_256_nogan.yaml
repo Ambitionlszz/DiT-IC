@@ -1,9 +1,11 @@
 data:
   data_path:
-    - /data/data/LSDIR_sub
-    - /data/data/mlic_train512
+    - /data2/luosheng/data/Datasets/DIV2K_train_HR_clean
+    - /data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png
+    - /data2/luosheng/data/Datasets/LSDIR
+    - /data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png
   valid_path:
-    - /data/data/valid
+    - /data2/luosheng/data/Datasets/Kodak
   im_exts: ['JPEG', 'png', 'jpg', 'jpeg', 'PNG']
   num_workers: 8
   path_size: [256, 256]
@@ -12,11 +14,17 @@ model:
   model_type: Codec
   use_checkpoint: false
   params:
+    use_aux_encoder: True
+    use_aux_decoder: True
+    use_variance_guide: True
+    use_self_dist: True
+    use_text_condition: False
     time: 999
     codec_mode: 'self_dist'
     DiT_mode: 'scale'
+    text_encoder_path: "/data2/luosheng/hf_models/hub/clip-vit-base-patch32"
     dit_path: "SANA"
-    elic_path: "ELIC/weights/elic_official.pth"
+    elic_path: "/data2/luosheng/hf_models/hub/elic_official.pth"
     codec_path: ~
     use_ema: True
     use_merge: False
@@ -61,11 +69,11 @@ model:
 # recommend to use default settings
 train:
   output_dir: 'checkpoints'
-  exp_name: '256_nogan_0.5lrd_100k' # <---- experiment name, set as you like
-  global_batch_size: 72
+  exp_name: 'pure_sana_0.5lrd_bs8_100k' # <---- experiment name, set as you like
+  global_batch_size: 8
   accumulation_steps: 1
   accumulate_disc: false
-  resume: true
+  resume: false
   log_every: 100
   ckpt_every: 10000
   max_steps: 100001

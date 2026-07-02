@@ -124,15 +124,24 @@ class Upsample(nn.Module):
 
 
 class AnalysisTransform(nn.Module):
-    def __init__(self, ch_emd=32, channel=320):
+    def __init__(self, ch_emd=32, channel=320, use_aux_encoder=True):
         super().__init__()
-        self.pre1 = nn.Sequential(
-            nn.Conv2d(ch_emd, 128, kernel_size=3, padding=1),
-        )
-            
-        self.pre2 = nn.Sequential(
-            Downsample(320, 64)
-        )
+        self.use_aux_encoder = use_aux_encoder
+
+        if self.use_aux_encoder:
+            self.pre1 = nn.Sequential(
+                nn.Conv2d(ch_emd, 128, kernel_size=3, padding=1),
+            )
+            self.pre2 = nn.Sequential(
+                Downsample(320, 64)
+            )
+        else:
+            # auxE off: pre1 outputs 192ch directly to match the concat dimension
+            self.pre1 = nn.Sequential(
+                nn.Conv2d(ch_emd, 192, kernel_size=3, padding=1),
+            )
+            self.pre2 = None
+
         self.analysis_transform = nn.Sequential(
             DepthConvBlock(192, 192),
             DepthConvBlock(192, 192),
@@ -141,8 +150,11 @@ class AnalysisTransform(nn.Module):
             DepthConvBlock(320, channel),
         )
 
-    def forward(self, latent, latent2):
-        x = torch.cat((self.pre1(latent), self.pre2(latent2)), dim=1)
+    def forward(self, latent, latent2=None):
+        if self.use_aux_encoder and latent2 is not None:
+            x = torch.cat((self.pre1(latent), self.pre2(latent2)), dim=1)
+        else:
+            x = self.pre1(latent)
         x = self.analysis_transform(x)
         return x
     
@@ -284,34 +296,41 @@ class LRP(nn.Module):
         return self.block(x)
     
 class LatentCodec(nn.Module):
-    def __init__(self, 
+    def __init__(self,
                  ch_emd=32,
-                 channel=320, 
+                 channel=320,
                  channel_out=320,
-                 num_slices=5, 
-                 max_support_slices=5, 
+                 num_slices=5,
+                 max_support_slices=5,
                  kernel_size=8,
                  drop_path_rate=0.1,
                  depths=[2,2,2,2,2],
                  num_heads=[12,12,12,12,12],
+                 use_aux_encoder=True,
+                 use_aux_decoder=True,
                  **kwargs
                  ):
         super().__init__()
-        
+
         M = channel
         self.M = channel
         self.num_slices = num_slices
         self.max_support_slices = max_support_slices
         num_per_slice = channel // self.num_slices
-        
-        self.g_a = AnalysisTransform(ch_emd, channel)
+        self.use_aux_encoder = use_aux_encoder
+        self.use_aux_decoder = use_aux_decoder
+
+        self.g_a = AnalysisTransform(ch_emd, channel, use_aux_encoder=use_aux_encoder)
         self.g_s = SynthesisTransform(channel, channel_out)
         self.scale = SynthesisTransform2(channel, channel_out)
         self.prompt = SynthesisTransform(channel, 320)
         self.h_a = HyperAnalysis(channel)
         self.h_s = HyperSynthesis(channel)
 
-        self.aux = AuxDecoder(ch_emd, channel)
+        if self.use_aux_decoder:
+            self.aux = AuxDecoder(ch_emd, channel)
+        else:
+            self.aux = None
 
         context_dim = M * 2
         self.adapter_in = nn.ModuleList(Adapter(in_ch=M, out_ch=context_dim) for i in range(4))
@@ -514,9 +533,9 @@ class LatentCodec(nn.Module):
         latent_scales = self.scale_with_mask(scales_0_supp, scales_1_supp, scales_2_supp, scales_3_supp, mask_0, mask_1, mask_2, mask_3)
         mean = self.g_s(y_hat)
         scale = self.scale(latent_scales)
-        res = self.aux(y_hat)
+        res = self.aux(y_hat) if self.use_aux_decoder else None
         prompt = self.prompt(y_hat)
-        
+
         return {
             "mean": mean,
             "scale": scale,
@@ -634,7 +653,7 @@ class LatentCodec(nn.Module):
         latent_scales = self.scale_with_mask(scales_0_supp, scales_1_supp, scales_2_supp, scales_3_supp, mask_0, mask_1, mask_2, mask_3)
         mean = self.g_s(y_hat)
         scale = self.scale(latent_scales)
-        res = self.aux(y_hat)
+        res = self.aux(y_hat) if self.use_aux_decoder else None
         prompt = self.prompt(y_hat)
 
         return mean, scale, res, prompt

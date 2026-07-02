@@ -1,0 +1,19 @@
+{
+  "num_images": 24,
+  "avg_bpp": 0.06278403848409653,
+  "results_dir": "results/withaux_lrd4p0/Kodak/infer_baseline_best_ckpt_20260630_030901",
+  "checkpoint": "checkpoints/withaux_100k_lrd4p0/checkpoints/best_ckpt.pt",
+  "config": "configs/infer_baseline.yaml",
+  "use_ema": true,
+  "use_merge": false,
+  "entropy_estimation": true,
+  "timestamp": "20260630_030901",
+  "clipiqa": 0.7097237855195999,
+  "musiq": 71.13421312967937,
+  "niqe": 4.330138829416648,
+  "psnr": 23.612837711970013,
+  "dists": 0.0829142505923907,
+  "ms_ssim": 0.8264541212742741,
+  "lpips": 0.1195200119788448,
+  "fid": 57.3002815246582
+}

@@ -20,7 +20,7 @@ class MyDDPMScheduler:
         self.base_scheduler = base_scheduler
         self.mode = mode
         print(f'========mode is #{mode}#======')
-        if 'adapt' not in self.mode:
+        if self.mode not in ('epsilon', 'sample', 'flow_prediction', 'v_prediction'):
             self.adaptor = AdaptiveNoiseScheduler(mode).to(device)
         else:
             self.adaptor = None

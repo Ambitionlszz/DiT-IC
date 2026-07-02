@@ -141,13 +141,13 @@ class LatentConditionAlignment(nn.Module):
 
 
 class Codec(torch.nn.Module):
-    def __init__(self, 
+    def __init__(self,
                  device='cuda',
                  model_type='Codec',
                  time=999,
                  codec_mode='self_dist',
                  DiT_mode='scale',
-                 dit_path=None, 
+                 dit_path=None,
                  elic_path=None,
                  codec_path=None,
                  use_ema=False,
@@ -157,10 +157,25 @@ class Codec(torch.nn.Module):
                  vae_params=None,
                  codec_param=None,
                  loss_params=None,
+                 use_aux_encoder=True,
+                 use_aux_decoder=True,
+                 use_variance_guide=True,
+                 use_self_dist=True,
+                 use_text_condition=False,
+                 text_encoder_path=None,
                  **kwargs
                  ):
         super().__init__()
-        
+
+        # Ablation flags
+        self.use_variance_guide = use_variance_guide
+        self.use_self_dist = use_self_dist
+        self.use_text_condition = use_text_condition
+
+        # Override DiT_mode when variance guide is disabled
+        if not use_variance_guide:
+            DiT_mode = 'flow_prediction'
+
         self.DiT_mode = DiT_mode
         self.codec_mode = codec_mode
         self.model_type = model_type
@@ -179,6 +194,10 @@ class Codec(torch.nn.Module):
             self.build_DiT(dit_path, DiT_params["channel_in"], device, use_merge)
         
         # Latent Codec
+        if codec_param is None:
+            codec_param = {}
+        codec_param['use_aux_encoder'] = use_aux_encoder
+        codec_param['use_aux_decoder'] = use_aux_decoder
         self.codec = latent_models(model_type, **codec_param)
 
         # Latent Prompt Condition
@@ -192,15 +211,38 @@ class Codec(torch.nn.Module):
             use_clip_contrast = False,
             clip_embed_dim = 768 # 1024, xxx
         )
-        
+
+        # Text Condition (replaces latent-conditioned guidance when use_text_condition=True)
+        if self.use_text_condition:
+            import os
+            # Load pre-computed fixed text embedding (generated offline from the text encoder)
+            embed_path = os.path.join(os.path.dirname(text_encoder_path), 'fixed_text_embed_gemma.pt')
+            if not os.path.exists(embed_path):
+                embed_path = text_encoder_path  # fallback: passed path IS the .pt file
+            embed_data = torch.load(embed_path, map_location='cpu', weights_only=True)
+            self.register_buffer('fixed_text_embed', embed_data['fixed_text_embed'])
+            hidden_size = embed_data['hidden_size']
+            self.text_proj = nn.Linear(hidden_size, 2304)
+            self.text_encoder = None
+            print(f"[TextCond] Loaded pre-computed text embedding from {embed_path}, "
+                  f"hidden_size={hidden_size}, shape={list(self.fixed_text_embed.shape)}")
+        else:
+            self.text_encoder = None
+            self.text_proj = None
+            self.fixed_text_embed = None
+
         # Aux Encoder
-        model = ELIC()
-        if not use_merge:
-            checkpoint = torch.load(elic_path)
-            model.load_state_dict(checkpoint)
-        self.aux_codec = model.g_a
-        self.aux_codec.eval()
-        self.aux_codec.requires_grad_(False)
+        self.use_aux_encoder = use_aux_encoder
+        if self.use_aux_encoder:
+            model = ELIC()
+            if not use_merge:
+                checkpoint = torch.load(elic_path)
+                model.load_state_dict(checkpoint)
+            self.aux_codec = model.g_a
+            self.aux_codec.eval()
+            self.aux_codec.requires_grad_(False)
+        else:
+            self.aux_codec = None
         
         # Loss
         if loss_params["use_vf"] is not None:
@@ -259,7 +301,8 @@ class Codec(torch.nn.Module):
 
         _dit_codec = self.codec.state_dict()
         for k in dit["state_dict_codec"]:
-            _dit_codec[k] = dit["state_dict_codec"][k]
+            if k in _dit_codec:
+                _dit_codec[k] = dit["state_dict_codec"][k]
         self.codec.load_state_dict(_dit_codec)
         self.codec.update()
 
@@ -273,7 +316,10 @@ class Codec(torch.nn.Module):
             _dit_DiT[k] = dit["state_dict_DiT"][k]
         self.DiT.load_state_dict(_dit_DiT)
         
-        self.prompter.load_state_dict(dit["state_dict_prompter"])
+        if self.use_text_condition and "state_dict_text_proj" in dit:
+            self.text_proj.load_state_dict(dit["state_dict_text_proj"])
+        elif not self.use_text_condition and "state_dict_prompter" in dit:
+            self.prompter.load_state_dict(dit["state_dict_prompter"])
 
         if self.use_vf is not None and self.vf_latent:
             self.linear_proj.load_state_dict(dit["state_dict_vf"])
@@ -362,12 +408,17 @@ class Codec(torch.nn.Module):
         params_to_optimize += DiT_lora_params
         
         prompt_params = [p for n, p in self.prompter.named_parameters() if p.requires_grad]
-        params_to_optimize += prompt_params
+        if not self.use_text_condition:
+            params_to_optimize += prompt_params
 
         if self.use_vf is not None and self.vf_latent:
             # VF params
             vf_params = list(self.linear_proj.parameters())
             params_to_optimize += vf_params
+
+        # Text projection params (when using text conditioning)
+        if self.use_text_condition and self.text_proj is not None:
+            params_to_optimize += list(self.text_proj.parameters())
 
         return params_to_optimize
     
@@ -394,7 +445,11 @@ class Codec(torch.nn.Module):
         save_dict["state_dict_DiT"] = {**DiT_lora_state}
 
         prompter = getattr(self.prompter, "module", self.prompter)
-        save_dict["state_dict_prompter"] = prompter.state_dict()
+        if self.use_text_condition:
+            text_proj = getattr(self.text_proj, "module", self.text_proj)
+            save_dict["state_dict_text_proj"] = text_proj.state_dict()
+        else:
+            save_dict["state_dict_prompter"] = prompter.state_dict()
 
         if self.use_vf is not None and self.vf_latent:
             # VF params
@@ -404,14 +459,19 @@ class Codec(torch.nn.Module):
         return save_dict
     
     def get_last_layer(self):
-        return self.codec.aux.block[-1].weight
-    
+        if self.codec.aux is not None:
+            return self.codec.aux.block[-1].weight
+        return self.codec.g_s.synthesis_transform[-1].weight
+
     def get_vf_last_layer(self):
-        return self.codec.aux.block[-1].weight
+        return self.get_last_layer()
     
     def forward(self, c_t, cfg=False):
         # 1. Encoder
-        latent2 = self.aux_codec((c_t + 1) / 2).detach()
+        if self.use_aux_encoder:
+            latent2 = self.aux_codec((c_t + 1) / 2).detach()
+        else:
+            latent2 = None
         lq_latent = self.vae.encode(c_t).latent * self.vae.config.scaling_factor
 
 
@@ -449,7 +509,11 @@ class Codec(torch.nn.Module):
                 )
         
         # 3. Encode input prompt
-        pos_caption_enc = self.prompter(prompt)
+        if self.use_text_condition:
+            # Use fixed text embedding instead of latent-conditioned guidance
+            pos_caption_enc = self.text_proj(self.fixed_text_embed).expand(lq_latent_hat.shape[0], -1, -1)
+        else:
+            pos_caption_enc = self.prompter(prompt)
 
         # 4. Denoising loop
         # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
@@ -468,11 +532,16 @@ class Codec(torch.nn.Module):
         )[0]
 
         # compute previous image: x_t -> x_t-1
-        x_denoised = self.sched.step(model_pred, lq_scale_hat, self.timesteps, lq_latent_hat, return_dict=True) + res
+        x_denoised = self.sched.step(model_pred, lq_scale_hat, self.timesteps, lq_latent_hat, return_dict=True)
+        if res is not None:
+            x_denoised = x_denoised + res
 
         if self.codec_mode == 'self_dist':
-            # kl_loss = 0.05 * (1 - F.cosine_similarity(x_denoised, lq_latent)).mean()
-            kl_loss = 0.05 * F.relu(1 - 0.5 - F.cosine_similarity(x_denoised, lq_latent)).mean()
+            if self.use_self_dist:
+                # kl_loss = 0.05 * (1 - F.cosine_similarity(x_denoised, lq_latent)).mean()
+                kl_loss = 0.05 * F.relu(1 - 0.5 - F.cosine_similarity(x_denoised, lq_latent)).mean()
+            else:
+                kl_loss = torch.tensor(0.0, device=lq_latent_hat.device)
 
         # 5. Decoder
         output_image = self.vae.decode(x_denoised / self.vae.config.scaling_factor, return_dict=False)[0].clamp(-1, 1)
@@ -499,9 +568,12 @@ class Codec(torch.nn.Module):
         return output_image, rate, None, None, kl_loss
     
     def compress(self, c_t):
-        
+
         # 1. Encoder
-        latent2 = self.aux_codec((c_t + 1) / 2).detach()
+        if self.use_aux_encoder:
+            latent2 = self.aux_codec((c_t + 1) / 2).detach()
+        else:
+            latent2 = None
         lq_latent = self.vae.encode(c_t).latent * self.vae.config.scaling_factor
 
         # 2. Latent Codec
@@ -526,7 +598,12 @@ class Codec(torch.nn.Module):
             lq_latent_hat = lq_mean_hat
         
         # 2. Encode input prompt
-        pos_caption_enc = self.prompter(prompt)
+        if self.use_text_condition:
+            # Use fixed text embedding instead of latent-conditioned guidance
+            pos_caption_enc = self.text_proj(self.fixed_text_embed).expand(lq_latent_hat.shape[0], -1, -1)
+            pos_caption_enc = pos_caption_enc.to(lq_latent_hat.device)
+        else:
+            pos_caption_enc = self.prompter(prompt)
 
         # 3. Denoising loop
         # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
@@ -545,7 +622,9 @@ class Codec(torch.nn.Module):
         )[0]
 
         # compute previous image: x_t -> x_t-1
-        x_denoised = self.sched.step(model_pred, lq_scale_hat, self.timesteps, lq_latent_hat, return_dict=True) + res
+        x_denoised = self.sched.step(model_pred, lq_scale_hat, self.timesteps, lq_latent_hat, return_dict=True)
+        if res is not None:
+            x_denoised = x_denoised + res
 
         # Decoder
         output_image = self.vae.decode(x_denoised / self.vae.config.scaling_factor, return_dict=False)[0].clamp(-1, 1)

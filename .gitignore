@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+checkpoints/
+output/
+logs/
+SANA/transformer/*.safetensors
+SANA/transformer/*.bin
+SANA/vae/*.safetensors
+SANA/vae/*.bin
+.claude/
+.empty/
