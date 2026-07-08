@@ -558,10 +558,12 @@ def set_seed(seed=903):
 
 
 def setup_ddp():
-    dist.init_process_group("nccl")
+    backend = "nccl" if torch.cuda.device_count() > 1 else "gloo"
+    dist.init_process_group(backend)
     rank = dist.get_rank()
     local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
+    if backend == "nccl":
+        torch.cuda.set_device(local_rank)
     return rank, dist.get_world_size(), local_rank
 
 def cleanup_ddp():
@@ -571,9 +573,13 @@ if __name__ == "__main__":
     # read config
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/debug.yaml')
+    parser.add_argument('--upsample_mode', type=str, default=None,
+                        help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
 
     train_config = load_config(args.config)
+    if args.upsample_mode is not None:
+        train_config['model']['params']['upsample_mode'] = args.upsample_mode
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()

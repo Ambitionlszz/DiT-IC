@@ -44,12 +44,31 @@ def detect_aux_from_checkpoint(codec_path, use_ema=False):
 
     ckpt = torch.load(codec_path, map_location="cpu")
     key = "ema" if use_ema else "model"
-    if key not in ckpt:
-        print(f"[AutoDetect] Key '{key}' not found in checkpoint, available keys: {list(ckpt.keys())}")
-        key = list(ckpt.keys())[0]  # fallback to first key (ema or model)
-        print(f"[AutoDetect] Using '{key}' instead")
 
-    state_dict_codec = ckpt[key].get("state_dict_codec", {})
+    # Try to find state_dict_codec: may be inside ckpt["ema"]["state_dict_codec"]
+    # (training ckpt), or ckpt may be a raw state_dict.
+    state_dict_codec = {}
+
+    if key in ckpt and isinstance(ckpt[key], dict):
+        state_dict_codec = ckpt[key].get("state_dict_codec", {})
+    elif "state_dict_codec" in ckpt:
+        state_dict_codec = ckpt["state_dict_codec"]
+    else:
+        # Raw state_dict: check all keys directly
+        print(f"[AutoDetect] Key '{key}' not found — checkpoint appears to be a raw state_dict.")
+        all_keys = list(ckpt.keys())
+        use_aux_encoder = any("g_a.pre2" in k for k in all_keys)
+        use_aux_decoder = any("aux.block" in k for k in all_keys)
+        print(f"[AutoDetect] Checkpoint: {codec_path}")
+        print(f"[AutoDetect]   use_aux_encoder: {use_aux_encoder}")
+        print(f"[AutoDetect]   use_aux_decoder: {use_aux_decoder}")
+        print(f"[AutoDetect]   ema mode: {use_ema}")
+        del ckpt
+        return {
+            "use_aux_encoder": use_aux_encoder,
+            "use_aux_decoder": use_aux_decoder,
+        }
+
     codec_keys = list(state_dict_codec.keys())
 
     use_aux_encoder = any("g_a.pre2" in k for k in codec_keys)

@@ -114,10 +114,25 @@ class Upsample(nn.Module):
         self.up = nn.Sequential(
             nn.Conv2d(in_ch, in_ch, kernel_size=3, padding=1),
             nn.GELU(),
-            nn.Conv2d(in_ch, out_ch * 4, kernel_size=1, padding=0), 
+            nn.Conv2d(in_ch, out_ch * 4, kernel_size=1, padding=0),
             nn.PixelShuffle(2),
         )
         self.branch1 = self.up  # legacy name for loading old checkpoints
+
+    def forward(self, x):
+        return self.up(x)
+
+
+class UpsampleConvTranspose(nn.Module):
+    """ConvTranspose2d-based upsampling, matching ELIC's deconv."""
+    def __init__(self, in_ch, out_ch, kernel_size=4):
+        super().__init__()
+        self.up = nn.ConvTranspose2d(
+            in_ch, out_ch,
+            kernel_size=kernel_size,
+            stride=2,
+            padding=1,
+        )
 
     def forward(self, x):
         return self.up(x)
@@ -159,43 +174,46 @@ class AnalysisTransform(nn.Module):
         return x
     
 class SynthesisTransform(nn.Module):
-    def __init__(self, channel=320, channel_out=32) -> None:
+    def __init__(self, channel=320, channel_out=32, upsample_mode="pixelshuffle") -> None:
         super().__init__()
+        _upsample_cls = Upsample if upsample_mode == "pixelshuffle" else UpsampleConvTranspose
         self.synthesis_transform = nn.Sequential(
             DepthConvBlock(channel, 320),
             DepthConvBlock(320, 320),
             DepthConvBlock(320, 320),
-            Upsample(320, 320),
+            _upsample_cls(320, 320),
             nn.Conv2d(320, channel_out, kernel_size=3, padding=1)
         )
-        
+
     def forward(self, x):
         x = self.synthesis_transform(x)
         return x
 
 class SynthesisTransform2(nn.Module):
-    def __init__(self, channel=320, channel_out=32) -> None:
+    def __init__(self, channel=320, channel_out=32, upsample_mode="pixelshuffle") -> None:
         super().__init__()
+        _upsample_cls = Upsample if upsample_mode == "pixelshuffle" else UpsampleConvTranspose
         self.synthesis_transform = nn.Sequential(
             DepthConvBlock(channel, 320),
             DepthConvBlock(320, 320),
             DepthConvBlock(320, 320),
-            Upsample(320, 192),
+            _upsample_cls(320, 192),
             nn.Conv2d(192, channel_out, kernel_size=3, padding=1)
         )
-        
+
     def forward(self, x):
         x = self.synthesis_transform(x)
         return x
         
     
 class AuxDecoder(nn.Module):
-    def __init__(self, ch_emd=32, channel=320) -> None:
+    def __init__(self, ch_emd=32, channel=320, upsample_mode="pixelshuffle") -> None:
         super().__init__()
+        _upsample_cls = Upsample if upsample_mode == "pixelshuffle" else UpsampleConvTranspose
         self.block = nn.Sequential(
             DepthConvBlock(channel, 320),
             DepthConvBlock(320, 320),
-            Upsample(320, 320),
+            _upsample_cls(320, 320),
             nn.Conv2d(320, ch_emd, kernel_size=3, padding=1)
         )
 
@@ -308,6 +326,7 @@ class LatentCodec(nn.Module):
                  num_heads=[12,12,12,12,12],
                  use_aux_encoder=True,
                  use_aux_decoder=True,
+                 upsample_mode="pixelshuffle",
                  **kwargs
                  ):
         super().__init__()
@@ -319,16 +338,17 @@ class LatentCodec(nn.Module):
         num_per_slice = channel // self.num_slices
         self.use_aux_encoder = use_aux_encoder
         self.use_aux_decoder = use_aux_decoder
+        self.upsample_mode = upsample_mode
 
         self.g_a = AnalysisTransform(ch_emd, channel, use_aux_encoder=use_aux_encoder)
-        self.g_s = SynthesisTransform(channel, channel_out)
-        self.scale = SynthesisTransform2(channel, channel_out)
-        self.prompt = SynthesisTransform(channel, 320)
+        self.g_s = SynthesisTransform(channel, channel_out, upsample_mode=upsample_mode)
+        self.scale = SynthesisTransform2(channel, channel_out, upsample_mode=upsample_mode)
+        self.prompt = SynthesisTransform(channel, 320, upsample_mode=upsample_mode)
         self.h_a = HyperAnalysis(channel)
         self.h_s = HyperSynthesis(channel)
 
         if self.use_aux_decoder:
-            self.aux = AuxDecoder(ch_emd, channel)
+            self.aux = AuxDecoder(ch_emd, channel, upsample_mode=upsample_mode)
         else:
             self.aux = None
 
@@ -548,7 +568,7 @@ class LatentCodec(nn.Module):
         y = self.g_a(latent, latent2)
         z = self.h_a(y)
 
-        torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.deterministic = True
         z_strings = self.entropy_bottleneck.compress(z)
         z_hat = self.entropy_bottleneck.decompress(z_strings, z.size()[-2:])
 
@@ -595,7 +615,7 @@ class LatentCodec(nn.Module):
         y_string = encoder.flush()
         y_strings.append(y_string)
 
-        torch.backends.cudnn.deterministic = False
+        # torch.backends.cudnn.deterministic = False
 
         return {
             "strings": [y_strings, z_strings],
@@ -604,7 +624,7 @@ class LatentCodec(nn.Module):
 
     def decompress(self, strings, shape):
 
-        torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.deterministic = True
         y_strings = strings[0][0]
         z_strings = strings[1]
         z_hat = self.entropy_bottleneck.decompress(z_strings, shape)
@@ -648,7 +668,7 @@ class LatentCodec(nn.Module):
 
         y_hat = y_hat_0 + y_hat_1 + y_hat_2 + y_hat_3
 
-        torch.backends.cudnn.deterministic = False
+        # torch.backends.cudnn.deterministic = False
 
         latent_scales = self.scale_with_mask(scales_0_supp, scales_1_supp, scales_2_supp, scales_3_supp, mask_0, mask_1, mask_2, mask_3)
         mean = self.g_s(y_hat)

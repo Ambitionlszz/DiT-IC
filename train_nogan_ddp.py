@@ -228,9 +228,13 @@ def do_train(rank, local_rank, world_size, train_config):
     best_loss = float("inf")
     start_time = time()
     
+    accumulation_steps = train_config['train'].get('accumulation_steps', 1)
+    accum_count = 0
+    disc_start = train_config['model']['params']['loss_params']['disc_start']
+
     while True:
         # sampler.set_epoch(train_steps)
-        epoch = train_steps // len(loader)  # ★DDP: ensure shuffle
+        epoch = (train_steps * accumulation_steps) // max(1, len(loader))  # ★DDP: ensure shuffle
         sampler.set_epoch(epoch)
 
 
@@ -238,125 +242,171 @@ def do_train(rank, local_rank, world_size, train_config):
         for x in loader:
             x = x.to(device)
 
-            # if optimizer_idx == 0: train codec
+            # ---- forward pass ----
             output_image, rate, z, aux_feature, kl_loss = model(x)
-            if train_steps < train_config['model']['params']['loss_params']['disc_start']:
+
+            # Generator loss
+            if train_steps < disc_start:
                 loss, log_dict = model.module.loss(x, output_image, rate, -1, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature, 
+                                            last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature,
                                             enc_last_layer=model.module.get_vf_last_layer())
             else:
                 loss, log_dict = model.module.loss(x, output_image, rate, 0, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature, 
+                                            last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature,
                                             enc_last_layer=model.module.get_vf_last_layer())
             loss += kl_loss
-            opt.zero_grad()
-            loss.backward()
-            if 'max_grad_norm' in train_config['optimizer']:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), train_config['optimizer']['max_grad_norm'])
-            opt.step()
-            scheduler.step()
-            # aux loss
-            aux_loss = model.module.codec.aux_loss()
-            opt_aux.zero_grad()
-            aux_loss.backward()
-            opt_aux.step()
-            if rank == 0: 
-                update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
+            loss = loss / accumulation_steps
 
-            # if optimizer_idx == 1: train the discriminator
-            
-            if train_steps >= train_config['model']['params']['loss_params']['disc_start']:
+            # Discriminator loss (forward only, backward after clearing stale disc grads)
+            disc_active = train_steps >= disc_start
+            if disc_active:
                 discloss, log_dict_disc = model.module.loss(x, output_image, rate, 1, train_steps,
                                                 last_layer=model.module.get_last_layer(), split="train", enc_last_layer=model.module.get_vf_last_layer())
-                opt_disc.zero_grad()
-                discloss.backward()
-                
-                if 'max_grad_norm' in train_config['optimizer']:
-                    torch.nn.utils.clip_grad_norm_(model.module.loss.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
-                opt_disc.step()
-
-
-                scheduler_disc.step()
+                discloss = discloss / accumulation_steps
             else:
                 discloss = torch.tensor(0.0, device=x.device)
 
-            # Log loss values:
-            running_loss += loss.item()
-            running_aux_loss += aux_loss.item()
+            # Aux loss
+            aux_loss = model.module.codec.aux_loss() / accumulation_steps
+
+            # ---- backward pass (accumulate gradients) ----
+            loss.backward()
+
+            # Discard quantile grads from generator loss, then accumulate aux grads
+            opt_aux.zero_grad()
+            aux_loss.backward()
+
+            # Discard disc grads from generator loss, then accumulate disc grads
+            if disc_active:
+                opt_disc.zero_grad()
+                discloss.backward()
+
+            accum_count += 1
+
+            # Track running losses at original scale
+            running_loss += loss.item() * accumulation_steps
+            running_aux_loss += aux_loss.item() * accumulation_steps
             running_sdis_loss += kl_loss.item()
-            running_dis_loss += discloss.item()
+            running_dis_loss += discloss.item() * accumulation_steps if disc_active else 0.0
             log_steps += 1
-            train_steps += 1
 
-            
-            
-            if train_steps % train_config['train']['log_every'] == 0:
-                # Measure training speed:
-                torch.cuda.synchronize()
-                end_time = time()
-                steps_per_sec = log_steps / (end_time - start_time)
-                # Reduce loss history over all processes:
-                avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                avg_loss = avg_loss.item() / dist.get_world_size()
-                # d loss
-                avg_dis_loss = torch.tensor(running_dis_loss / log_steps, device=device)
-                dist.all_reduce(avg_dis_loss, op=dist.ReduceOp.SUM)
-                avg_dis_loss = avg_dis_loss.item() / dist.get_world_size()
-                # aux loss
-                avg_aux_loss = torch.tensor(running_aux_loss / log_steps, device=device)
-                dist.all_reduce(avg_aux_loss, op=dist.ReduceOp.SUM)
-                avg_aux_loss = avg_aux_loss.item() / dist.get_world_size()
-                # self-dist loss
-                avg_sdis_loss = torch.tensor(running_sdis_loss / log_steps, device=device)
-                dist.all_reduce(avg_sdis_loss, op=dist.ReduceOp.SUM)
-                avg_sdis_loss = avg_sdis_loss.item() / dist.get_world_size()
+            # ---- step optimizers after accumulation ----
+            if accum_count == accumulation_steps:
+                # Generator step
+                if 'max_grad_norm' in train_config['optimizer']:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), train_config['optimizer']['max_grad_norm'])
+                opt.step()
+                scheduler.step()
 
-                lr = opt.param_groups[0]['lr']
+                # Aux step
+                opt_aux.step()
+
+                # Discriminator step
+                if disc_active:
+                    if 'max_grad_norm' in train_config['optimizer']:
+                        torch.nn.utils.clip_grad_norm_(model.module.loss.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
+                    opt_disc.step()
+                    scheduler_disc.step()
+
+                # EMA update
                 if rank == 0:
-                    logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f},  Dis: {avg_dis_loss:.4f}, Aux: {avg_aux_loss:.4f}, SDIS: {avg_sdis_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
-                    log = {k: float(v) for k, v in log_dict.items()}
-                    logger.info(json.dumps(log, indent=2))
-                    if train_steps > train_config['model']['params']['loss_params']['disc_start']:
-                        dis_log = {k: float(v) for k, v in log_dict_disc.items()}
-                        logger.info(json.dumps(dis_log, indent=2))
-                    writer.add_scalar('Loss/train', avg_loss, train_steps)
-                    writer.add_scalar('Loss/aux', avg_aux_loss, train_steps)
-                    writer.add_scalar('Loss/sdis', avg_sdis_loss, train_steps)
-                    writer.add_scalar('Loss/dis', avg_dis_loss, train_steps)
-                    writer.add_scalar('Params/lr', lr, train_steps)
-                    # Log all loss components to tensorboard
-                    for k, v in log_dict.items():
-                        if isinstance(v, (int, float)):
-                            writer.add_scalar(f'Train/{k}', v, train_steps)
-                        elif isinstance(v, torch.Tensor):
-                            writer.add_scalar(f'Train/{k}', v.item(), train_steps)
-                    if train_steps > train_config['model']['params']['loss_params']['disc_start']:
-                        for k, v in log_dict_disc.items():
+                    update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)
+
+                # Zero all gradients for next accumulation cycle
+                opt.zero_grad()
+                opt_aux.zero_grad()
+                opt_disc.zero_grad()
+
+                train_steps += 1
+                accum_count = 0
+
+                # ---- logging ----
+                if train_steps > 0 and train_steps % train_config['train']['log_every'] == 0:
+                    # Measure training speed:
+                    torch.cuda.synchronize()
+                    end_time = time()
+                    steps_per_sec = log_steps / (end_time - start_time)
+                    # Reduce loss history over all processes:
+                    avg_loss = torch.tensor(running_loss / log_steps, device=device)
+                    dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+                    avg_loss = avg_loss.item() / dist.get_world_size()
+                    # d loss
+                    avg_dis_loss = torch.tensor(running_dis_loss / log_steps, device=device)
+                    dist.all_reduce(avg_dis_loss, op=dist.ReduceOp.SUM)
+                    avg_dis_loss = avg_dis_loss.item() / dist.get_world_size()
+                    # aux loss
+                    avg_aux_loss = torch.tensor(running_aux_loss / log_steps, device=device)
+                    dist.all_reduce(avg_aux_loss, op=dist.ReduceOp.SUM)
+                    avg_aux_loss = avg_aux_loss.item() / dist.get_world_size()
+                    # self-dist loss
+                    avg_sdis_loss = torch.tensor(running_sdis_loss / log_steps, device=device)
+                    dist.all_reduce(avg_sdis_loss, op=dist.ReduceOp.SUM)
+                    avg_sdis_loss = avg_sdis_loss.item() / dist.get_world_size()
+
+                    lr = opt.param_groups[0]['lr']
+                    if rank == 0:
+                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f},  Dis: {avg_dis_loss:.4f}, Aux: {avg_aux_loss:.4f}, SDIS: {avg_sdis_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
+                        log = {k: float(v) for k, v in log_dict.items()}
+                        logger.info(json.dumps(log, indent=2))
+                        if train_steps > disc_start:
+                            dis_log = {k: float(v) for k, v in log_dict_disc.items()}
+                            logger.info(json.dumps(dis_log, indent=2))
+                        writer.add_scalar('Loss/train', avg_loss, train_steps)
+                        writer.add_scalar('Loss/aux', avg_aux_loss, train_steps)
+                        writer.add_scalar('Loss/sdis', avg_sdis_loss, train_steps)
+                        writer.add_scalar('Loss/dis', avg_dis_loss, train_steps)
+                        writer.add_scalar('Params/lr', lr, train_steps)
+                        # Log all loss components to tensorboard
+                        for k, v in log_dict.items():
                             if isinstance(v, (int, float)):
                                 writer.add_scalar(f'Train/{k}', v, train_steps)
                             elif isinstance(v, torch.Tensor):
                                 writer.add_scalar(f'Train/{k}', v.item(), train_steps)
-                # Reset monitoring variables:
-                running_loss = 0
-                running_aux_loss = 0
-                running_sdis_loss = 0
-                running_dis_loss = 0
-                log_steps = 0
-                start_time = time()
+                        if train_steps > disc_start:
+                            for k, v in log_dict_disc.items():
+                                if isinstance(v, (int, float)):
+                                    writer.add_scalar(f'Train/{k}', v, train_steps)
+                                elif isinstance(v, torch.Tensor):
+                                    writer.add_scalar(f'Train/{k}', v.item(), train_steps)
+                    # Reset monitoring variables:
+                    running_loss = 0
+                    running_aux_loss = 0
+                    running_sdis_loss = 0
+                    running_dis_loss = 0
+                    log_steps = 0
+                    start_time = time()
 
-            # Evaluate on validation set (separate from log interval)
-            eval_every = train_config['train'].get('eval_every', 2000)
-            if train_steps % eval_every == 0 and 'valid_path' in train_config['data']:
-                if rank == 0:
-                    logger.info(f"Start evaluating at step {train_steps}")
+                # ---- evaluation ----
+                eval_every = train_config['train'].get('eval_every', 2000)
+                if train_steps > 0 and train_steps % eval_every == 0 and 'valid_path' in train_config['data']:
+                    if rank == 0:
+                        logger.info(f"Start evaluating at step {train_steps}")
 
-                test_loss = evaluate(model, valid_loader, device, train_steps, logger if rank==0 else None, writer if rank==0 else None)
+                    test_loss = evaluate(model, valid_loader, device, train_steps, logger if rank==0 else None, writer if rank==0 else None)
 
-                if rank == 0:
-                    is_best = test_loss < best_loss
-                    best_loss = min(test_loss, best_loss)
-                    if is_best and train_steps > 0.7 * train_config['train']['max_steps']:
+                    if rank == 0:
+                        is_best = test_loss < best_loss
+                        best_loss = min(test_loss, best_loss)
+                        if is_best and train_steps > 0.7 * train_config['train']['max_steps']:
+                            checkpoint = {
+                                "model": model.module.get_state_dicts_for_save(),
+                                "ema": ema,
+                                "opt": opt.state_dict(),
+                                "opt_disc": opt_disc.state_dict(),
+                                "opt_aux": opt_aux.state_dict(),
+                                "scheduler": scheduler.state_dict(),
+                                "scheduler_disc": scheduler_disc.state_dict(),
+                                "config": train_config,
+                            }
+                            checkpoint_path = f"{checkpoint_dir}/best_ckpt.pt"
+                            torch.save(checkpoint, checkpoint_path)
+                            logger.info(f"Saved best checkpoint to {checkpoint_path} at step {train_steps}")
+                    dist.barrier()
+                    model.train()
+
+                # ---- save checkpoint ----
+                if train_steps % train_config['train']['ckpt_every'] == 0 and train_steps > 0:
+                    if rank == 0:
                         checkpoint = {
                             "model": model.module.get_state_dicts_for_save(),
                             "ema": ema,
@@ -367,35 +417,14 @@ def do_train(rank, local_rank, world_size, train_config):
                             "scheduler_disc": scheduler_disc.state_dict(),
                             "config": train_config,
                         }
-                        checkpoint_path = f"{checkpoint_dir}/best_ckpt.pt"
+                        checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
                         torch.save(checkpoint, checkpoint_path)
-                        logger.info(f"Saved best checkpoint to {checkpoint_path} at step {train_steps}")
-                dist.barrier()
-                model.train()
+                        logger.info(f"Saved checkpoint to {checkpoint_path}")
+                    dist.barrier()
 
-
-            # Save checkpoint:
-            if train_steps % train_config['train']['ckpt_every'] == 0 and train_steps > 0:
-                if rank == 0: 
-                    checkpoint = {
-                        "model": model.module.get_state_dicts_for_save(),
-                        "ema": ema,
-                        "opt": opt.state_dict(),
-                        "opt_disc": opt_disc.state_dict(),
-                        "opt_aux": opt_aux.state_dict(),
-                        "scheduler": scheduler.state_dict(),
-                        "scheduler_disc": scheduler_disc.state_dict(),
-                        "config": train_config,
-                    }
-                    checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
-                    torch.save(checkpoint, checkpoint_path)
-                    logger.info(f"Saved checkpoint to {checkpoint_path}")
-                dist.barrier()
-
-            
-                model.train()
-            if train_steps >= train_config['train']['max_steps']:
-                break
+                    model.train()
+                if train_steps >= train_config['train']['max_steps']:
+                    break
         if train_steps >= train_config['train']['max_steps']:
             break
 
@@ -579,10 +608,12 @@ def set_seed(seed=903):
 
 
 def setup_ddp():
-    dist.init_process_group("nccl")
+    backend = "nccl" if torch.cuda.device_count() > 1 else "gloo"
+    dist.init_process_group(backend)
     rank = dist.get_rank()
     local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
+    if backend == "nccl":
+        torch.cuda.set_device(local_rank)
     return rank, dist.get_world_size(), local_rank
 
 def cleanup_ddp():
@@ -602,6 +633,8 @@ if __name__ == "__main__":
                         help='1 to enable self-distillation alignment loss, 0 to disable.')
     parser.add_argument('--use_text_condition', type=int, default=None,
                         help='1 to use CLIP text embedding instead of latent-conditioned guidance.')
+    parser.add_argument('--upsample_mode', type=str, default=None,
+                        help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
 
     train_config = load_config(args.config)
@@ -616,6 +649,8 @@ if __name__ == "__main__":
         train_config['model']['params']['use_self_dist'] = bool(args.use_self_dist)
     if args.use_text_condition is not None:
         train_config['model']['params']['use_text_condition'] = bool(args.use_text_condition)
+    if args.upsample_mode is not None:
+        train_config['model']['params']['upsample_mode'] = args.upsample_mode
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()
