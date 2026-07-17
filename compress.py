@@ -28,64 +28,6 @@ from eval.compress_utils import *
 from eval.testing_utils import parse_args_testing
 from eval._update_patch_fid import update_patch_fid
 
-
-
-
-def detect_aux_from_checkpoint(codec_path, use_ema=False):
-    """
-    自动检测checkpoint是否使用了aux encoder/decoder。
-    通过检查state_dict_codec中的key来确定模型架构。
-
-    Returns:
-        dict: {'use_aux_encoder': bool, 'use_aux_decoder': bool}
-    """
-    if codec_path is None:
-        return None
-
-    ckpt = torch.load(codec_path, map_location="cpu")
-    key = "ema" if use_ema else "model"
-
-    # Try to find state_dict_codec: may be inside ckpt["ema"]["state_dict_codec"]
-    # (training ckpt), or ckpt may be a raw state_dict.
-    state_dict_codec = {}
-
-    if key in ckpt and isinstance(ckpt[key], dict):
-        state_dict_codec = ckpt[key].get("state_dict_codec", {})
-    elif "state_dict_codec" in ckpt:
-        state_dict_codec = ckpt["state_dict_codec"]
-    else:
-        # Raw state_dict: check all keys directly
-        print(f"[AutoDetect] Key '{key}' not found — checkpoint appears to be a raw state_dict.")
-        all_keys = list(ckpt.keys())
-        use_aux_encoder = any("g_a.pre2" in k for k in all_keys)
-        use_aux_decoder = any("aux.block" in k for k in all_keys)
-        print(f"[AutoDetect] Checkpoint: {codec_path}")
-        print(f"[AutoDetect]   use_aux_encoder: {use_aux_encoder}")
-        print(f"[AutoDetect]   use_aux_decoder: {use_aux_decoder}")
-        print(f"[AutoDetect]   ema mode: {use_ema}")
-        del ckpt
-        return {
-            "use_aux_encoder": use_aux_encoder,
-            "use_aux_decoder": use_aux_decoder,
-        }
-
-    codec_keys = list(state_dict_codec.keys())
-
-    use_aux_encoder = any("g_a.pre2" in k for k in codec_keys)
-    use_aux_decoder = any("aux.block" in k for k in codec_keys)
-
-    print(f"[AutoDetect] Checkpoint: {codec_path}")
-    print(f"[AutoDetect]   use_aux_encoder: {use_aux_encoder}")
-    print(f"[AutoDetect]   use_aux_decoder: {use_aux_decoder}")
-    print(f"[AutoDetect]   ema mode: {use_ema}")
-
-    del ckpt
-    return {
-        "use_aux_encoder": use_aux_encoder,
-        "use_aux_decoder": use_aux_decoder,
-    }
-
-
 class TeeLogger:
     """
     Duplicates stdout to both the original stdout and a log file.
@@ -497,20 +439,6 @@ def main(args):
     config["model"]["params"]["use_ema"] = args.use_ema
     config["model"]["params"]["use_merge"] = args.use_merge
     config["model"]["params"]["training"] = False
-
-    # ---- Auto-detect aux settings from checkpoint ----
-    if args.codec_path is not None:
-        aux_detected = detect_aux_from_checkpoint(args.codec_path, args.use_ema)
-        if aux_detected is not None:
-            config_aux_enc = config["model"]["params"].get("use_aux_encoder", None)
-            config_aux_dec = config["model"]["params"].get("use_aux_decoder", None)
-            if config_aux_enc != aux_detected["use_aux_encoder"]:
-                print(f"[AutoDetect] Overriding use_aux_encoder: config={config_aux_enc} -> detected={aux_detected['use_aux_encoder']}")
-                config["model"]["params"]["use_aux_encoder"] = aux_detected["use_aux_encoder"]
-            if config_aux_dec != aux_detected["use_aux_decoder"]:
-                print(f"[AutoDetect] Overriding use_aux_decoder: config={config_aux_dec} -> detected={aux_detected['use_aux_decoder']}")
-                config["model"]["params"]["use_aux_decoder"] = aux_detected["use_aux_decoder"]
-    # ---------------------------------------------------
 
     params = config.get("model", {}).get("params", {})
     net = codec_models(config['model']['model_type'], 'cuda', **params)

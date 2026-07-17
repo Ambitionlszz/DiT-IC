@@ -80,7 +80,8 @@ def do_train(rank, local_rank, world_size, train_config):
     checkpoint_dir = f"{train_config['train']['output_dir']}/{train_config['train']['exp_name']}/checkpoints"
 
     # Create model:
-    params = train_config.get("model", {}).get("params", {})
+    params = dict(train_config.get("model", {}).get("params", {}))
+    params["training"] = True
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
     
     if rank==0:
@@ -93,7 +94,7 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     opt = torch.optim.AdamW(model.get_trainable_params(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
     opt_disc = torch.optim.AdamW(model.loss.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
-    opt_aux = optim.AdamW(model.get_trainable_auxloss(), lr=train_config['optimizer']['aux_lr'], weight_decay=0)
+    opt_entropy = optim.AdamW(model.get_entropy_parameters(), lr=train_config['optimizer']['entropy_lr'], weight_decay=0)
     
     milestones = train_config['optimizer']['step_lr']
     gammas = [0.5, 0.2, 0.1]
@@ -185,7 +186,7 @@ def do_train(rank, local_rank, world_size, train_config):
             
             opt.load_state_dict(checkpoint['opt'])
             opt_disc.load_state_dict(checkpoint['opt_disc'])
-            opt_aux.load_state_dict(checkpoint['opt_aux'])
+            opt_entropy.load_state_dict(checkpoint['opt_entropy'])
 
             ema = checkpoint['ema']
             ema = move_to_device(checkpoint['ema'], device)
@@ -209,8 +210,7 @@ def do_train(rank, local_rank, world_size, train_config):
         train_steps = 0
     log_steps = 0
     running_loss = 0
-    running_aux_loss = 0
-    running_sdis_loss = 0
+    running_entropy_loss = 0
     running_dis_loss = 0
 
     best_loss = float("inf")
@@ -222,56 +222,30 @@ def do_train(rank, local_rank, world_size, train_config):
         sampler.set_epoch(epoch)
 
 
-        model.module.loss.kl_weight = train_config['train']['lrd']
+        model.module.loss.rate_weight = train_config['train']['rate_weight']
         for x in loader:
             x = x.to(device)
 
-            # if optimizer_idx == 0: train codec
-            output_image, rate, z, aux_feature, kl_loss = model(x)
-            # if train_steps < train_config['model']['params']['loss_params']['disc_start']:
-            #     loss, log_dict = model.module.loss(x, output_image, rate, -1, train_steps,
-            #                                 last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature, 
-            #                                 enc_last_layer=model.module.get_vf_last_layer())
-            # else:
-            #     loss, log_dict = model.module.loss(x, output_image, rate, 0, train_steps,
-            #                                 last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature, 
-            #                                 enc_last_layer=model.module.get_vf_last_layer())
-
+            output_image, rate = model(x)
             loss, log_dict = model.module.loss(x, output_image, rate, 0, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train", z=z, aux_feature=aux_feature, 
-                                            enc_last_layer=model.module.get_vf_last_layer())
-            
-            loss += kl_loss
+                                            last_layer=model.module.get_last_layer(), split="train")
             opt.zero_grad()
             loss.backward()
             if 'max_grad_norm' in train_config['optimizer']:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), train_config['optimizer']['max_grad_norm'])
             opt.step()
             scheduler.step()
-            # aux loss
-            aux_loss = model.module.codec.aux_loss()
-            opt_aux.zero_grad()
-            aux_loss.backward()
-            opt_aux.step()
+            # Entropy-bottleneck quantile loss
+            entropy_loss = model.module.codec.entropy_bottleneck_loss()
+            opt_entropy.zero_grad()
+            entropy_loss.backward()
+            opt_entropy.step()
             if rank == 0: 
                 update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
 
-            # if optimizer_idx == 1: train the discriminator
             opt_disc.zero_grad()
-            # if train_steps >= train_config['model']['params']['loss_params']['disc_start']:
-            #     discloss, log_dict_disc = model.module.loss(x, output_image, rate, 1, train_steps,
-            #                                     last_layer=model.module.get_last_layer(), split="train", enc_last_layer=model.module.get_vf_last_layer())
-            #     discloss.backward()
-                
-            #     if 'max_grad_norm' in train_config['optimizer']:
-            #         torch.nn.utils.clip_grad_norm_(model.module.loss.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
-            #     opt_disc.step()
-
-            # else:
-            #     discloss = torch.tensor(0.0, device=x.device)
-
             discloss, log_dict_disc = model.module.loss(x, output_image, rate, 1, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train", enc_last_layer=model.module.get_vf_last_layer())
+                                            last_layer=model.module.get_last_layer(), split="train")
             discloss.backward()
             
             if 'max_grad_norm' in train_config['optimizer']:
@@ -282,8 +256,7 @@ def do_train(rank, local_rank, world_size, train_config):
 
             # Log loss values:
             running_loss += loss.item()
-            running_aux_loss += aux_loss.item()
-            running_sdis_loss += kl_loss.item()
+            running_entropy_loss += entropy_loss.item()
             running_dis_loss += discloss.item()
             log_steps += 1
             train_steps += 1
@@ -303,18 +276,14 @@ def do_train(rank, local_rank, world_size, train_config):
                 avg_dis_loss = torch.tensor(running_dis_loss / log_steps, device=device)
                 dist.all_reduce(avg_dis_loss, op=dist.ReduceOp.SUM)
                 avg_dis_loss = avg_dis_loss.item() / dist.get_world_size()
-                # aux loss
-                avg_aux_loss = torch.tensor(running_aux_loss / log_steps, device=device)
-                dist.all_reduce(avg_aux_loss, op=dist.ReduceOp.SUM)
-                avg_aux_loss = avg_aux_loss.item() / dist.get_world_size()
-                # self-dist loss
-                avg_sdis_loss = torch.tensor(running_sdis_loss / log_steps, device=device)
-                dist.all_reduce(avg_sdis_loss, op=dist.ReduceOp.SUM)
-                avg_sdis_loss = avg_sdis_loss.item() / dist.get_world_size()
+                # entropy-bottleneck loss
+                avg_entropy_loss = torch.tensor(running_entropy_loss / log_steps, device=device)
+                dist.all_reduce(avg_entropy_loss, op=dist.ReduceOp.SUM)
+                avg_entropy_loss = avg_entropy_loss.item() / dist.get_world_size()
 
                 lr = opt.param_groups[0]['lr']
                 if rank == 0: 
-                    logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f},  Dis: {avg_dis_loss:.4f}, Aux: {avg_aux_loss:.4f}, SDIS: {avg_sdis_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
+                    logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Entropy: {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
                     log = {k: float(v) for k, v in log_dict.items()}
                     logger.info(json.dumps(log, indent=2))
                     if train_steps > train_config['model']['params']['loss_params']['disc_start']:
@@ -323,8 +292,7 @@ def do_train(rank, local_rank, world_size, train_config):
                     writer.add_scalar('Loss/train', avg_loss, train_steps)
                 # Reset monitoring variables:
                 running_loss = 0
-                running_aux_loss = 0
-                running_sdis_loss = 0
+                running_entropy_loss = 0
                 running_dis_loss = 0
                 log_steps = 0
                 start_time = time()
@@ -345,7 +313,7 @@ def do_train(rank, local_rank, world_size, train_config):
                                 "ema": ema,
                                 "opt": opt.state_dict(),
                                 "opt_disc": opt_disc.state_dict(),
-                                "opt_aux": opt_aux.state_dict(),
+                                "opt_entropy": opt_entropy.state_dict(),
                                 "scheduler": scheduler.state_dict(),
                                 "scheduler_disc": scheduler_disc.state_dict(),
                                 "config": train_config,
@@ -366,7 +334,7 @@ def do_train(rank, local_rank, world_size, train_config):
                         "ema": ema,
                         "opt": opt.state_dict(),
                         "opt_disc": opt_disc.state_dict(),
-                        "opt_aux": opt_aux.state_dict(),
+                        "opt_entropy": opt_entropy.state_dict(),
                         "scheduler": scheduler.state_dict(),
                         "scheduler_disc": scheduler_disc.state_dict(),
                         "config": train_config,
@@ -395,13 +363,13 @@ def evaluate(model, test_loader, device, logger=None, writer=None):
     psnr_loss = AverageMeter()
     lpips_loss = AverageMeter()
     bpp_loss = AverageMeter()
-    aux_loss = AverageMeter()
+    entropy_loss = AverageMeter()
     all_loss = AverageMeter()
     
     for x in test_loader:
         x = x.to(device)
 
-        output_image, rate, z, aux_feature, kl_loss = model(x)
+        output_image, rate = model(x)
         loss, rec_loss, psnr, rate_loss, p_loss = model.module.loss(x, output_image, rate, -1, -1, split="eval")
         
         all_loss.update(loss)
@@ -409,7 +377,7 @@ def evaluate(model, test_loader, device, logger=None, writer=None):
         psnr_loss.update(psnr)
         lpips_loss.update(p_loss)
         bpp_loss.update(rate_loss)
-        aux_loss.update((model.module.codec if hasattr(model, 'module') else model.codec).aux_loss())
+        entropy_loss.update((model.module.codec if hasattr(model, 'module') else model.codec).entropy_bottleneck_loss())
 
     if logger is not None:
         logger.info(
@@ -419,7 +387,7 @@ def evaluate(model, test_loader, device, logger=None, writer=None):
             f"PSNR: {psnr_loss.avg:.2f} | "
             f"LPIPS: {lpips_loss.avg:.4f} | "
             f"Bpp loss: {bpp_loss.avg:.4f} | "
-            f"Aux loss: {aux_loss.avg:.2f}\n"
+            f"Entropy loss: {entropy_loss.avg:.2f}\n"
         )
 
     return all_loss.avg
@@ -572,17 +540,16 @@ def cleanup_ddp():
 if __name__ == "__main__":
     # read config
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/debug.yaml')
+    parser.add_argument('--config', type=str, default='configs/pure_sana_train.yaml')
     parser.add_argument('--upsample_mode', type=str, default=None,
                         help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
 
     train_config = load_config(args.config)
     if args.upsample_mode is not None:
-        train_config['model']['params']['upsample_mode'] = args.upsample_mode
+        train_config['model']['params']['codec_param']['upsample_mode'] = args.upsample_mode
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()
     do_train(rank, local_rank, world_size, train_config)
     cleanup_ddp()
-    

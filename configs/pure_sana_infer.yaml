@@ -1,0 +1,18 @@
+model:
+  model_type: Codec
+  params:
+    dit_path: SANA
+    text_encoder_path: SANA/fixed_text_embed_gemma.pt
+    DiT_params:
+      DiT_lora: true
+      lora_rank_DiT: 128
+      lora_alpha_DiT: 128
+    vae_params:
+      vae_lora: true
+      lora_rank_vae: 64
+      lora_alpha_vae: 64
+    codec_param:
+      ch_emd: 32
+      channel: 320
+      channel_out: 32
+      upsample_mode: pixelshuffle

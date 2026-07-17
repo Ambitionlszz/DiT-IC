@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn.init import trunc_normal_
 
 import math
@@ -124,7 +123,7 @@ class Upsample(nn.Module):
 
 
 class UpsampleConvTranspose(nn.Module):
-    """ConvTranspose2d-based upsampling, matching ELIC's deconv."""
+    """ConvTranspose2d-based upsampling for the latent codec."""
     def __init__(self, in_ch, out_ch, kernel_size=4):
         super().__init__()
         self.up = nn.ConvTranspose2d(
@@ -139,23 +138,11 @@ class UpsampleConvTranspose(nn.Module):
 
 
 class AnalysisTransform(nn.Module):
-    def __init__(self, ch_emd=32, channel=320, use_aux_encoder=True):
+    def __init__(self, ch_emd=32, channel=320):
         super().__init__()
-        self.use_aux_encoder = use_aux_encoder
-
-        if self.use_aux_encoder:
-            self.pre1 = nn.Sequential(
-                nn.Conv2d(ch_emd, 128, kernel_size=3, padding=1),
-            )
-            self.pre2 = nn.Sequential(
-                Downsample(320, 64)
-            )
-        else:
-            # auxE off: pre1 outputs 192ch directly to match the concat dimension
-            self.pre1 = nn.Sequential(
-                nn.Conv2d(ch_emd, 192, kernel_size=3, padding=1),
-            )
-            self.pre2 = None
+        self.pre1 = nn.Sequential(
+            nn.Conv2d(ch_emd, 192, kernel_size=3, padding=1),
+        )
 
         self.analysis_transform = nn.Sequential(
             DepthConvBlock(192, 192),
@@ -165,13 +152,8 @@ class AnalysisTransform(nn.Module):
             DepthConvBlock(320, channel),
         )
 
-    def forward(self, latent, latent2=None):
-        if self.use_aux_encoder and latent2 is not None:
-            x = torch.cat((self.pre1(latent), self.pre2(latent2)), dim=1)
-        else:
-            x = self.pre1(latent)
-        x = self.analysis_transform(x)
-        return x
+    def forward(self, latent):
+        return self.analysis_transform(self.pre1(latent))
     
 class SynthesisTransform(nn.Module):
     def __init__(self, channel=320, channel_out=32, upsample_mode="pixelshuffle") -> None:
@@ -189,38 +171,6 @@ class SynthesisTransform(nn.Module):
         x = self.synthesis_transform(x)
         return x
 
-class SynthesisTransform2(nn.Module):
-    def __init__(self, channel=320, channel_out=32, upsample_mode="pixelshuffle") -> None:
-        super().__init__()
-        _upsample_cls = Upsample if upsample_mode == "pixelshuffle" else UpsampleConvTranspose
-        self.synthesis_transform = nn.Sequential(
-            DepthConvBlock(channel, 320),
-            DepthConvBlock(320, 320),
-            DepthConvBlock(320, 320),
-            _upsample_cls(320, 192),
-            nn.Conv2d(192, channel_out, kernel_size=3, padding=1)
-        )
-
-    def forward(self, x):
-        x = self.synthesis_transform(x)
-        return x
-        
-    
-class AuxDecoder(nn.Module):
-    def __init__(self, ch_emd=32, channel=320, upsample_mode="pixelshuffle") -> None:
-        super().__init__()
-        _upsample_cls = Upsample if upsample_mode == "pixelshuffle" else UpsampleConvTranspose
-        self.block = nn.Sequential(
-            DepthConvBlock(channel, 320),
-            DepthConvBlock(320, 320),
-            _upsample_cls(320, 320),
-            nn.Conv2d(320, ch_emd, kernel_size=3, padding=1)
-        )
-
-    def forward(self, x):
-        x = self.block(x)
-        return x
-    
 class HyperAnalysis(nn.Module):
     def __init__(self, channel=320) -> None:
         super().__init__()
@@ -324,8 +274,6 @@ class LatentCodec(nn.Module):
                  drop_path_rate=0.1,
                  depths=[2,2,2,2,2],
                  num_heads=[12,12,12,12,12],
-                 use_aux_encoder=True,
-                 use_aux_decoder=True,
                  upsample_mode="pixelshuffle",
                  **kwargs
                  ):
@@ -336,21 +284,12 @@ class LatentCodec(nn.Module):
         self.num_slices = num_slices
         self.max_support_slices = max_support_slices
         num_per_slice = channel // self.num_slices
-        self.use_aux_encoder = use_aux_encoder
-        self.use_aux_decoder = use_aux_decoder
         self.upsample_mode = upsample_mode
 
-        self.g_a = AnalysisTransform(ch_emd, channel, use_aux_encoder=use_aux_encoder)
+        self.g_a = AnalysisTransform(ch_emd, channel)
         self.g_s = SynthesisTransform(channel, channel_out, upsample_mode=upsample_mode)
-        self.scale = SynthesisTransform2(channel, channel_out, upsample_mode=upsample_mode)
-        self.prompt = SynthesisTransform(channel, 320, upsample_mode=upsample_mode)
         self.h_a = HyperAnalysis(channel)
         self.h_s = HyperSynthesis(channel)
-
-        if self.use_aux_decoder:
-            self.aux = AuxDecoder(ch_emd, channel, upsample_mode=upsample_mode)
-        else:
-            self.aux = None
 
         context_dim = M * 2
         self.adapter_in = nn.ModuleList(Adapter(in_ch=M, out_ch=context_dim) for i in range(4))
@@ -408,14 +347,12 @@ class LatentCodec(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
             
-    def aux_loss(self):
-        """Return the aggregated loss over the auxiliary entropy bottleneck
-        module(s).
-        """
-        aux_loss = sum(
+    def entropy_bottleneck_loss(self):
+        """Return the aggregated entropy-bottleneck quantile loss."""
+        loss = sum(
             m.loss() for m in self.modules() if isinstance(m, EntropyBottleneck)
         )
-        return aux_loss
+        return loss
     
     def update(self, scale_table=None, force=False):
         if scale_table is None:
@@ -489,24 +426,8 @@ class LatentCodec(nn.Module):
         latent_hat = self.unsequeeze_with_mask(latent_hat, mask)
         return latent_hat, y_likelihoods
 
-    def scale_with_mask(self, scales_1, scales_2, scales_3, scales_4, mask_0, mask_1, mask_2, mask_3):
-        scales_1 = self.sequeeze_with_mask(scales_1, mask_0)
-        scales_1 = self.unsequeeze_with_mask(scales_1, mask_0)
-
-        scales_2 = self.sequeeze_with_mask(scales_2, mask_1)
-        scales_2 = self.unsequeeze_with_mask(scales_2, mask_1)
-
-        scales_3 = self.sequeeze_with_mask(scales_3, mask_2)
-        scales_3 = self.unsequeeze_with_mask(scales_3, mask_2)
-
-        scales_4 = self.sequeeze_with_mask(scales_4, mask_3)
-        scales_4 = self.unsequeeze_with_mask(scales_4, mask_3)
-
-        scales = scales_1 + scales_2 + scales_3 + scales_4
-        return scales
-
-    def forward(self, latent, latent2):
-        y = self.g_a(latent, latent2)
+    def forward(self, latent):
+        y = self.g_a(latent)
         z = self.h_a(y)
 
         # torch.backends.cudnn.deterministic = True
@@ -550,22 +471,15 @@ class LatentCodec(nn.Module):
         y_likelihoods = y_likelihoods_0 + y_likelihoods_1 + y_likelihoods_2 + y_likelihoods_3 
         # torch.backends.cudnn.deterministic = False
         
-        latent_scales = self.scale_with_mask(scales_0_supp, scales_1_supp, scales_2_supp, scales_3_supp, mask_0, mask_1, mask_2, mask_3)
         mean = self.g_s(y_hat)
-        scale = self.scale(latent_scales)
-        res = self.aux(y_hat) if self.use_aux_decoder else None
-        prompt = self.prompt(y_hat)
 
         return {
             "mean": mean,
-            "scale": scale,
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
-            "res": res,
-            "prompt": prompt
         }
 
-    def compress(self, latent, latent2):
-        y = self.g_a(latent, latent2)
+    def compress(self, latent):
+        y = self.g_a(latent)
         z = self.h_a(y)
 
         # torch.backends.cudnn.deterministic = True
@@ -670,16 +584,11 @@ class LatentCodec(nn.Module):
 
         # torch.backends.cudnn.deterministic = False
 
-        latent_scales = self.scale_with_mask(scales_0_supp, scales_1_supp, scales_2_supp, scales_3_supp, mask_0, mask_1, mask_2, mask_3)
         mean = self.g_s(y_hat)
-        scale = self.scale(latent_scales)
-        res = self.aux(y_hat) if self.use_aux_decoder else None
-        prompt = self.prompt(y_hat)
 
-        return mean, scale, res, prompt
+        return mean
 
 if __name__ == '__main__':
     model = LatentCodec()
     x = torch.randn(1, 4, 32, 32)
-    y = torch.randn(1, 320, 16, 16)
-    model(x,y)
+    model(x)

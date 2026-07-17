@@ -1,0 +1,55 @@
+model:
+  model_type: Codec
+  params:
+    dit_path: SANA
+    text_encoder_path: SANA/fixed_text_embed_gemma.pt
+    DiT_params:
+      DiT_lora: true
+      lora_rank_DiT: 128
+      lora_alpha_DiT: 128
+    vae_params:
+      vae_lora: true
+      lora_rank_vae: 64
+      lora_alpha_vae: 64
+    codec_param:
+      ch_emd: 32
+      channel: 320
+      channel_out: 32
+      upsample_mode: pixelshuffle
+    loss_params:
+      disc_start: 1000001
+      disc_factor: 0.0
+      disc_weight: 1.0
+      perceptual_weight: 1.0
+      pixelloss_weight: 2.0
+      rate_weight: 0.5
+      pp_style: true
+
+optimizer:
+  lr: 0.0001
+  entropy_lr: 0.001
+  beta2: 0.99
+  beta_vae: [0.5, 0.9]
+  step_lr: [50000, 80000, 95000]
+  max_grad_norm: 1.0
+
+train:
+  output_dir: checkpoints
+  exp_name: pure_sana
+  global_seed: 903
+  global_batch_size: 8
+  accumulation_steps: 1
+  max_steps: 100000
+  log_every: 100
+  eval_every: 2000
+  ckpt_every: 10000
+  rate_weight: 0.5
+  resume: false
+
+data:
+  # Replace these paths before training.
+  data_path: [data/train]
+  valid_path: [data/valid]
+  im_exts: [jpg, jpeg, png]
+  path_size: [256, 256]
+  num_workers: 8
