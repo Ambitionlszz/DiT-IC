@@ -17,9 +17,9 @@ def parse_args_testing(input_args=None):
 
     # testing details
     parser.add_argument("--seed", type=int, default=903, help="A seed for reproducible training.")
-    parser.add_argument("--use_ema", action="store_true",)
+    parser.add_argument("--use_ema", action="store_true", default=None)
     parser.add_argument("--save_img", action="store_true",)
-    parser.add_argument("--use_merge", action="store_true",)
+    parser.add_argument("--use_merge", action="store_true", default=None)
     parser.add_argument("--entropy_estimation", action="store_true",)
     
     # results output

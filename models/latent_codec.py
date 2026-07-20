@@ -381,7 +381,7 @@ class LatentCodec(nn.Module):
             ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
             state_dict,
         )
-        super().load_state_dict(state_dict, strict=strict)
+        return super().load_state_dict(state_dict, strict=strict)
     
     def sequeeze_with_mask(self, latent, mask):
         latent_group_1, latent_group_2, latent_group_3, latent_group_4 = latent.chunk(4, 1)

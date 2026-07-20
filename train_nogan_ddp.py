@@ -26,6 +26,7 @@ from copy import deepcopy
 from collections import OrderedDict
 
 from datasets.image import ImageFolder
+from config_compat import normalize_pure_sana_config
 
 
 
@@ -53,7 +54,7 @@ def move_to_device(obj, device):
 
 
 def do_train(rank, local_rank, world_size, train_config):
-    device = f'cuda:{rank}'
+    device = f'cuda:{local_rank}'
 
     # Compute the experiment name consistently across all ranks.
     experiment_index = len(glob(f"{train_config['train']['output_dir']}/*"))
@@ -84,6 +85,8 @@ def do_train(rank, local_rank, world_size, train_config):
     params = dict(train_config.get("model", {}).get("params", {}))
     params["training"] = True
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
+    loss_module = model.loss
+    model.loss = None
     
     if rank==0:
         ema = deepcopy(model.get_state_dicts_for_save())
@@ -94,8 +97,17 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info(f"Trainable Codec Parameters: {sum(p.numel() for p in model.codec.parameters()) / 1e6:.2f}M")
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     opt = torch.optim.AdamW(model.get_trainable_params(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
-    opt_disc = torch.optim.AdamW(model.loss.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
-    opt_entropy = optim.AdamW(model.get_entropy_parameters(), lr=train_config['optimizer']['entropy_lr'], weight_decay=0)
+    opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
+    entropy_parameters = model.get_entropy_parameters()
+    opt_entropy = (
+        optim.AdamW(
+            entropy_parameters,
+            lr=train_config['optimizer']['entropy_lr'],
+            weight_decay=0,
+        )
+        if entropy_parameters
+        else None
+    )
     
     milestones = train_config['optimizer']['step_lr']
     gammas = [0.5, 0.2, 0.1]
@@ -114,7 +126,12 @@ def do_train(rank, local_rank, world_size, train_config):
     # scheduler = MultiStepLR(opt, milestones=train_config['optimizer']['step_lr'], gamma=0.5)
     # scheduler_disc = MultiStepLR(opt_disc, milestones=train_config['optimizer']['step_lr'], gamma=0.5)
     
-    model = DDP(model, device_ids=[rank], static_graph=True)
+    model = DDP(model, device_ids=[local_rank], static_graph=True)
+    discriminator = (
+        DDP(loss_module.discriminator, device_ids=[local_rank], broadcast_buffers=False)
+        if world_size > 1
+        else loss_module.discriminator
+    )
     # Setup data
     train_transforms = transforms.Compose([
             ResizeIfSmall(train_config['data']['path_size']),
@@ -127,7 +144,12 @@ def do_train(rank, local_rank, world_size, train_config):
     dataset = ImageFolder(train_config['data']['data_path'], train_config['data']['im_exts'], transform=train_transforms)
     
     # batch_size_per_gpu = int(train_config['train']['global_batch_size'] / torch.cuda.device_count())
-    batch_size_per_gpu = train_config['train']['global_batch_size'] // world_size
+    global_batch_size = train_config['train']['global_batch_size']
+    if global_batch_size % world_size != 0:
+        raise ValueError(
+            "train.global_batch_size must be divisible by the DDP world size"
+        )
+    batch_size_per_gpu = global_batch_size // world_size
     sampler = DistributedSampler(
         dataset, num_replicas=world_size, rank=rank, shuffle=True
     )
@@ -170,6 +192,7 @@ def do_train(rank, local_rank, world_size, train_config):
     if rank==0:
         update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
     model.train()
+    loss_module.train()
 
     train_config['train']['resume'] if 'resume' in train_config['train'] else False
 
@@ -182,19 +205,38 @@ def do_train(rank, local_rank, world_size, train_config):
             checkpoint = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
             
             model.module.load_ckpt_dict(latest_checkpoint, use_ema=False)
-            model.to(device)
             model.train()
+            loss_module.train()
             
             opt.load_state_dict(checkpoint['opt'])
-            opt_disc.load_state_dict(checkpoint['opt_disc'])
-            opt_entropy.load_state_dict(checkpoint['opt_entropy'])
+            if "loss" in checkpoint:
+                loss_state = checkpoint["loss"]
+                loss_module.discriminator.load_state_dict(
+                    loss_state["discriminator"]
+                )
+                if "logvar" in loss_state:
+                    loss_module.logvar.data.copy_(loss_state["logvar"])
+                opt_disc.load_state_dict(checkpoint['opt_disc'])
+            elif rank == 0:
+                logger.warning(
+                    "Legacy checkpoint has no discriminator weights; "
+                    "starting the discriminator from its fresh initialization."
+                )
+            entropy_state = checkpoint.get("opt_entropy", checkpoint.get("opt_aux"))
+            if opt_entropy is not None and entropy_state is not None:
+                opt_entropy.load_state_dict(entropy_state)
 
             ema = checkpoint['ema']
             ema = move_to_device(checkpoint['ema'], device)
-            train_steps = int(latest_checkpoint.split('/')[-1].split('.')[0])
+            checkpoint_stem = os.path.splitext(os.path.basename(latest_checkpoint))[0]
+            train_steps = checkpoint.get(
+                "train_steps",
+                int(checkpoint_stem) if checkpoint_stem.isdigit() else 0,
+            )
             if "scheduler" in checkpoint:
                 scheduler.load_state_dict(checkpoint["scheduler"])
-                scheduler_disc.load_state_dict(checkpoint["scheduler_disc"])
+                if "loss" in checkpoint and "scheduler_disc" in checkpoint:
+                    scheduler_disc.load_state_dict(checkpoint["scheduler_disc"])
             else:
                 scheduler = MultiStepLR(opt, milestones=train_config['optimizer']['step_lr'], gamma=0.5, last_epoch=train_steps)
                 scheduler_disc = MultiStepLR(opt_disc, milestones=train_config['optimizer']['step_lr'], gamma=0.5, last_epoch=train_steps)
@@ -209,6 +251,28 @@ def do_train(rank, local_rank, world_size, train_config):
     # Variables for monitoring/logging purposes:
     if not train_config['train']['resume']:
         train_steps = 0
+
+    def make_checkpoint():
+        checkpoint = {
+            "model": model.module.get_state_dicts_for_save(),
+            "ema": ema,
+            "loss": {
+                "discriminator": loss_module.discriminator.state_dict(),
+                "logvar": loss_module.logvar.detach().cpu(),
+            },
+            "opt": opt.state_dict(),
+            "opt_disc": opt_disc.state_dict(),
+            "scheduler": scheduler.state_dict(),
+            "scheduler_disc": scheduler_disc.state_dict(),
+            "train_steps": train_steps,
+            "config": train_config,
+        }
+        if opt_entropy is not None:
+            entropy_state = opt_entropy.state_dict()
+            checkpoint["opt_entropy"] = entropy_state
+            checkpoint["opt_aux"] = entropy_state
+        return checkpoint
+
     log_steps = 0
     running_loss = 0
     running_entropy_loss = 0
@@ -218,8 +282,15 @@ def do_train(rank, local_rank, world_size, train_config):
     start_time = time()
     
     accumulation_steps = train_config['train'].get('accumulation_steps', 1)
+    if accumulation_steps < 1:
+        raise ValueError("train.accumulation_steps must be at least 1")
+    accumulate_disc = train_config['train'].get('accumulate_disc', True)
     accum_count = 0
     disc_start = train_config['model']['params']['loss_params']['disc_start']
+    opt.zero_grad(set_to_none=True)
+    opt_disc.zero_grad(set_to_none=True)
+    if opt_entropy is not None:
+        opt_entropy.zero_grad(set_to_none=True)
 
     while True:
         # sampler.set_epoch(train_steps)
@@ -227,52 +298,83 @@ def do_train(rank, local_rank, world_size, train_config):
         sampler.set_epoch(epoch)
 
 
-        model.module.loss.rate_weight = train_config['train']['rate_weight']
+        loss_module.rate_weight = train_config['train']['rate_weight']
         for x in loader:
             x = x.to(device)
+            will_step = accum_count + 1 == accumulation_steps
+            disc_active = train_steps >= disc_start
 
             # ---- forward pass ----
             output_image, rate = model(x)
 
             # Generator loss
-            if train_steps < disc_start:
-                loss, log_dict = model.module.loss(x, output_image, rate, -1, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train")
+            if not disc_active:
+                loss, log_dict = loss_module(
+                    x,
+                    output_image,
+                    rate,
+                    -1,
+                    train_steps,
+                    last_layer=model.module.get_last_layer(),
+                    split="train",
+                )
             else:
-                loss, log_dict = model.module.loss(x, output_image, rate, 0, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train")
+                loss_module.discriminator.requires_grad_(False)
+                loss, log_dict = loss_module(
+                    x,
+                    output_image,
+                    rate,
+                    0,
+                    train_steps,
+                    last_layer=model.module.get_last_layer(),
+                    split="train",
+                    discriminator=loss_module.discriminator,
+                )
+                loss_module.discriminator.requires_grad_(True)
             loss = loss / accumulation_steps
-
-            # Discriminator loss (forward only, backward after clearing stale disc grads)
-            disc_active = train_steps >= disc_start
-            if disc_active:
-                discloss, log_dict_disc = model.module.loss(x, output_image, rate, 1, train_steps,
-                                                last_layer=model.module.get_last_layer(), split="train")
-                discloss = discloss / accumulation_steps
-            else:
-                discloss = torch.tensor(0.0, device=x.device)
-
-            # Entropy-bottleneck quantile loss
-            entropy_loss = model.module.codec.entropy_bottleneck_loss() / accumulation_steps
 
             # ---- backward pass (accumulate gradients) ----
             loss.backward()
 
-            # Discard quantile grads from generator loss, then accumulate quantile grads.
-            opt_entropy.zero_grad()
-            entropy_loss.backward()
+            # Entropy-bottleneck quantile gradients follow generator accumulation.
+            if opt_entropy is not None:
+                entropy_loss = (
+                    model.module.codec.entropy_bottleneck_loss()
+                    / accumulation_steps
+                )
+                entropy_loss.backward()
+            else:
+                entropy_loss = torch.tensor(0.0, device=x.device)
 
-            # Discard disc grads from generator loss, then accumulate disc grads
-            if disc_active:
-                opt_disc.zero_grad()
+            # With accumulate_disc=False, use only the boundary micro-batch so
+            # the discriminator still performs one update per generator step.
+            run_discriminator = disc_active and (accumulate_disc or will_step)
+            if run_discriminator:
+                if not accumulate_disc:
+                    opt_disc.zero_grad(set_to_none=True)
+                discloss, log_dict_disc = loss_module(
+                    x,
+                    output_image,
+                    rate,
+                    1,
+                    train_steps,
+                    last_layer=model.module.get_last_layer(),
+                    split="train",
+                    discriminator=discriminator,
+                )
+                if accumulate_disc:
+                    discloss = discloss / accumulation_steps
                 discloss.backward()
+            else:
+                discloss = torch.tensor(0.0, device=x.device)
 
             accum_count += 1
 
             # Track running losses at original scale
             running_loss += loss.item() * accumulation_steps
             running_entropy_loss += entropy_loss.item() * accumulation_steps
-            running_dis_loss += discloss.item() * accumulation_steps if disc_active else 0.0
+            if run_discriminator:
+                running_dis_loss += discloss.item() * accumulation_steps
             log_steps += 1
 
             # ---- step optimizers after accumulation ----
@@ -284,12 +386,13 @@ def do_train(rank, local_rank, world_size, train_config):
                 scheduler.step()
 
                 # Entropy-bottleneck step
-                opt_entropy.step()
+                if opt_entropy is not None:
+                    opt_entropy.step()
 
                 # Discriminator step
-                if disc_active:
+                if run_discriminator:
                     if 'max_grad_norm' in train_config['optimizer']:
-                        torch.nn.utils.clip_grad_norm_(model.module.loss.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
+                        torch.nn.utils.clip_grad_norm_(loss_module.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
                     opt_disc.step()
                     scheduler_disc.step()
 
@@ -298,9 +401,10 @@ def do_train(rank, local_rank, world_size, train_config):
                     update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)
 
                 # Zero all gradients for next accumulation cycle
-                opt.zero_grad()
-                opt_entropy.zero_grad()
-                opt_disc.zero_grad()
+                opt.zero_grad(set_to_none=True)
+                if opt_entropy is not None:
+                    opt_entropy.zero_grad(set_to_none=True)
+                opt_disc.zero_grad(set_to_none=True)
 
                 train_steps += 1
                 accum_count = 0
@@ -361,41 +465,24 @@ def do_train(rank, local_rank, world_size, train_config):
                     if rank == 0:
                         logger.info(f"Start evaluating at step {train_steps}")
 
-                    test_loss = evaluate(model, valid_loader, device, train_steps, logger if rank==0 else None, writer if rank==0 else None)
+                    test_loss = evaluate(model, loss_module, valid_loader, device, train_steps, logger if rank==0 else None, writer if rank==0 else None)
 
                     if rank == 0:
                         is_best = test_loss < best_loss
                         best_loss = min(test_loss, best_loss)
                         if is_best and train_steps > 0.7 * train_config['train']['max_steps']:
-                            checkpoint = {
-                                "model": model.module.get_state_dicts_for_save(),
-                                "ema": ema,
-                                "opt": opt.state_dict(),
-                                "opt_disc": opt_disc.state_dict(),
-                                "opt_entropy": opt_entropy.state_dict(),
-                                "scheduler": scheduler.state_dict(),
-                                "scheduler_disc": scheduler_disc.state_dict(),
-                                "config": train_config,
-                            }
+                            checkpoint = make_checkpoint()
                             checkpoint_path = f"{checkpoint_dir}/best_ckpt.pt"
                             torch.save(checkpoint, checkpoint_path)
                             logger.info(f"Saved best checkpoint to {checkpoint_path} at step {train_steps}")
                     dist.barrier()
                     model.train()
+                    loss_module.train()
 
                 # ---- save checkpoint ----
                 if train_steps % train_config['train']['ckpt_every'] == 0 and train_steps > 0:
                     if rank == 0:
-                        checkpoint = {
-                            "model": model.module.get_state_dicts_for_save(),
-                            "ema": ema,
-                            "opt": opt.state_dict(),
-                            "opt_disc": opt_disc.state_dict(),
-                            "opt_entropy": opt_entropy.state_dict(),
-                            "scheduler": scheduler.state_dict(),
-                            "scheduler_disc": scheduler_disc.state_dict(),
-                            "config": train_config,
-                        }
+                        checkpoint = make_checkpoint()
                         checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
                         torch.save(checkpoint, checkpoint_path)
                         logger.info(f"Saved checkpoint to {checkpoint_path}")
@@ -411,8 +498,9 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info("Done!")
 
 @torch.no_grad()
-def evaluate(model, test_loader, device, train_steps, logger=None, writer=None):
+def evaluate(model, loss_module, test_loader, device, train_steps, logger=None, writer=None):
     model.eval()
+    loss_module.eval()
     loss = AverageMeter()
     
     mse_loss = AverageMeter()
@@ -426,7 +514,14 @@ def evaluate(model, test_loader, device, train_steps, logger=None, writer=None):
         x = x.to(device)
 
         output_image, rate = model(x)
-        loss, rec_loss, psnr, rate_loss, p_loss = model.module.loss(x, output_image, rate, -1, -1, split="eval")
+        loss, rec_loss, psnr, rate_loss, p_loss = loss_module(
+            x,
+            output_image,
+            rate,
+            -1,
+            -1,
+            split="eval",
+        )
         
         all_loss.update(loss)
         mse_loss.update(rec_loss)
@@ -527,7 +622,7 @@ def update_ema(ema_model, model, decay=0.9999):
 def load_config(config_path):
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    return config
+    return normalize_pure_sana_config(config)
 
 class ResizeIfSmall:
     def __init__(self, min_size):

@@ -26,6 +26,7 @@ from copy import deepcopy
 from collections import OrderedDict
 
 from datasets.image import ImageFolder
+from config_compat import normalize_pure_sana_config
 
 
 
@@ -468,7 +469,7 @@ def update_ema(ema_model, model, decay=0.9999):
 def load_config(config_path):
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    return config
+    return normalize_pure_sana_config(config)
 
 class ResizeIfSmall:
     def __init__(self, min_size):

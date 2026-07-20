@@ -56,29 +56,31 @@ class LPIPSWithDiscriminator(nn.Module):
             print("Using pp_style for reconstruction loss")
 
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
-        if last_layer is not None:
-            nll_grads = torch.autograd.grad(
-                nll_loss,
-                last_layer,
-                retain_graph=True,
-            )[0]
-            g_grads = torch.autograd.grad(
-                g_loss,
-                last_layer,
-                retain_graph=True,
-            )[0]
-        else:
-            nll_grads = torch.autograd.grad(
-                nll_loss,
-                self.last_layer[0],
-                retain_graph=True,
-            )[0]
-            g_grads = torch.autograd.grad(
-                g_loss,
-                self.last_layer[0],
-                retain_graph=True,
-            )[0]
+        if last_layer is None or not last_layer.requires_grad:
+            return torch.as_tensor(
+                self.discriminator_weight,
+                device=nll_loss.device,
+                dtype=nll_loss.dtype,
+            )
+        nll_grads = torch.autograd.grad(
+            nll_loss,
+            last_layer,
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
+        g_grads = torch.autograd.grad(
+            g_loss,
+            last_layer,
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
 
+        if nll_grads is None or g_grads is None:
+            return torch.as_tensor(
+                self.discriminator_weight,
+                device=nll_loss.device,
+                dtype=nll_loss.dtype,
+            )
         weight = torch.norm(nll_grads) / (torch.norm(g_grads) + 1e-4)
         return torch.clamp(weight, 0.0, 1e4).detach() * self.discriminator_weight
 
@@ -100,7 +102,9 @@ class LPIPSWithDiscriminator(nn.Module):
         cond=None,
         split="train",
         weights=None,
+        discriminator=None,
     ):
+        discriminator = discriminator or self.discriminator
         batch, _, height, width = inputs.size()
         num_pixels = batch * height * width
         rate_loss = self._rate_loss(rate, num_pixels)
@@ -181,11 +185,11 @@ class LPIPSWithDiscriminator(nn.Module):
             if cond is None:
                 if self.disc_conditional:
                     raise ValueError("Conditional discriminator requires cond")
-                logits_fake = self.discriminator(reconstructions.contiguous())
+                logits_fake = discriminator(reconstructions.contiguous())
             else:
                 if not self.disc_conditional:
                     raise ValueError("Unconditional discriminator does not accept cond")
-                logits_fake = self.discriminator(
+                logits_fake = discriminator(
                     torch.cat((reconstructions.contiguous(), cond), dim=1)
                 )
             g_loss = -torch.mean(logits_fake)
@@ -225,15 +229,25 @@ class LPIPSWithDiscriminator(nn.Module):
 
         if optimizer_idx == 1:
             if cond is None:
-                logits_real = self.discriminator(inputs.contiguous().detach())
-                logits_fake = self.discriminator(reconstructions.contiguous().detach())
+                discriminator_input = torch.cat(
+                    (
+                        inputs.contiguous().detach(),
+                        reconstructions.contiguous().detach(),
+                    ),
+                    dim=0,
+                )
             else:
-                logits_real = self.discriminator(
-                    torch.cat((inputs.contiguous().detach(), cond), dim=1)
+                discriminator_input = torch.cat(
+                    (
+                        torch.cat((inputs.contiguous().detach(), cond), dim=1),
+                        torch.cat(
+                            (reconstructions.contiguous().detach(), cond),
+                            dim=1,
+                        ),
+                    ),
+                    dim=0,
                 )
-                logits_fake = self.discriminator(
-                    torch.cat((reconstructions.contiguous().detach(), cond), dim=1)
-                )
+            logits_real, logits_fake = discriminator(discriminator_input).chunk(2)
 
             disc_factor = adopt_weight(
                 self.disc_factor,

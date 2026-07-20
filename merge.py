@@ -2,6 +2,7 @@ import torch
 
 import os
 import yaml
+from config_compat import normalize_pure_sana_config
 import importlib
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def codec_models(model, device, **kwargs):
 def load_config(config_path):
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    return config
+    return normalize_pure_sana_config(config)
 
 def decompress_one_image(net, bin_path, ori_h, ori_w, img_name):
     output = os.path.join(bin_path, img_name)

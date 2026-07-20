@@ -27,6 +27,7 @@ from pathlib import Path
 from eval.compress_utils import *
 from eval.testing_utils import parse_args_testing
 from eval._update_patch_fid import update_patch_fid
+from config_compat import normalize_pure_sana_config, prepare_inference_config
 
 class TeeLogger:
     """
@@ -80,7 +81,7 @@ def codec_models(model, device, **kwargs):
 def load_config(config_path):
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    return config
+    return normalize_pure_sana_config(config)
 
 
 def print_model_parameters(net, model_name="DiT-IC"):
@@ -384,6 +385,17 @@ def main(args):
     torch.cuda.set_device(device)
     print(f"Using GPU: {args.gpu} ({torch.cuda.get_device_name(device)})")
 
+    # A legacy training YAML is also a valid inference YAML. CLI values only
+    # override fields when they were explicitly provided.
+    config = prepare_inference_config(
+        load_config(args.config_path),
+        codec_path=args.codec_path,
+        use_ema=args.use_ema,
+        use_merge=args.use_merge,
+    )
+    params = config["model"]["params"]
+    args.codec_path = params["codec_path"]
+
     # ===== Setup results directory and logging =====
     ckpt_name = Path(args.codec_path).stem if args.codec_path else "no_ckpt"
     config_name = Path(args.config_path).stem
@@ -398,8 +410,8 @@ def main(args):
     # Save the effective config for reproducibility
     try:
         effective_config_path = os.path.join(run_dir, "config_used.yaml")
-        import shutil
-        shutil.copy(args.config_path, effective_config_path)
+        with open(effective_config_path, "w", encoding="utf-8") as file:
+            yaml.safe_dump(config, file, sort_keys=False)
         print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Config saved to: {effective_config_path}")
     except Exception as e:
         print(f"Warning: Could not save config copy: {e}")
@@ -434,12 +446,6 @@ def main(args):
     kid_metric = KernelInceptionDistance().to(device)
     
     # load model
-    config = load_config(args.config_path)
-    config["model"]["params"]["codec_path"] = args.codec_path
-    config["model"]["params"]["use_ema"] = args.use_ema
-    config["model"]["params"]["use_merge"] = args.use_merge
-    config["model"]["params"]["training"] = False
-
     params = config.get("model", {}).get("params", {})
     net = codec_models(config['model']['model_type'], 'cuda', **params)
     net.cuda().eval()

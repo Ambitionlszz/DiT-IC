@@ -53,6 +53,7 @@ class Codec(nn.Module):
         codec_param=None,
         loss_params=None,
         text_encoder_path=None,
+        freeze_codec=False,
         **kwargs,
     ):
         super().__init__()
@@ -71,6 +72,9 @@ class Codec(nn.Module):
 
         self.build_DiT(dit_path, device, use_merge)
         self.codec = latent_models(model_type, **codec_param)
+        self.freeze_codec = freeze_codec
+        if self.freeze_codec:
+            self.codec.requires_grad_(False)
         self._build_fixed_text_condition(text_encoder_path)
         self.loss = (
             LPIPSWithDiscriminator(device, **loss_params)
@@ -162,12 +166,72 @@ class Codec(nn.Module):
     def load_ckpt_dict(self, codec_path, use_ema=False):
         print("[Pure SANA] Loading trained weights")
         checkpoint = torch.load(codec_path, map_location="cpu", weights_only=True)
-        state = checkpoint["ema" if use_ema else "model"]
+        state_key = "ema" if use_ema else "model"
+        if state_key not in checkpoint:
+            raise KeyError(f"Checkpoint does not contain {state_key!r}: {codec_path}")
+        state = checkpoint[state_key]
+        required = {
+            "state_dict_codec",
+            "state_dict_vae",
+            "state_dict_DiT",
+            "state_dict_text_proj",
+        }
+        missing = sorted(required.difference(state))
+        if missing:
+            raise KeyError(
+                "Checkpoint is not a fixed-text Pure SANA/all-off checkpoint; "
+                f"missing entries: {missing}"
+            )
 
-        self.codec.load_state_dict(state["state_dict_codec"], strict=False)
+        codec_result = self.codec.load_state_dict(
+            state["state_dict_codec"],
+            strict=False,
+        )
+        active_codec_missing = [
+            key
+            for key in codec_result.missing_keys
+            if not key.endswith("_quantized_cdf")
+            and not key.endswith("_cdf_length")
+            and not key.endswith("_offset")
+            and not key.endswith("scale_table")
+        ]
+        if active_codec_missing:
+            raise RuntimeError(
+                "Checkpoint is missing active Pure SANA codec weights: "
+                + ", ".join(active_codec_missing)
+            )
         self.codec.update()
-        self.vae.load_state_dict(state["state_dict_vae"], strict=False)
-        self.DiT.load_state_dict(state["state_dict_DiT"], strict=False)
+        expected_vae_lora = {
+            key for key in self.vae.state_dict() if "lora" in key
+        }
+        expected_dit_lora = {
+            key for key in self.DiT.state_dict() if "lora" in key
+        }
+        missing_adapter_keys = sorted(
+            expected_vae_lora.difference(state["state_dict_vae"])
+            | expected_dit_lora.difference(state["state_dict_DiT"])
+        )
+        if missing_adapter_keys:
+            raise RuntimeError(
+                "Checkpoint is missing configured LoRA weights: "
+                + ", ".join(missing_adapter_keys)
+            )
+        vae_result = self.vae.load_state_dict(
+            state["state_dict_vae"],
+            strict=False,
+        )
+        dit_result = self.DiT.load_state_dict(
+            state["state_dict_DiT"],
+            strict=False,
+        )
+        unexpected_adapter_keys = (
+            list(vae_result.unexpected_keys) + list(dit_result.unexpected_keys)
+        )
+        if unexpected_adapter_keys:
+            raise RuntimeError(
+                "Checkpoint LoRA keys do not match the configured VAE/DiT: "
+                + ", ".join(unexpected_adapter_keys)
+            )
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
 
     def build_DiT(self, dit_path, device="cuda", use_merge=False):
@@ -277,7 +341,22 @@ class Codec(nn.Module):
         }
 
     def get_last_layer(self):
-        return self.codec.g_s.synthesis_transform[-1].weight
+        codec_last_layer = self.codec.g_s.synthesis_transform[-1].weight
+        if codec_last_layer.requires_grad:
+            return codec_last_layer
+
+        decoder_lora = [
+            parameter
+            for name, parameter in self.vae.named_parameters()
+            if parameter.requires_grad
+            and "decoder" in name.lower()
+            and "lora" in name.lower()
+        ]
+        if decoder_lora:
+            return decoder_lora[-1]
+
+        trainable = self.get_trainable_params()
+        return trainable[-1] if trainable else None
 
     def _decode_with_sana(self, latent):
         condition = self.text_proj(self.fixed_text_embed).expand(
