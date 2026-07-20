@@ -215,7 +215,8 @@ def do_train(rank, local_rank, world_size, train_config):
 
     best_loss = float("inf")
     start_time = time()
-    
+    disc_start = train_config['model']['params']['loss_params']['disc_start']
+
     while True:
         # sampler.set_epoch(train_steps)
         epoch = train_steps // len(loader)  # ★DDP: ensure shuffle
@@ -240,19 +241,22 @@ def do_train(rank, local_rank, world_size, train_config):
             opt_entropy.zero_grad()
             entropy_loss.backward()
             opt_entropy.step()
-            if rank == 0: 
+            if rank == 0:
                 update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
 
-            opt_disc.zero_grad()
-            discloss, log_dict_disc = model.module.loss(x, output_image, rate, 1, train_steps,
-                                            last_layer=model.module.get_last_layer(), split="train")
-            discloss.backward()
-            
-            if 'max_grad_norm' in train_config['optimizer']:
-                torch.nn.utils.clip_grad_norm_(model.module.loss.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
-            opt_disc.step()
-
-            scheduler_disc.step()
+            # Discriminator (only when past disc_start)
+            disc_active = train_steps >= disc_start
+            if disc_active:
+                opt_disc.zero_grad()
+                discloss, log_dict_disc = model.module.loss(x, output_image, rate, 1, train_steps,
+                                                last_layer=model.module.get_last_layer(), split="train")
+                discloss.backward()
+                if 'max_grad_norm' in train_config['optimizer']:
+                    torch.nn.utils.clip_grad_norm_(model.module.loss.discriminator.parameters(), train_config['optimizer']['max_grad_norm'])
+                opt_disc.step()
+                scheduler_disc.step()
+            else:
+                discloss = torch.tensor(0.0, device=device)
 
             # Log loss values:
             running_loss += loss.item()
@@ -517,11 +521,9 @@ def set_seed(seed=903):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
     os.environ["PYTHONHASHSEED"] = str(seed)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 

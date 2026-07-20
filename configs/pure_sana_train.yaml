@@ -2,7 +2,7 @@ model:
   model_type: Codec
   params:
     dit_path: SANA
-    text_encoder_path: SANA/fixed_text_embed_gemma.pt
+    text_encoder_path: /data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers
     DiT_params:
       DiT_lora: true
       lora_rank_DiT: 128

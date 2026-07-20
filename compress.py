@@ -487,7 +487,7 @@ def main(args):
             if args.entropy_estimation:
                 N, _, H, W = img.size()
                 num_pixels = N * H * W
-                out_img, rate, _, _, _ = net(img_padded)
+                out_img, rate = net(img_padded)
                 
                 rate = sum(
                     (torch.log(likelihoods).sum() / (-math.log(2) * num_pixels))
@@ -743,7 +743,7 @@ def main(args):
                     if args.entropy_estimation:
                         N, _, H, W = img.size()
                         num_pixels = N * H * W
-                        out_img, rate, _, _, _ = net(img_padded)
+                        out_img, rate = net(img_padded)
                     else:
                         rate = compress_one_image(net, args.bin_path, ori_h, ori_w, fname, img_padded)
                         out_img = decompress_one_image(net, args.bin_path, ori_h, ori_w, fname)
