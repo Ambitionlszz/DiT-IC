@@ -54,6 +54,7 @@ class Codec(nn.Module):
         loss_params=None,
         text_encoder_path=None,
         freeze_codec=False,
+        decode_mode="sana",
         **kwargs,
     ):
         super().__init__()
@@ -71,6 +72,7 @@ class Codec(nn.Module):
         self.vae.requires_grad_(False)
 
         self.build_DiT(dit_path, device, use_merge)
+        self.decode_mode = decode_mode
         self.codec = latent_models(model_type, **codec_param)
         self.freeze_codec = freeze_codec
         if self.freeze_codec:
@@ -81,6 +83,14 @@ class Codec(nn.Module):
             if training
             else None
         )
+
+        if self.decode_mode == "gs_residual":
+            self.g_s_fusion = nn.Sequential(
+                nn.Conv2d(64, 32, kernel_size=3, padding=1),
+                nn.GELU(),
+                nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            )
+            print("[DecodeMode] g_s_residual fusion module initialized")
 
         if use_merge:
             if codec_path is None:
@@ -234,6 +244,11 @@ class Codec(nn.Module):
             )
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
 
+        if "state_dict_g_s_fusion" in state and self.decode_mode == "gs_residual":
+            self.g_s_fusion.load_state_dict(state["state_dict_g_s_fusion"])
+        elif self.decode_mode == "gs_residual":
+            print("[Pure SANA] Legacy checkpoint — g_s_fusion randomly initialized")
+
     def build_DiT(self, dit_path, device="cuda", use_merge=False):
         base_scheduler = make_1step_sched(dit_path, device)
         self.sched = OneStepFlowScheduler(base_scheduler)
@@ -322,6 +337,8 @@ class Codec(nn.Module):
             if "lora" in name and parameter.requires_grad
         )
         parameters.extend(self.text_proj.parameters())
+        if self.decode_mode == "gs_residual":
+            parameters.extend(self.g_s_fusion.parameters())
         return parameters
 
     def get_state_dicts_for_save(self):
@@ -329,7 +346,7 @@ class Codec(nn.Module):
         vae = getattr(self.vae, "module", self.vae)
         dit = getattr(self.DiT, "module", self.DiT)
         text_proj = getattr(self.text_proj, "module", self.text_proj)
-        return {
+        state_dicts = {
             "state_dict_codec": codec.state_dict(),
             "state_dict_vae": {
                 key: value for key, value in vae.state_dict().items() if "lora" in key
@@ -339,6 +356,10 @@ class Codec(nn.Module):
             },
             "state_dict_text_proj": text_proj.state_dict(),
         }
+        if self.decode_mode == "gs_residual":
+            g_s_fusion = getattr(self.g_s_fusion, "module", self.g_s_fusion)
+            state_dicts["state_dict_g_s_fusion"] = g_s_fusion.state_dict()
+        return state_dicts
 
     def get_last_layer(self):
         codec_last_layer = self.codec.g_s.synthesis_transform[-1].weight
@@ -378,10 +399,43 @@ class Codec(nn.Module):
             return_dict=False,
         )[0].clamp(-1, 1)
 
+    def _decode_with_gs_residual(self, latent):
+        """Ablation: g_s output (latent) skip-connects to DiT output, then
+        concat + fusion before VAE decode."""
+        condition = self.text_proj(self.fixed_text_embed).expand(
+            latent.shape[0],
+            -1,
+            -1,
+        )
+        timestep = self.sched.base_scheduler.timesteps.expand(latent.shape[0])
+        timestep = timestep * self.DiT.config.timestep_scale
+        model_prediction = self.DiT(
+            latent,
+            encoder_hidden_states=condition.to(latent.device),
+            timestep=timestep.to(latent.device),
+            return_dict=False,
+        )[0]
+        denoised = self.sched.step(model_prediction, latent)
+        # Residual: g_s output added to DiT output
+        enhanced = denoised + latent
+        # Concat enhanced with original g_s output, then fuse
+        combined = torch.cat([enhanced, latent], dim=1)
+        fused = self.g_s_fusion(combined)
+        return self.vae.decode(
+            fused / self.vae.config.scaling_factor,
+            return_dict=False,
+        )[0].clamp(-1, 1)
+
+    def _decode_latent(self, latent):
+        """Dispatch to the active decode method."""
+        if self.decode_mode == "gs_residual":
+            return self._decode_with_gs_residual(latent)
+        return self._decode_with_sana(latent)
+
     def forward(self, image):
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
         codec_output = self.codec(latent)
-        output_image = self._decode_with_sana(codec_output["mean"])
+        output_image = self._decode_latent(codec_output["mean"])
         return output_image, codec_output["likelihoods"]
 
     def compress(self, image):
@@ -390,4 +444,4 @@ class Codec(nn.Module):
 
     def decompress(self, strings, shape):
         latent = self.codec.decompress(strings, shape)
-        return self._decode_with_sana(latent)
+        return self._decode_latent(latent)

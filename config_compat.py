@@ -49,6 +49,8 @@ def normalize_pure_sana_config(config):
         params["freeze_codec"] = bool(train["freeze_codec"])
     train.setdefault("resume", False)
 
+    params.setdefault("decode_mode", "sana")
+
     return config
 
 
