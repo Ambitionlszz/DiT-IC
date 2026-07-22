@@ -26,7 +26,11 @@ from copy import deepcopy
 from collections import OrderedDict
 
 from datasets.image import ImageFolder
-from config_compat import normalize_pure_sana_config
+from config_compat import (
+    configure_frozen_decode_ablation,
+    normalize_pure_sana_config,
+)
+from decode_modes import SUPPORTED_DECODE_MODES
 
 
 
@@ -94,7 +98,24 @@ def do_train(rank, local_rank, world_size, train_config):
     if rank == 0:
         logger.info(f"Model Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
         logger.info(f"Trainable Parameters: {sum(p.numel() for p in model.get_trainable_params()) / 1e6:.2f}M")
-        logger.info(f"Trainable Codec Parameters: {sum(p.numel() for p in model.codec.parameters()) / 1e6:.2f}M")
+        trainable_codec_params = sum(
+            parameter.numel()
+            for parameter in model.codec.parameters()
+            if parameter.requires_grad
+        )
+        logger.info(
+            f"Trainable Codec Parameters: {trainable_codec_params / 1e6:.2f}M"
+        )
+        frozen_ablation = train_config.get("experiment", {}).get(
+            "frozen_decode_ablation"
+        )
+        if frozen_ablation is not None:
+            logger.info(
+                "Frozen decode ablation: "
+                f"mode={frozen_ablation['mode']}, "
+                f"common_init={frozen_ablation['init_checkpoint']}, "
+                "codec_mode=eval, trainable_codec_params=0"
+            )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     opt = torch.optim.AdamW(model.get_trainable_params(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
     opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
@@ -192,6 +213,7 @@ def do_train(rank, local_rank, world_size, train_config):
     if rank==0:
         update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
     model.train()
+    model.module.assert_frozen_codec_contract()
     loss_module.train()
 
     train_config['train']['resume'] if 'resume' in train_config['train'] else False
@@ -697,6 +719,19 @@ if __name__ == "__main__":
     # read config
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/pure_sana_train.yaml')
+    parser.add_argument(
+        '--frozen_decode_ablation',
+        type=str,
+        choices=SUPPORTED_DECODE_MODES,
+        default=None,
+        help='Fixed-bitstream comparison mode initialized from one Pure checkpoint.',
+    )
+    parser.add_argument(
+        '--init_checkpoint',
+        type=str,
+        default=None,
+        help='Common Pure SANA checkpoint used by --frozen_decode_ablation.',
+    )
     parser.add_argument('--upsample_mode', type=str, default=None,
                         help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
@@ -704,6 +739,16 @@ if __name__ == "__main__":
     train_config = load_config(args.config)
     if args.upsample_mode is not None:
         train_config['model']['params']['codec_param']['upsample_mode'] = args.upsample_mode
+    if (args.frozen_decode_ablation is None) != (args.init_checkpoint is None):
+        parser.error(
+            '--frozen_decode_ablation and --init_checkpoint must be provided together'
+        )
+    if args.frozen_decode_ablation is not None:
+        configure_frozen_decode_ablation(
+            train_config,
+            args.frozen_decode_ablation,
+            args.init_checkpoint,
+        )
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()

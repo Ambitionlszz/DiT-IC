@@ -43,6 +43,36 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "removed DiT-IC features"):
             normalize_pure_sana_config(config)
 
+    def test_conflicting_rate_weight_aliases_are_rejected(self):
+        config = {
+            "model": {
+                "params": {
+                    "use_text_condition": True,
+                    "loss_params": {"rate_weight": 0.5},
+                }
+            },
+            "train": {"lrd": 0.4, "rate_weight": 0.5},
+        }
+        with self.assertRaisesRegex(ValueError, "Conflicting rate weights"):
+            normalize_pure_sana_config(config)
+
+    def test_training_rate_weight_overrides_legacy_kl_default(self):
+        config = {
+            "model": {
+                "params": {
+                    "use_text_condition": True,
+                    "loss_params": {"kl_weight": 0.1},
+                }
+            },
+            "train": {"lrd": 0.4},
+        }
+        normalized = normalize_pure_sana_config(config)
+        self.assertEqual(normalized["train"]["rate_weight"], 0.4)
+        self.assertEqual(
+            normalized["model"]["params"]["loss_params"]["rate_weight"],
+            0.4,
+        )
+
     def test_training_yaml_values_are_not_overridden_by_cli_defaults(self):
         args = parse_args_testing(["--config_path", "legacy.yaml"])
         self.assertIsNone(args.codec_path)

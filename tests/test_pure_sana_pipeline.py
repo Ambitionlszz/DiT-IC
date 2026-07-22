@@ -120,6 +120,26 @@ class PureSanaStructureTest(unittest.TestCase):
         ]
         self.assertEqual(len(dit_calls), 1)
 
+    def test_gs_fusion_initialization_preserves_shared_rng_stream(self):
+        source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
+        self.assertIn("with torch.random.fork_rng(devices=[]):", source)
+
+    def test_frozen_codec_stays_in_eval_mode(self):
+        source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        codec_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "Codec"
+        )
+        train_method = next(
+            node
+            for node in codec_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "train"
+        )
+        train_source = ast.get_source_segment(source, train_method)
+        self.assertIn("self.codec.eval()", train_source)
+
 
 if __name__ == "__main__":
     unittest.main()

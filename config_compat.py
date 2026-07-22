@@ -1,4 +1,7 @@
+import os
 from copy import deepcopy
+
+from decode_modes import validate_decode_mode
 
 
 _REMOVED_FEATURE_FLAGS = (
@@ -32,12 +35,45 @@ def normalize_pure_sana_config(config):
             "legacy latent-conditioned checkpoints are not compatible."
         )
 
-    # Legacy training configs called the real-rate weight `lrd`/`kl_weight`.
-    rate_weight = train.get("rate_weight", train.get("lrd"))
+    # Main treats train.lrd as the effective rate weight.  Resolve the legacy
+    # and Pure-SANA names once so stale duplicate fields cannot silently select
+    # a different objective.
+    train_lrd = train.get("lrd")
+    train_rate_weight = train.get("rate_weight")
+    loss_rate_weight = loss_params.get("rate_weight")
+
+    if (
+        train_lrd is not None
+        and train_rate_weight is not None
+        and train_lrd != train_rate_weight
+    ):
+        raise ValueError(
+            "Conflicting rate weights: "
+            f"train.lrd={train_lrd!r} and "
+            f"train.rate_weight={train_rate_weight!r}"
+        )
+
+    train_weight = (
+        train_lrd if train_lrd is not None else train_rate_weight
+    )
+    if (
+        train_weight is not None
+        and loss_rate_weight is not None
+        and train_weight != loss_rate_weight
+    ):
+        raise ValueError(
+            "Conflicting rate weights: "
+            f"train={train_weight!r} and "
+            f"model.params.loss_params.rate_weight={loss_rate_weight!r}"
+        )
+
+    rate_weight = train_weight
     if rate_weight is None:
-        rate_weight = loss_params.get("rate_weight", loss_params.get("kl_weight", 1.0))
-    train.setdefault("rate_weight", rate_weight)
-    loss_params.setdefault("rate_weight", rate_weight)
+        rate_weight = loss_rate_weight
+    if rate_weight is None:
+        rate_weight = loss_params.get("kl_weight", 1.0)
+    train["rate_weight"] = rate_weight
+    loss_params["rate_weight"] = rate_weight
 
     # The old auxiliary optimizer and the current entropy optimizer own the
     # same entropy-bottleneck quantile parameters.
@@ -49,8 +85,44 @@ def normalize_pure_sana_config(config):
         params["freeze_codec"] = bool(train["freeze_codec"])
     train.setdefault("resume", False)
 
-    params.setdefault("decode_mode", "sana")
+    params["decode_mode"] = validate_decode_mode(
+        params.get("decode_mode", "sana")
+    )
 
+    return config
+
+
+def configure_frozen_decode_ablation(config, mode, init_checkpoint):
+    """Configure a fixed-bitstream SANA-vs-g_s warm-start comparison."""
+    mode = validate_decode_mode(mode)
+    if not init_checkpoint:
+        raise ValueError("frozen decode ablation requires --init_checkpoint")
+
+    init_checkpoint = os.path.abspath(os.path.expanduser(init_checkpoint))
+    if not os.path.isfile(init_checkpoint):
+        raise FileNotFoundError(
+            f"Pure SANA initialization checkpoint not found: {init_checkpoint}"
+        )
+
+    params = config["model"]["params"]
+    configured_mode = params.get("decode_mode", "sana")
+    if configured_mode != mode:
+        raise ValueError(
+            f"config decode_mode={configured_mode!r} does not match "
+            f"--frozen_decode_ablation={mode!r}"
+        )
+    params.update(
+        {
+            "codec_path": init_checkpoint,
+            "freeze_codec": True,
+            "use_merge": False,
+            "allow_missing_gs_fusion_for_init": mode == "gs_residual",
+        }
+    )
+    config.setdefault("experiment", {})["frozen_decode_ablation"] = {
+        "mode": mode,
+        "init_checkpoint": init_checkpoint,
+    }
     return config
 
 

@@ -7,6 +7,7 @@ import torch.nn as nn
 from diffusers import AutoencoderDC, SanaTransformer2DModel
 from peft import LoraConfig, get_peft_model
 
+from decode_modes import validate_decode_checkpoint, validate_decode_mode
 from .losses import LPIPSWithDiscriminator
 from .scheduler import OneStepFlowScheduler, make_1step_sched
 
@@ -55,6 +56,7 @@ class Codec(nn.Module):
         text_encoder_path=None,
         freeze_codec=False,
         decode_mode="sana",
+        allow_missing_gs_fusion_for_init=False,
         **kwargs,
     ):
         super().__init__()
@@ -63,6 +65,10 @@ class Codec(nn.Module):
         vae_params = vae_params or {}
         codec_param = codec_param or {}
         loss_params = loss_params or {}
+        self.decode_mode = validate_decode_mode(decode_mode)
+        self._init_for_training = training
+        if freeze_codec and codec_path is None:
+            raise ValueError("freeze_codec=True requires a pretrained codec_path")
 
         if use_merge:
             vae_config = AutoencoderDC.load_config(dit_path, subfolder="vae")
@@ -72,7 +78,6 @@ class Codec(nn.Module):
         self.vae.requires_grad_(False)
 
         self.build_DiT(dit_path, device, use_merge)
-        self.decode_mode = decode_mode
         self.codec = latent_models(model_type, **codec_param)
         self.freeze_codec = freeze_codec
         if self.freeze_codec:
@@ -85,11 +90,12 @@ class Codec(nn.Module):
         )
 
         if self.decode_mode == "gs_residual":
-            self.g_s_fusion = nn.Sequential(
-                nn.Conv2d(64, 32, kernel_size=3, padding=1),
-                nn.GELU(),
-                nn.Conv2d(32, 32, kernel_size=3, padding=1),
-            )
+            with torch.random.fork_rng(devices=[]):
+                self.g_s_fusion = nn.Sequential(
+                    nn.Conv2d(64, 32, kernel_size=3, padding=1),
+                    nn.GELU(),
+                    nn.Conv2d(32, 32, kernel_size=3, padding=1),
+                )
             print("[DecodeMode] g_s_residual fusion module initialized")
 
         if use_merge:
@@ -118,7 +124,17 @@ class Codec(nn.Module):
                     DiT_params["lora_alpha_DiT"],
                 )
             if codec_path is not None:
-                self.load_ckpt_dict(codec_path, use_ema)
+                self.load_ckpt_dict(
+                    codec_path,
+                    use_ema,
+                    allow_missing_gs_fusion=(
+                        training and allow_missing_gs_fusion_for_init
+                    ),
+                )
+
+        if self.freeze_codec:
+            self.codec.eval()
+            self.assert_frozen_codec_contract()
 
         print("Pure SANA initialization complete")
 
@@ -128,11 +144,11 @@ class Codec(nn.Module):
 
         if os.path.isdir(text_encoder_path):
             candidates = [
-                os.path.join(text_encoder_path, "fixed_text_embed_gemma.pt"),
                 os.path.join(
                     os.path.dirname(text_encoder_path),
                     "fixed_text_embed_gemma.pt",
                 ),
+                os.path.join(text_encoder_path, "fixed_text_embed_gemma.pt"),
             ]
             embed_path = next((path for path in candidates if os.path.exists(path)), None)
         else:
@@ -164,6 +180,13 @@ class Codec(nn.Module):
                 codec_state[key[6:]] = value
             else:
                 model_state[key] = value
+        validate_decode_checkpoint(
+            self.decode_mode,
+            any(key.startswith("g_s_fusion.") for key in model_state),
+            training=self._init_for_training,
+            allow_missing_gs_fusion=False,
+            source="merged checkpoint",
+        )
         self.codec.load_state_dict(codec_state, strict=False)
         self.load_state_dict(model_state, strict=False)
 
@@ -173,7 +196,12 @@ class Codec(nn.Module):
         if hasattr(self.DiT, "merge_and_unload"):
             self.DiT = self.DiT.merge_and_unload()
 
-    def load_ckpt_dict(self, codec_path, use_ema=False):
+    def load_ckpt_dict(
+        self,
+        codec_path,
+        use_ema=False,
+        allow_missing_gs_fusion=False,
+    ):
         print("[Pure SANA] Loading trained weights")
         checkpoint = torch.load(codec_path, map_location="cpu", weights_only=True)
         state_key = "ema" if use_ema else "model"
@@ -192,6 +220,14 @@ class Codec(nn.Module):
                 "Checkpoint is not a fixed-text Pure SANA/all-off checkpoint; "
                 f"missing entries: {missing}"
             )
+        has_gs_fusion = "state_dict_g_s_fusion" in state
+        validate_decode_checkpoint(
+            self.decode_mode,
+            has_gs_fusion,
+            training=self._init_for_training,
+            allow_missing_gs_fusion=allow_missing_gs_fusion,
+            source=f"checkpoint {codec_path!r}",
+        )
 
         codec_result = self.codec.load_state_dict(
             state["state_dict_codec"],
@@ -244,10 +280,31 @@ class Codec(nn.Module):
             )
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
 
-        if "state_dict_g_s_fusion" in state and self.decode_mode == "gs_residual":
+        if has_gs_fusion:
             self.g_s_fusion.load_state_dict(state["state_dict_g_s_fusion"])
         elif self.decode_mode == "gs_residual":
-            print("[Pure SANA] Legacy checkpoint — g_s_fusion randomly initialized")
+            print("[Pure SANA] Warm-starting g_s_fusion from its initialization")
+
+    def train(self, mode=True):
+        super().train(mode)
+        if self.freeze_codec:
+            self.codec.eval()
+        return self
+
+    def assert_frozen_codec_contract(self):
+        if not self.freeze_codec:
+            return
+        trainable = [
+            name for name, parameter in self.codec.named_parameters()
+            if parameter.requires_grad
+        ]
+        if trainable:
+            preview = ", ".join(trainable[:5])
+            raise RuntimeError(
+                f"freeze_codec=True but codec parameters remain trainable: {preview}"
+            )
+        if self.codec.training:
+            raise RuntimeError("freeze_codec=True requires codec.eval()")
 
     def build_DiT(self, dit_path, device="cuda", use_merge=False):
         base_scheduler = make_1step_sched(dit_path, device)
