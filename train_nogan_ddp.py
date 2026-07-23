@@ -3,7 +3,6 @@ import torch.backends.cuda
 import torch.backends.cudnn
 import torch.optim as optim
 import torch.distributed as dist
-from compressai.entropy_models import EntropyBottleneck
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -38,7 +37,6 @@ from decode_modes import SUPPORTED_DECODE_MODES
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
 ENTROPY_OPTIMIZER_VERSION = 2
-ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION = 2
 
 
 
@@ -136,30 +134,53 @@ def do_train(rank, local_rank, world_size, train_config):
                 "codec_mode=eval, trainable_codec_params=0"
             )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
-    opt = torch.optim.AdamW(main_parameters, lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
-    opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
     entropy_parameters = model.get_entropy_parameters()
+    main_parameter_ids = {id(parameter) for parameter in main_parameters}
     entropy_parameter_ids = {id(parameter) for parameter in entropy_parameters}
-    entropy_bottleneck_main_parameters = [
-        parameter
-        for module in model.codec.modules()
-        if isinstance(module, EntropyBottleneck)
-        for parameter in module.parameters()
-        if parameter.requires_grad and id(parameter) not in entropy_parameter_ids
-    ]
-    entropy_bottleneck_main_parameter_ids = {
-        id(parameter) for parameter in entropy_bottleneck_main_parameters
+    if len(main_parameter_ids) != len(main_parameters):
+        raise RuntimeError("Main optimizer parameter list contains duplicates")
+    if len(entropy_parameter_ids) != len(entropy_parameters):
+        raise RuntimeError("Entropy optimizer parameter list contains duplicates")
+    if main_parameter_ids & entropy_parameter_ids:
+        raise RuntimeError(
+            "Main and entropy optimizer parameter sets must be disjoint"
+        )
+    model_named_parameters = list(model.named_parameters())
+    model_parameter_names = {
+        id(parameter): name
+        for name, parameter in model_named_parameters
     }
-    entropy_bottleneck_main_parameter_signature = [
-        (name, tuple(parameter.shape))
-        for name, parameter in model.codec.named_parameters()
-        if id(parameter) in entropy_bottleneck_main_parameter_ids
-    ]
+    trainable_parameter_ids = {
+        id(parameter)
+        for _, parameter in model_named_parameters
+        if parameter.requires_grad
+    }
+    trainable_parameter_names = {
+        id(parameter): name
+        for name, parameter in model_named_parameters
+        if parameter.requires_grad
+    }
+    optimizer_parameter_ids = main_parameter_ids | entropy_parameter_ids
+    if optimizer_parameter_ids != trainable_parameter_ids:
+        missing = sorted(
+            trainable_parameter_names[parameter_id]
+            for parameter_id in trainable_parameter_ids - optimizer_parameter_ids
+        )
+        unexpected = sorted(
+            model_parameter_names.get(parameter_id, f"<id={parameter_id}>")
+            for parameter_id in optimizer_parameter_ids - trainable_parameter_ids
+        )
+        raise RuntimeError(
+            "Optimizer parameter partition does not match trainable model "
+            f"parameters; missing={missing}, unexpected={unexpected}"
+        )
     entropy_parameter_signature = [
         (name, tuple(parameter.shape))
         for name, parameter in model.codec.named_parameters()
         if name.endswith(".quantiles") and parameter.requires_grad
     ]
+    opt = torch.optim.AdamW(main_parameters, lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
+    opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
     opt_entropy = (
         optim.AdamW(
             entropy_parameters,
@@ -309,29 +330,6 @@ def do_train(rank, local_rank, world_size, train_config):
                 )
             
             opt.load_state_dict(checkpoint['opt'])
-            saved_entropy_main_version = checkpoint.get(
-                "entropy_bottleneck_main_optimizer_version"
-            )
-            saved_entropy_main_signature = checkpoint.get(
-                "entropy_bottleneck_main_parameter_signature"
-            )
-            if not (
-                saved_entropy_main_version
-                == ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION
-                and saved_entropy_main_signature
-                == entropy_bottleneck_main_parameter_signature
-            ):
-                reset_main_state_count = sum(
-                    opt.state.pop(parameter, None) is not None
-                    for parameter in entropy_bottleneck_main_parameters
-                )
-                if rank == 0:
-                    logger.warning(
-                        "Resetting legacy/incompatible main Adam moments for "
-                        f"{reset_main_state_count} entropy-bottleneck CDF "
-                        "parameters while preserving all model weights and "
-                        "unrelated optimizer state."
-                    )
             if "loss" in checkpoint:
                 loss_state = checkpoint["loss"]
                 loss_module.discriminator.load_state_dict(
@@ -351,9 +349,8 @@ def do_train(rank, local_rank, world_size, train_config):
                 saved_entropy_signature = checkpoint.get(
                     "entropy_parameter_signature"
                 )
-                # Legacy moments include the rate-loss gradient and global
-                # clipping. Reusing them with the isolated aux update can
-                # produce an oversized first resumed Adam step.
+                # Legacy moments were accumulated while entropy gradients
+                # participated in model-wide clipping.
                 if (
                     saved_entropy_version == ENTROPY_OPTIMIZER_VERSION
                     and saved_entropy_signature == entropy_parameter_signature
@@ -412,12 +409,6 @@ def do_train(rank, local_rank, world_size, train_config):
             "config": train_config,
             "entropy_bottleneck_loss": float(
                 model.module.codec.entropy_bottleneck_loss().detach().item()
-            ),
-            "entropy_bottleneck_main_optimizer_version": (
-                ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION
-            ),
-            "entropy_bottleneck_main_parameter_signature": (
-                entropy_bottleneck_main_parameter_signature
             ),
             "entropy_optimizer_version": ENTROPY_OPTIMIZER_VERSION,
             "entropy_parameter_signature": entropy_parameter_signature,
@@ -538,9 +529,20 @@ def do_train(rank, local_rank, world_size, train_config):
                 # parameters have moved. Keep its gradients out of main clipping.
                 if opt_entropy is not None:
                     opt_entropy.zero_grad(set_to_none=True)
-                    entropy_loss = model.module.codec.entropy_bottleneck_loss()
-                    entropy_loss.backward()
+                    entropy_loss_before_step = (
+                        model.module.codec.entropy_bottleneck_loss()
+                    )
+                    entropy_loss_before_step.backward()
                     opt_entropy.step()
+                    with torch.no_grad():
+                        entropy_loss = (
+                            model.module.codec.entropy_bottleneck_loss().detach()
+                        )
+                    if not torch.isfinite(entropy_loss).item():
+                        raise FloatingPointError(
+                            "Entropy-bottleneck loss became non-finite after "
+                            f"the auxiliary update at step {train_steps}"
+                        )
                 else:
                     entropy_loss = torch.tensor(0.0, device=x.device)
                 running_entropy_loss += entropy_loss.item() * accumulation_steps
@@ -586,7 +588,7 @@ def do_train(rank, local_rank, world_size, train_config):
 
                     lr = opt.param_groups[0]['lr']
                     if rank == 0:
-                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Entropy: {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
+                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Entropy(post-step): {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
                         log = {k: float(v) for k, v in log_dict.items()}
                         logger.info(json.dumps(log, indent=2))
                         if train_steps > disc_start:

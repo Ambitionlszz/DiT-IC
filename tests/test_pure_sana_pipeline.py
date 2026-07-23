@@ -153,22 +153,61 @@ class PureSanaStructureTest(unittest.TestCase):
         main_backward = train_source.index("loss.backward()")
         main_clip = train_source.index("clip_grad_norm_(main_parameters")
         main_step = train_source.index("opt.step()")
-        entropy_objective = train_source.index(
-            "entropy_loss = model.module.codec.entropy_bottleneck_loss()"
+        entropy_zero = train_source.index(
+            "opt_entropy.zero_grad(set_to_none=True)",
+            main_step,
         )
-        entropy_backward = train_source.index("entropy_loss.backward()")
+        entropy_objective = train_source.index(
+            "entropy_loss_before_step = ("
+        )
+        entropy_backward = train_source.index(
+            "entropy_loss_before_step.backward()"
+        )
         entropy_step = train_source.index("opt_entropy.step()")
+        post_step_entropy = train_source.index(
+            "entropy_loss = (",
+            entropy_step,
+        )
+        entropy_log = train_source.index(
+            "running_entropy_loss += entropy_loss.item()"
+        )
 
         self.assertLess(main_backward, main_clip)
         self.assertLess(main_clip, main_step)
+        self.assertLess(main_step, entropy_zero)
+        self.assertLess(entropy_zero, entropy_objective)
         self.assertLess(main_step, entropy_objective)
         self.assertLess(entropy_objective, entropy_backward)
         self.assertLess(entropy_backward, entropy_step)
-        self.assertEqual(
-            train_source.count(
-                "entropy_loss = model.module.codec.entropy_bottleneck_loss()"
-            ),
-            1,
+        self.assertLess(entropy_step, post_step_entropy)
+        self.assertLess(post_step_entropy, entropy_log)
+        self.assertIn("Entropy(post-step)", train_source)
+
+    def test_main_and_entropy_optimizer_parameters_are_disjoint_and_complete(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "if main_parameter_ids & entropy_parameter_ids:",
+            source,
+        )
+        self.assertIn(
+            "if optimizer_parameter_ids != trainable_parameter_ids:",
+            source,
+        )
+        self.assertIn(
+            "Optimizer parameter partition does not match trainable model",
+            source,
+        )
+        self.assertNotIn(
+            "ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION",
+            source,
+        )
+        self.assertNotIn(
+            "opt.state.pop(parameter, None)",
+            source,
+        )
+        self.assertIn(
+            "if not torch.isfinite(entropy_loss).item():",
+            source,
         )
 
     def test_legacy_entropy_optimizer_state_is_not_loaded_blindly(self):
@@ -195,40 +234,6 @@ class PureSanaStructureTest(unittest.TestCase):
         )
         self.assertIn(
             "Resetting legacy/incompatible entropy optimizer moments",
-            train_source,
-        )
-
-    def test_legacy_entropy_cdf_main_moments_are_reset_selectively(self):
-        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        do_train = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "do_train"
-        )
-        train_source = ast.get_source_segment(source, do_train)
-        normalized_source = " ".join(train_source.split())
-
-        self.assertIn(
-            "saved_entropy_main_version "
-            "== ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION",
-            normalized_source,
-        )
-        self.assertIn(
-            "saved_entropy_main_signature "
-            "== entropy_bottleneck_main_parameter_signature",
-            normalized_source,
-        )
-        self.assertIn(
-            "opt.state.pop(parameter, None)",
-            train_source,
-        )
-        self.assertIn(
-            "while preserving all model weights",
-            train_source,
-        )
-        self.assertIn(
-            "unrelated optimizer state",
             train_source,
         )
 
