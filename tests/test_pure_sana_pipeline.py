@@ -171,6 +171,46 @@ class PureSanaStructureTest(unittest.TestCase):
             1,
         )
 
+    def test_legacy_entropy_optimizer_state_is_not_loaded_blindly(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        do_train = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "do_train"
+        )
+        train_source = ast.get_source_segment(source, do_train)
+
+        self.assertIn(
+            "saved_entropy_version == ENTROPY_OPTIMIZER_VERSION",
+            train_source,
+        )
+        self.assertIn(
+            "saved_entropy_signature == entropy_parameter_signature",
+            train_source,
+        )
+        self.assertIn(
+            "opt_entropy.load_state_dict(entropy_state)",
+            train_source,
+        )
+        self.assertIn(
+            "Resetting legacy/incompatible entropy optimizer moments",
+            train_source,
+        )
+
+    def test_resume_records_and_checks_entropy_state(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        self.assertIn('"entropy_bottleneck_loss": float(', source)
+        self.assertIn(
+            "Restored entropy-bottleneck loss before the first update",
+            source,
+        )
+        self.assertIn(
+            "Entropy-bottleneck state changed while restoring the checkpoint",
+            source,
+        )
+        self.assertIn("'--resume_checkpoint'", source)
+
 
 if __name__ == "__main__":
     unittest.main()

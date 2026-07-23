@@ -33,6 +33,10 @@ from config_compat import (
 from decode_modes import SUPPORTED_DECODE_MODES
 
 
+# Bump when entropy-gradient ordering, scaling, or clipping semantics change.
+ENTROPY_OPTIMIZER_VERSION = 2
+
+
 
 
 def codec_models(model, device, **kwargs):
@@ -121,6 +125,11 @@ def do_train(rank, local_rank, world_size, train_config):
     opt = torch.optim.AdamW(main_parameters, lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
     opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
     entropy_parameters = model.get_entropy_parameters()
+    entropy_parameter_signature = [
+        (name, tuple(parameter.shape))
+        for name, parameter in model.codec.named_parameters()
+        if name.endswith(".quantiles") and parameter.requires_grad
+    ]
     opt_entropy = (
         optim.AdamW(
             entropy_parameters,
@@ -221,15 +230,48 @@ def do_train(rank, local_rank, world_size, train_config):
 
     if train_config['train']['resume']:
         # check if the checkpoint exists
-        checkpoint_files = glob(f"{checkpoint_dir}/*.pt")
+        resume_checkpoint = train_config['train'].get('resume_checkpoint')
+        checkpoint_files = (
+            [resume_checkpoint]
+            if resume_checkpoint is not None
+            else glob(f"{checkpoint_dir}/*.pt")
+        )
         if checkpoint_files:
-            checkpoint_files.sort(key=os.path.getmtime)
-            latest_checkpoint = checkpoint_files[-1]
+            if resume_checkpoint is not None:
+                latest_checkpoint = resume_checkpoint
+                if not os.path.isfile(latest_checkpoint):
+                    raise FileNotFoundError(
+                        f"Configured resume checkpoint does not exist: {latest_checkpoint}"
+                    )
+            else:
+                checkpoint_files.sort(key=os.path.getmtime)
+                latest_checkpoint = checkpoint_files[-1]
             checkpoint = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
             
             model.module.load_ckpt_dict(latest_checkpoint, use_ema=False)
             model.train()
             loss_module.train()
+
+            restored_entropy_loss = float(
+                model.module.codec.entropy_bottleneck_loss().detach().item()
+            )
+            if not np.isfinite(restored_entropy_loss):
+                raise RuntimeError(
+                    "Checkpoint restored a non-finite entropy-bottleneck loss: "
+                    f"{restored_entropy_loss}"
+                )
+            saved_entropy_loss = checkpoint.get("entropy_bottleneck_loss")
+            if saved_entropy_loss is not None and not np.isclose(
+                restored_entropy_loss,
+                float(saved_entropy_loss),
+                rtol=1e-4,
+                atol=1e-4,
+            ):
+                raise RuntimeError(
+                    "Entropy-bottleneck state changed while restoring the checkpoint: "
+                    f"saved={float(saved_entropy_loss):.6f}, "
+                    f"restored={restored_entropy_loss:.6f}"
+                )
             
             opt.load_state_dict(checkpoint['opt'])
             if "loss" in checkpoint:
@@ -247,7 +289,24 @@ def do_train(rank, local_rank, world_size, train_config):
                 )
             entropy_state = checkpoint.get("opt_entropy", checkpoint.get("opt_aux"))
             if opt_entropy is not None and entropy_state is not None:
-                opt_entropy.load_state_dict(entropy_state)
+                saved_entropy_version = checkpoint.get("entropy_optimizer_version")
+                saved_entropy_signature = checkpoint.get(
+                    "entropy_parameter_signature"
+                )
+                # Legacy moments include the rate-loss gradient and global
+                # clipping. Reusing them with the isolated aux update can
+                # produce an oversized first resumed Adam step.
+                if (
+                    saved_entropy_version == ENTROPY_OPTIMIZER_VERSION
+                    and saved_entropy_signature == entropy_parameter_signature
+                ):
+                    opt_entropy.load_state_dict(entropy_state)
+                elif rank == 0:
+                    logger.warning(
+                        "Resetting legacy/incompatible entropy optimizer moments "
+                        "while preserving the checkpoint's entropy-model weights "
+                        "and quantiles."
+                    )
 
             ema = checkpoint['ema']
             ema = move_to_device(checkpoint['ema'], device)
@@ -266,6 +325,10 @@ def do_train(rank, local_rank, world_size, train_config):
     
             if rank == 0: 
                 logger.info(f"Resuming training from checkpoint: {latest_checkpoint}")
+                logger.info(
+                    "Restored entropy-bottleneck loss before the first update: "
+                    f"{restored_entropy_loss:.6f}"
+                )
         else:
             train_steps = 0
             if rank == 0: 
@@ -289,6 +352,11 @@ def do_train(rank, local_rank, world_size, train_config):
             "scheduler_disc": scheduler_disc.state_dict(),
             "train_steps": train_steps,
             "config": train_config,
+            "entropy_bottleneck_loss": float(
+                model.module.codec.entropy_bottleneck_loss().detach().item()
+            ),
+            "entropy_optimizer_version": ENTROPY_OPTIMIZER_VERSION,
+            "entropy_parameter_signature": entropy_parameter_signature,
         }
         if opt_entropy is not None:
             entropy_state = opt_entropy.state_dict()
@@ -729,6 +797,12 @@ if __name__ == "__main__":
         default=None,
         help='Common Pure SANA checkpoint used by --frozen_decode_ablation.',
     )
+    parser.add_argument(
+        '--resume_checkpoint',
+        type=str,
+        default=None,
+        help='Exact training checkpoint to resume; also enables train.resume.',
+    )
     parser.add_argument('--upsample_mode', type=str, default=None,
                         help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
@@ -746,6 +820,9 @@ if __name__ == "__main__":
             args.frozen_decode_ablation,
             args.init_checkpoint,
         )
+    if args.resume_checkpoint is not None:
+        train_config['train']['resume'] = True
+        train_config['train']['resume_checkpoint'] = args.resume_checkpoint
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()
