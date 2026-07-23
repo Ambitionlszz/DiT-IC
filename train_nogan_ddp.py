@@ -3,6 +3,7 @@ import torch.backends.cuda
 import torch.backends.cudnn
 import torch.optim as optim
 import torch.distributed as dist
+from compressai.entropy_models import EntropyBottleneck
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -35,6 +36,7 @@ from decode_modes import SUPPORTED_DECODE_MODES
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
 ENTROPY_OPTIMIZER_VERSION = 2
+ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION = 2
 
 
 
@@ -125,6 +127,22 @@ def do_train(rank, local_rank, world_size, train_config):
     opt = torch.optim.AdamW(main_parameters, lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
     opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
     entropy_parameters = model.get_entropy_parameters()
+    entropy_parameter_ids = {id(parameter) for parameter in entropy_parameters}
+    entropy_bottleneck_main_parameters = [
+        parameter
+        for module in model.codec.modules()
+        if isinstance(module, EntropyBottleneck)
+        for parameter in module.parameters()
+        if parameter.requires_grad and id(parameter) not in entropy_parameter_ids
+    ]
+    entropy_bottleneck_main_parameter_ids = {
+        id(parameter) for parameter in entropy_bottleneck_main_parameters
+    }
+    entropy_bottleneck_main_parameter_signature = [
+        (name, tuple(parameter.shape))
+        for name, parameter in model.codec.named_parameters()
+        if id(parameter) in entropy_bottleneck_main_parameter_ids
+    ]
     entropy_parameter_signature = [
         (name, tuple(parameter.shape))
         for name, parameter in model.codec.named_parameters()
@@ -274,6 +292,29 @@ def do_train(rank, local_rank, world_size, train_config):
                 )
             
             opt.load_state_dict(checkpoint['opt'])
+            saved_entropy_main_version = checkpoint.get(
+                "entropy_bottleneck_main_optimizer_version"
+            )
+            saved_entropy_main_signature = checkpoint.get(
+                "entropy_bottleneck_main_parameter_signature"
+            )
+            if not (
+                saved_entropy_main_version
+                == ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION
+                and saved_entropy_main_signature
+                == entropy_bottleneck_main_parameter_signature
+            ):
+                reset_main_state_count = sum(
+                    opt.state.pop(parameter, None) is not None
+                    for parameter in entropy_bottleneck_main_parameters
+                )
+                if rank == 0:
+                    logger.warning(
+                        "Resetting legacy/incompatible main Adam moments for "
+                        f"{reset_main_state_count} entropy-bottleneck CDF "
+                        "parameters while preserving all model weights and "
+                        "unrelated optimizer state."
+                    )
             if "loss" in checkpoint:
                 loss_state = checkpoint["loss"]
                 loss_module.discriminator.load_state_dict(
@@ -354,6 +395,12 @@ def do_train(rank, local_rank, world_size, train_config):
             "config": train_config,
             "entropy_bottleneck_loss": float(
                 model.module.codec.entropy_bottleneck_loss().detach().item()
+            ),
+            "entropy_bottleneck_main_optimizer_version": (
+                ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION
+            ),
+            "entropy_bottleneck_main_parameter_signature": (
+                entropy_bottleneck_main_parameter_signature
             ),
             "entropy_optimizer_version": ENTROPY_OPTIMIZER_VERSION,
             "entropy_parameter_signature": entropy_parameter_signature,

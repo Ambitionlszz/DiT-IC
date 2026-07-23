@@ -198,6 +198,40 @@ class PureSanaStructureTest(unittest.TestCase):
             train_source,
         )
 
+    def test_legacy_entropy_cdf_main_moments_are_reset_selectively(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        do_train = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "do_train"
+        )
+        train_source = ast.get_source_segment(source, do_train)
+        normalized_source = " ".join(train_source.split())
+
+        self.assertIn(
+            "saved_entropy_main_version "
+            "== ENTROPY_BOTTLENECK_MAIN_OPTIMIZER_VERSION",
+            normalized_source,
+        )
+        self.assertIn(
+            "saved_entropy_main_signature "
+            "== entropy_bottleneck_main_parameter_signature",
+            normalized_source,
+        )
+        self.assertIn(
+            "opt.state.pop(parameter, None)",
+            train_source,
+        )
+        self.assertIn(
+            "while preserving all model weights",
+            train_source,
+        )
+        self.assertIn(
+            "unrelated optimizer state",
+            train_source,
+        )
+
     def test_resume_records_and_checks_entropy_state(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
         self.assertIn('"entropy_bottleneck_loss": float(', source)
