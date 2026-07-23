@@ -91,13 +91,14 @@ def do_train(rank, local_rank, world_size, train_config):
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
     loss_module = model.loss
     model.loss = None
+    main_parameters = model.get_trainable_params()
     
     if rank==0:
         ema = deepcopy(model.get_state_dicts_for_save())
 
     if rank == 0:
         logger.info(f"Model Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
-        logger.info(f"Trainable Parameters: {sum(p.numel() for p in model.get_trainable_params()) / 1e6:.2f}M")
+        logger.info(f"Trainable Parameters: {sum(p.numel() for p in main_parameters) / 1e6:.2f}M")
         trainable_codec_params = sum(
             parameter.numel()
             for parameter in model.codec.parameters()
@@ -117,7 +118,7 @@ def do_train(rank, local_rank, world_size, train_config):
                 "codec_mode=eval, trainable_codec_params=0"
             )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
-    opt = torch.optim.AdamW(model.get_trainable_params(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
+    opt = torch.optim.AdamW(main_parameters, lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
     opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
     entropy_parameters = model.get_entropy_parameters()
     opt_entropy = (
@@ -358,16 +359,6 @@ def do_train(rank, local_rank, world_size, train_config):
             # ---- backward pass (accumulate gradients) ----
             loss.backward()
 
-            # Entropy-bottleneck quantile gradients follow generator accumulation.
-            if opt_entropy is not None:
-                entropy_loss = (
-                    model.module.codec.entropy_bottleneck_loss()
-                    / accumulation_steps
-                )
-                entropy_loss.backward()
-            else:
-                entropy_loss = torch.tensor(0.0, device=x.device)
-
             # With accumulate_disc=False, use only the boundary micro-batch so
             # the discriminator still performs one update per generator step.
             run_discriminator = disc_active and (accumulate_disc or will_step)
@@ -394,7 +385,6 @@ def do_train(rank, local_rank, world_size, train_config):
 
             # Track running losses at original scale
             running_loss += loss.item() * accumulation_steps
-            running_entropy_loss += entropy_loss.item() * accumulation_steps
             if run_discriminator:
                 running_dis_loss += discloss.item() * accumulation_steps
             log_steps += 1
@@ -403,13 +393,20 @@ def do_train(rank, local_rank, world_size, train_config):
             if accum_count == accumulation_steps:
                 # Generator step
                 if 'max_grad_norm' in train_config['optimizer']:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), train_config['optimizer']['max_grad_norm'])
+                    torch.nn.utils.clip_grad_norm_(main_parameters, train_config['optimizer']['max_grad_norm'])
                 opt.step()
                 scheduler.step()
 
-                # Entropy-bottleneck step
+                # Recompute the quantile objective after the main entropy-model
+                # parameters have moved. Keep its gradients out of main clipping.
                 if opt_entropy is not None:
+                    opt_entropy.zero_grad(set_to_none=True)
+                    entropy_loss = model.module.codec.entropy_bottleneck_loss()
+                    entropy_loss.backward()
                     opt_entropy.step()
+                else:
+                    entropy_loss = torch.tensor(0.0, device=x.device)
+                running_entropy_loss += entropy_loss.item() * accumulation_steps
 
                 # Discriminator step
                 if run_discriminator:

@@ -140,6 +140,37 @@ class PureSanaStructureTest(unittest.TestCase):
         train_source = ast.get_source_segment(source, train_method)
         self.assertIn("self.codec.eval()", train_source)
 
+    def test_entropy_aux_step_uses_updated_main_model(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        do_train = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "do_train"
+        )
+        train_source = ast.get_source_segment(source, do_train)
+
+        main_backward = train_source.index("loss.backward()")
+        main_clip = train_source.index("clip_grad_norm_(main_parameters")
+        main_step = train_source.index("opt.step()")
+        entropy_objective = train_source.index(
+            "entropy_loss = model.module.codec.entropy_bottleneck_loss()"
+        )
+        entropy_backward = train_source.index("entropy_loss.backward()")
+        entropy_step = train_source.index("opt_entropy.step()")
+
+        self.assertLess(main_backward, main_clip)
+        self.assertLess(main_clip, main_step)
+        self.assertLess(main_step, entropy_objective)
+        self.assertLess(entropy_objective, entropy_backward)
+        self.assertLess(entropy_backward, entropy_step)
+        self.assertEqual(
+            train_source.count(
+                "entropy_loss = model.module.codec.entropy_bottleneck_loss()"
+            ),
+            1,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
