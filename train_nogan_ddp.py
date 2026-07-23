@@ -28,7 +28,9 @@ from collections import OrderedDict
 
 from datasets.image import ImageFolder
 from config_compat import (
+    FROZEN_MEANFLOW_MODES,
     configure_frozen_decode_ablation,
+    configure_frozen_meanflow_ablation,
     normalize_pure_sana_config,
 )
 from decode_modes import SUPPORTED_DECODE_MODES
@@ -123,6 +125,16 @@ def do_train(rank, local_rank, world_size, train_config):
                 f"common_init={frozen_ablation['init_checkpoint']}, "
                 "codec_mode=eval, trainable_codec_params=0"
             )
+        frozen_meanflow = train_config.get("experiment", {}).get(
+            "frozen_meanflow_ablation"
+        )
+        if frozen_meanflow is not None:
+            logger.info(
+                "Frozen MeanFlow ablation: "
+                f"mode={frozen_meanflow['mode']}, "
+                f"common_init={frozen_meanflow['init_checkpoint']}, "
+                "codec_mode=eval, trainable_codec_params=0"
+            )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     opt = torch.optim.AdamW(main_parameters, lr=train_config['optimizer']['lr'], weight_decay=0, betas=(0.9, train_config['optimizer']['beta2']))
     opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=train_config['optimizer']['lr'], weight_decay=0, betas=train_config['optimizer']['beta_vae'])
@@ -175,7 +187,12 @@ def do_train(rank, local_rank, world_size, train_config):
     # scheduler = MultiStepLR(opt, milestones=train_config['optimizer']['step_lr'], gamma=0.5)
     # scheduler_disc = MultiStepLR(opt_disc, milestones=train_config['optimizer']['step_lr'], gamma=0.5)
     
-    model = DDP(model, device_ids=[local_rank], static_graph=True)
+    model = DDP(
+        model,
+        device_ids=[local_rank],
+        static_graph=not model.meanflow_enabled,
+        find_unused_parameters=model.meanflow_enabled,
+    )
     discriminator = (
         DDP(loss_module.discriminator, device_ids=[local_rank], broadcast_buffers=False)
         if world_size > 1
@@ -469,6 +486,11 @@ def do_train(rank, local_rank, world_size, train_config):
                     discriminator=loss_module.discriminator,
                 )
                 loss_module.discriminator.requires_grad_(True)
+            meanflow_loss = model.module.latest_meanflow_loss
+            if meanflow_loss is not None:
+                loss = loss + meanflow_loss
+                for name, value in model.module.latest_meanflow_stats.items():
+                    log_dict[f"meanflow/{name}"] = value
             loss = loss / accumulation_steps
 
             # ---- backward pass (accumulate gradients) ----
@@ -842,7 +864,18 @@ if __name__ == "__main__":
         '--init_checkpoint',
         type=str,
         default=None,
-        help='Common Pure SANA checkpoint used by --frozen_decode_ablation.',
+        help=(
+            'Common Pure SANA checkpoint used by a frozen ablation.'
+        ),
+    )
+    parser.add_argument(
+        '--frozen_meanflow_ablation',
+        type=str,
+        choices=FROZEN_MEANFLOW_MODES,
+        default=None,
+        help=(
+            'Fixed-bitstream Pure-vs-AdaLN-MeanFlow comparison mode.'
+        ),
     )
     parser.add_argument(
         '--resume_checkpoint',
@@ -857,14 +890,32 @@ if __name__ == "__main__":
     train_config = load_config(args.config)
     if args.upsample_mode is not None:
         train_config['model']['params']['codec_param']['upsample_mode'] = args.upsample_mode
-    if (args.frozen_decode_ablation is None) != (args.init_checkpoint is None):
+    selected_frozen_ablation = (
+        args.frozen_decode_ablation is not None
+        or args.frozen_meanflow_ablation is not None
+    )
+    if (
+        args.frozen_decode_ablation is not None
+        and args.frozen_meanflow_ablation is not None
+    ):
         parser.error(
-            '--frozen_decode_ablation and --init_checkpoint must be provided together'
+            '--frozen_decode_ablation and --frozen_meanflow_ablation '
+            'cannot be combined'
+        )
+    if selected_frozen_ablation != (args.init_checkpoint is not None):
+        parser.error(
+            'a frozen ablation and --init_checkpoint must be provided together'
         )
     if args.frozen_decode_ablation is not None:
         configure_frozen_decode_ablation(
             train_config,
             args.frozen_decode_ablation,
+            args.init_checkpoint,
+        )
+    if args.frozen_meanflow_ablation is not None:
+        configure_frozen_meanflow_ablation(
+            train_config,
+            args.frozen_meanflow_ablation,
             args.init_checkpoint,
         )
     if args.resume_checkpoint is not None:

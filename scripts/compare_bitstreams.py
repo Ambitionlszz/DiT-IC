@@ -54,7 +54,7 @@ def main():
 
     if missing_from_gs or missing_from_baseline or mismatched:
         for path in missing_from_gs:
-            print(f"missing from g_s residual: {path}")
+            print(f"missing from candidate: {path}")
         for path in missing_from_baseline:
             print(f"missing from baseline: {path}")
         for path in mismatched:
