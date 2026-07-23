@@ -5,6 +5,9 @@ Reports per-image latent RMS statistics for:
   quantization: g_s(y_hat) - g_s(y)
   curvature:    g_s((y + y_hat) / 2) - (g_s(y) + g_s(y_hat)) / 2
 
+Also reports transform/quantization direction cosine, exact MSE-energy
+decomposition, and the net MSE change caused by quantization.
+
 The default path obtains ``y_hat`` from real rANS compress/decompress.
 """
 
@@ -236,11 +239,27 @@ def measure_image(vae, codec, image, decode_source):
     codec_midpoint = codec.g_s(0.5 * (y + y_hat))
     chord_midpoint = 0.5 * (z_u + z_1)
 
+    transform_vector = (z_u.float() - z_0.float()).flatten(1)
+    quantization_vector = (z_1.float() - z_u.float()).flatten(1)
+    total_vector = (z_1.float() - z_0.float()).flatten(1)
+    transform_mse = transform_vector.square().mean(1)
+    quantization_mse = quantization_vector.square().mean(1)
+    total_mse = total_vector.square().mean(1)
+    cross_term = (transform_vector * quantization_vector).mean(1)
+
     transform = rms(z_u, z_0)
     quantization = rms(z_1, z_u)
     curvature = rms(codec_midpoint, chord_midpoint)
     total = rms(z_1, z_0)
     eps = torch.finfo(torch.float32).eps
+    cosine = cross_term / (
+        transform_mse.sqrt() * quantization_mse.sqrt()
+    ).clamp_min(eps)
+    quantization_delta_mse = total_mse - transform_mse
+    decomposition_error = (
+        total_mse - (transform_mse + quantization_mse + 2.0 * cross_term)
+    ).abs()
+
     return {
         "transform_rms": transform,
         "quantization_rms": quantization,
@@ -254,14 +273,43 @@ def measure_image(vae, codec, image, decode_source):
             curvature / quantization.clamp_min(eps)
         ),
         "curvature_over_total": curvature / total.clamp_min(eps),
+        "transform_quantization_cosine": cosine,
+        "transform_energy_over_total": (
+            transform_mse / total_mse.clamp_min(eps)
+        ),
+        "quantization_energy_over_total": (
+            quantization_mse / total_mse.clamp_min(eps)
+        ),
+        "cross_term_over_total": (
+            2.0 * cross_term / total_mse.clamp_min(eps)
+        ),
+        "quantization_delta_mse": quantization_delta_mse,
+        "quantization_delta_mse_over_total": (
+            quantization_delta_mse / total_mse.clamp_min(eps)
+        ),
+        "quantization_reduces_mse_indicator": (
+            quantization_delta_mse < 0
+        ).float(),
+        "decomposition_identity_relative_error": (
+            decomposition_error / total_mse.clamp_min(eps)
+        ),
     }
 
 
 def summarize(values):
     tensor = torch.tensor(values, dtype=torch.float64)
+    p10, median, p90 = torch.quantile(
+        tensor,
+        torch.tensor([0.1, 0.5, 0.9], dtype=tensor.dtype),
+    ).tolist()
     return {
         "mean": tensor.mean().item(),
         "std": tensor.std(unbiased=False).item(),
+        "p10": p10,
+        "median": median,
+        "p90": p90,
+        "min": tensor.min().item(),
+        "max": tensor.max().item(),
     }
 
 
