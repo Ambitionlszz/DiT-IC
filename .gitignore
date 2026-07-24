@@ -4,7 +4,13 @@ checkpoints/
 output/
 logs/
 results/
-configs/
+configs/*
+!configs/pure_sana_train.yaml
+!configs/pure_sana_infer.yaml
+!configs/baseline_lrd0p4.yaml
+!configs/pure_sana_meanflow_adaln.yaml
+!configs/pure_sana_ablation_gs_residual.yaml
+!configs/pure_sana_ablation_gs_residual_infer.yaml
 SANA/transformer/*.safetensors
 SANA/transformer/*.bin
 SANA/vae/*.safetensors
