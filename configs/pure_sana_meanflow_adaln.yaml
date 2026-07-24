@@ -64,9 +64,9 @@ model:
 
 train:
   output_dir: 'checkpoints'
-  exp_name: 'pure_sana_meanflow_adaln_lrd0p4_bs8_200k'
-  global_batch_size: 8
-  accumulation_steps: 1
+  exp_name: 'pure_sana_meanflow_adaln_lrd0p4_bs4_200k'
+  global_batch_size: 4
+  accumulation_steps: 2
   accumulate_disc: false
   resume: false
   log_every: 100
