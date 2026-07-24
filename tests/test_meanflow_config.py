@@ -112,10 +112,12 @@ class MeanFlowConfigTest(unittest.TestCase):
             "adaln",
         )
         self.assertEqual(
-            configured["experiment"]["frozen_meanflow_ablation"][
-                "init_checkpoint"
-            ],
-            str(checkpoint.resolve()),
+            Path(
+                configured["experiment"]["frozen_meanflow_ablation"][
+                    "init_checkpoint"
+                ]
+            ).resolve(),
+            checkpoint.resolve(),
         )
         self.assertFalse(configured["train"]["resume"])
 
@@ -154,16 +156,6 @@ class MeanFlowConfigTest(unittest.TestCase):
         self.assertIn('"state_dict_meanflow"', source)
         self.assertIn("self.meanflow.load_state_dict(meanflow_state)", source)
         self.assertNotIn("condition_caption(", source)
-
-    def test_factorization_probe_uses_pure_codec_signatures(self):
-        source = (
-            ROOT / "scripts" / "measure_codec_factorization.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("packed = codec.compress(z_0)", source)
-        self.assertIn('z_1 = codec(z_0)["mean"]', source)
-        self.assertNotIn("codec.compress(z_0, None)", source)
-        self.assertNotIn("codec(z_0, None)", source)
-
 
 if __name__ == "__main__":
     unittest.main()

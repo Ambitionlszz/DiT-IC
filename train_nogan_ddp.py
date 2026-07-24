@@ -28,11 +28,9 @@ from collections import OrderedDict
 from datasets.image import ImageFolder
 from config_compat import (
     FROZEN_MEANFLOW_MODES,
-    configure_frozen_decode_ablation,
     configure_frozen_meanflow_ablation,
     normalize_pure_sana_config,
 )
-from decode_modes import SUPPORTED_DECODE_MODES
 
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
@@ -113,16 +111,6 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info(
             f"Trainable Codec Parameters: {trainable_codec_params / 1e6:.2f}M"
         )
-        frozen_ablation = train_config.get("experiment", {}).get(
-            "frozen_decode_ablation"
-        )
-        if frozen_ablation is not None:
-            logger.info(
-                "Frozen decode ablation: "
-                f"mode={frozen_ablation['mode']}, "
-                f"common_init={frozen_ablation['init_checkpoint']}, "
-                "codec_mode=eval, trainable_codec_params=0"
-            )
         frozen_meanflow = train_config.get("experiment", {}).get(
             "frozen_meanflow_ablation"
         )
@@ -856,13 +844,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/pure_sana_train.yaml')
     parser.add_argument(
-        '--frozen_decode_ablation',
-        type=str,
-        choices=SUPPORTED_DECODE_MODES,
-        default=None,
-        help='Fixed-bitstream comparison mode initialized from one Pure checkpoint.',
-    )
-    parser.add_argument(
         '--init_checkpoint',
         type=str,
         default=None,
@@ -892,27 +873,10 @@ if __name__ == "__main__":
     train_config = load_config(args.config)
     if args.upsample_mode is not None:
         train_config['model']['params']['codec_param']['upsample_mode'] = args.upsample_mode
-    selected_frozen_ablation = (
-        args.frozen_decode_ablation is not None
-        or args.frozen_meanflow_ablation is not None
-    )
-    if (
-        args.frozen_decode_ablation is not None
-        and args.frozen_meanflow_ablation is not None
-    ):
-        parser.error(
-            '--frozen_decode_ablation and --frozen_meanflow_ablation '
-            'cannot be combined'
-        )
+    selected_frozen_ablation = args.frozen_meanflow_ablation is not None
     if selected_frozen_ablation != (args.init_checkpoint is not None):
         parser.error(
             'a frozen ablation and --init_checkpoint must be provided together'
-        )
-    if args.frozen_decode_ablation is not None:
-        configure_frozen_decode_ablation(
-            train_config,
-            args.frozen_decode_ablation,
-            args.init_checkpoint,
         )
     if args.frozen_meanflow_ablation is not None:
         configure_frozen_meanflow_ablation(

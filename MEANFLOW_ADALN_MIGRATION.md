@@ -79,24 +79,6 @@ Deployment remains one SANA call:
 rANS decode -> z_1 -> z_1 - U(z_1,1,0) -> VAE decode
 ```
 
-## Codec-factorization probe
-
-The migrated codec-factorization component is a diagnostic probe, matching
-the original `meanflow` branch: it does not alter the training graph. The
-default mode captures `y` and real-rANS-decoded `y_hat`, then measures
-transform, quantization and synthesis-path curvature:
-
-```bash
-python scripts/measure_codec_factorization.py \
-  --config configs/baseline_lrd0p4.yaml \
-  --checkpoint /path/to/pure_checkpoint.pt \
-  --max-images 24 \
-  --output-json results/codec_factorization.json
-```
-
-Keep the default `--decode-source rans` for the decision; `forward` is only a
-faster approximation.
-
 ## Server verification
 
 Before a long run, use the training server environment:

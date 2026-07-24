@@ -1,4 +1,4 @@
-SUPPORTED_DECODE_MODES = ("sana", "gs_residual")
+SUPPORTED_DECODE_MODES = ("sana",)
 
 
 def validate_decode_mode(decode_mode):
@@ -19,13 +19,8 @@ def validate_decode_checkpoint(
     source,
 ):
     validate_decode_mode(decode_mode)
-    if decode_mode == "gs_residual" and not has_gs_fusion:
-        if training and allow_missing_gs_fusion:
-            return
+    if has_gs_fusion:
         raise ValueError(
-            f"{source} has no g_s_fusion weights, but decode_mode='gs_residual'"
-        )
-    if decode_mode == "sana" and has_gs_fusion:
-        raise ValueError(
-            f"{source} contains g_s_fusion weights, but decode_mode='sana'"
+            f"{source} contains g_s_fusion weights, but this branch supports "
+            "only decode_mode='sana'"
         )

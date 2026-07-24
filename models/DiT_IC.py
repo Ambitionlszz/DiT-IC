@@ -64,7 +64,6 @@ class Codec(nn.Module):
         text_encoder_path=None,
         freeze_codec=False,
         decode_mode="sana",
-        allow_missing_gs_fusion_for_init=False,
         meanflow_params=None,
         require_pure_init=False,
         **kwargs,
@@ -173,15 +172,6 @@ class Codec(nn.Module):
             else None
         )
 
-        if self.decode_mode == "gs_residual":
-            with torch.random.fork_rng(devices=[]):
-                self.g_s_fusion = nn.Sequential(
-                    nn.Conv2d(64, 32, kernel_size=3, padding=1),
-                    nn.GELU(),
-                    nn.Conv2d(32, 32, kernel_size=3, padding=1),
-                )
-            print("[DecodeMode] g_s_residual fusion module initialized")
-
         if use_merge:
             if codec_path is None:
                 raise ValueError("codec_path is required when use_merge=True")
@@ -211,9 +201,6 @@ class Codec(nn.Module):
                 self.load_ckpt_dict(
                     codec_path,
                     use_ema,
-                    allow_missing_gs_fusion=(
-                        training and allow_missing_gs_fusion_for_init
-                    ),
                     require_pure_source=(
                         training and self.require_pure_init
                     ),
@@ -366,7 +353,6 @@ class Codec(nn.Module):
         self,
         codec_path,
         use_ema=False,
-        allow_missing_gs_fusion=False,
         require_pure_source=False,
     ):
         print("[Pure SANA] Loading trained weights")
@@ -392,7 +378,7 @@ class Codec(nn.Module):
             self.decode_mode,
             has_gs_fusion,
             training=self._init_for_training,
-            allow_missing_gs_fusion=allow_missing_gs_fusion,
+            allow_missing_gs_fusion=False,
             source=f"checkpoint {codec_path!r}",
         )
         meanflow_state = state.get("state_dict_meanflow")
@@ -464,11 +450,6 @@ class Codec(nn.Module):
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
         if meanflow_state is not None:
             self.meanflow.load_state_dict(meanflow_state)
-
-        if has_gs_fusion:
-            self.g_s_fusion.load_state_dict(state["state_dict_g_s_fusion"])
-        elif self.decode_mode == "gs_residual":
-            print("[Pure SANA] Warm-starting g_s_fusion from its initialization")
 
     def train(self, mode=True):
         super().train(mode)
@@ -595,8 +576,6 @@ class Codec(nn.Module):
             if "lora" in name and parameter.requires_grad
         )
         parameters.extend(self.text_proj.parameters())
-        if self.decode_mode == "gs_residual":
-            parameters.extend(self.g_s_fusion.parameters())
         if self.meanflow_enabled:
             parameters.extend(self.meanflow.parameters())
         return parameters
@@ -616,9 +595,6 @@ class Codec(nn.Module):
             },
             "state_dict_text_proj": text_proj.state_dict(),
         }
-        if self.decode_mode == "gs_residual":
-            g_s_fusion = getattr(self.g_s_fusion, "module", self.g_s_fusion)
-            state_dicts["state_dict_g_s_fusion"] = g_s_fusion.state_dict()
         if self.meanflow_enabled:
             meanflow = getattr(self.meanflow, "module", self.meanflow)
             state_dicts["state_dict_meanflow"] = meanflow.state_dict()
@@ -721,45 +697,13 @@ class Codec(nn.Module):
             return_dict=False,
         )[0].clamp(-1, 1)
 
-    def _decode_with_gs_residual(self, latent):
-        """Ablation: g_s output (latent) skip-connects to DiT output, then
-        concat + fusion before VAE decode."""
-        condition = self._fixed_text_condition(
-            latent.shape[0],
-            latent.device,
-        )
-        timestep = self.sched.base_scheduler.timesteps.expand(latent.shape[0])
-        timestep = timestep * self.DiT.config.timestep_scale
-        model_prediction = self.DiT(
-            latent,
-            encoder_hidden_states=condition,
-            timestep=timestep.to(latent.device),
-            return_dict=False,
-        )[0]
-        denoised = self.sched.step(model_prediction, latent)
-        # Residual: g_s output added to DiT output
-        enhanced = denoised + latent
-        # Concat enhanced with original g_s output, then fuse
-        combined = torch.cat([enhanced, latent], dim=1)
-        fused = self.g_s_fusion(combined)
-        return self.vae.decode(
-            fused / self.vae.config.scaling_factor,
-            return_dict=False,
-        )[0].clamp(-1, 1)
-
-    def _decode_latent(self, latent):
-        """Dispatch to the active decode method."""
-        if self.decode_mode == "gs_residual":
-            return self._decode_with_gs_residual(latent)
-        return self._decode_with_sana(latent)
-
     def forward(self, image):
         self.latest_meanflow_loss = None
         self.latest_meanflow_stats = None
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
         codec_output = self.codec(latent)
         compressed_latent = codec_output["mean"]
-        output_image = self._decode_latent(compressed_latent)
+        output_image = self._decode_with_sana(compressed_latent)
         if self.meanflow_enabled and self.training:
             base_condition = self._fixed_text_condition(
                 compressed_latent.shape[0],
@@ -790,4 +734,4 @@ class Codec(nn.Module):
 
     def decompress(self, strings, shape):
         latent = self.codec.decompress(strings, shape)
-        return self._decode_latent(latent)
+        return self._decode_with_sana(latent)

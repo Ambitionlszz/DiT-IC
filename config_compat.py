@@ -140,40 +140,6 @@ def normalize_pure_sana_config(config):
     return config
 
 
-def configure_frozen_decode_ablation(config, mode, init_checkpoint):
-    """Configure a fixed-bitstream SANA-vs-g_s warm-start comparison."""
-    mode = validate_decode_mode(mode)
-    if not init_checkpoint:
-        raise ValueError("frozen decode ablation requires --init_checkpoint")
-
-    init_checkpoint = os.path.abspath(os.path.expanduser(init_checkpoint))
-    if not os.path.isfile(init_checkpoint):
-        raise FileNotFoundError(
-            f"Pure SANA initialization checkpoint not found: {init_checkpoint}"
-        )
-
-    params = config["model"]["params"]
-    configured_mode = params.get("decode_mode", "sana")
-    if configured_mode != mode:
-        raise ValueError(
-            f"config decode_mode={configured_mode!r} does not match "
-            f"--frozen_decode_ablation={mode!r}"
-        )
-    params.update(
-        {
-            "codec_path": init_checkpoint,
-            "freeze_codec": True,
-            "use_merge": False,
-            "allow_missing_gs_fusion_for_init": mode == "gs_residual",
-        }
-    )
-    config.setdefault("experiment", {})["frozen_decode_ablation"] = {
-        "mode": mode,
-        "init_checkpoint": init_checkpoint,
-    }
-    return config
-
-
 def configure_frozen_meanflow_ablation(config, mode, init_checkpoint):
     """Configure a fixed-bitstream Pure-vs-AdaLN-MeanFlow comparison."""
     if mode not in FROZEN_MEANFLOW_MODES:
