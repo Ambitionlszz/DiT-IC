@@ -7,7 +7,6 @@ results/
 configs/*
 !configs/pure_sana_train.yaml
 !configs/pure_sana_infer.yaml
-!configs/pure_sana_meanflow_adaln.yaml
 SANA/transformer/*.safetensors
 SANA/transformer/*.bin
 SANA/vae/*.safetensors

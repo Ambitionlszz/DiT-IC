@@ -13,6 +13,9 @@ class PureSanaStructureTest(unittest.TestCase):
             ROOT / "ELIC" / "ckbd.py",
             ROOT / "ELIC" / "elic_official.py",
             ROOT / "models" / "foundation_models.py",
+            ROOT / "models" / "compression_meanflow.py",
+            ROOT / "scripts" / "measure_codec_factorization.py",
+            ROOT / "scripts" / "evaluate_correction_ownership.py",
         ]
         self.assertFalse(any(path.exists() for path in removed_paths))
 
@@ -119,10 +122,6 @@ class PureSanaStructureTest(unittest.TestCase):
             and node.func.attr == "DiT"
         ]
         self.assertEqual(len(dit_calls), 1)
-
-    def test_gs_fusion_initialization_preserves_shared_rng_stream(self):
-        source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
-        self.assertIn("with torch.random.fork_rng(devices=[]):", source)
 
     def test_frozen_codec_stays_in_eval_mode(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")

@@ -26,11 +26,7 @@ from copy import deepcopy
 from collections import OrderedDict
 
 from datasets.image import ImageFolder
-from config_compat import (
-    FROZEN_MEANFLOW_MODES,
-    configure_frozen_meanflow_ablation,
-    normalize_pure_sana_config,
-)
+from config_compat import normalize_pure_sana_config
 
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
@@ -111,16 +107,6 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info(
             f"Trainable Codec Parameters: {trainable_codec_params / 1e6:.2f}M"
         )
-        frozen_meanflow = train_config.get("experiment", {}).get(
-            "frozen_meanflow_ablation"
-        )
-        if frozen_meanflow is not None:
-            logger.info(
-                "Frozen MeanFlow ablation: "
-                f"mode={frozen_meanflow['mode']}, "
-                f"common_init={frozen_meanflow['init_checkpoint']}, "
-                "codec_mode=eval, trainable_codec_params=0"
-            )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     entropy_parameters = model.get_entropy_parameters()
     main_parameter_ids = {id(parameter) for parameter in main_parameters}
@@ -196,12 +182,7 @@ def do_train(rank, local_rank, world_size, train_config):
     # scheduler = MultiStepLR(opt, milestones=train_config['optimizer']['step_lr'], gamma=0.5)
     # scheduler_disc = MultiStepLR(opt_disc, milestones=train_config['optimizer']['step_lr'], gamma=0.5)
     
-    model = DDP(
-        model,
-        device_ids=[local_rank],
-        static_graph=not model.meanflow_enabled,
-        find_unused_parameters=model.meanflow_enabled,
-    )
+    model = DDP(model, device_ids=[local_rank], static_graph=True)
     discriminator = (
         DDP(loss_module.discriminator, device_ids=[local_rank], broadcast_buffers=False)
         if world_size > 1
@@ -465,11 +446,6 @@ def do_train(rank, local_rank, world_size, train_config):
                     discriminator=loss_module.discriminator,
                 )
                 loss_module.discriminator.requires_grad_(True)
-            meanflow_loss = model.module.latest_meanflow_loss
-            if meanflow_loss is not None:
-                loss = loss + meanflow_loss
-                for name, value in model.module.latest_meanflow_stats.items():
-                    log_dict[f"meanflow/{name}"] = value
             loss = loss / accumulation_steps
 
             # ---- backward pass (accumulate gradients) ----
@@ -844,23 +820,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/pure_sana_train.yaml')
     parser.add_argument(
-        '--init_checkpoint',
-        type=str,
-        default=None,
-        help=(
-            'Common Pure SANA checkpoint used by a frozen ablation.'
-        ),
-    )
-    parser.add_argument(
-        '--frozen_meanflow_ablation',
-        type=str,
-        choices=FROZEN_MEANFLOW_MODES,
-        default=None,
-        help=(
-            'Fixed-bitstream Pure-vs-AdaLN-MeanFlow comparison mode.'
-        ),
-    )
-    parser.add_argument(
         '--resume_checkpoint',
         type=str,
         default=None,
@@ -873,17 +832,6 @@ if __name__ == "__main__":
     train_config = load_config(args.config)
     if args.upsample_mode is not None:
         train_config['model']['params']['codec_param']['upsample_mode'] = args.upsample_mode
-    selected_frozen_ablation = args.frozen_meanflow_ablation is not None
-    if selected_frozen_ablation != (args.init_checkpoint is not None):
-        parser.error(
-            'a frozen ablation and --init_checkpoint must be provided together'
-        )
-    if args.frozen_meanflow_ablation is not None:
-        configure_frozen_meanflow_ablation(
-            train_config,
-            args.frozen_meanflow_ablation,
-            args.init_checkpoint,
-        )
     if args.resume_checkpoint is not None:
         train_config['train']['resume'] = True
         train_config['train']['resume_checkpoint'] = args.resume_checkpoint

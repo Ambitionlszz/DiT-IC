@@ -73,10 +73,6 @@ perceptual quality, bitrate, and the standard entropy-bottleneck quantiles.
 historical filename. It supports `disc_start`, gradient accumulation, and
 `accumulate_disc`.
 
-The migrated AdaLN-only Compression MeanFlow 5A experiment, frozen-bitstream
-protocol, and codec-factorization probe are documented in
-[`MEANFLOW_ADALN_MIGRATION.md`](MEANFLOW_ADALN_MIGRATION.md).
-
 Legacy names are mapped automatically: `train.lrd` to `train.rate_weight`,
 `loss_params.kl_weight` to `loss_params.rate_weight`, `optimizer.aux_lr` to
 `optimizer.entropy_lr`, and checkpoint `opt_aux` to `opt_entropy`. Set

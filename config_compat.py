@@ -1,4 +1,3 @@
-import os
 from copy import deepcopy
 
 from decode_modes import validate_decode_mode
@@ -10,9 +9,6 @@ _REMOVED_FEATURE_FLAGS = (
     "use_variance_guide",
     "use_self_dist",
 )
-FROZEN_MEANFLOW_MODES = ("pure", "meanflow")
-
-
 def normalize_pure_sana_config(config):
     """Map legacy main-branch YAML fields onto the Pure SANA interface."""
     config = deepcopy(config)
@@ -98,104 +94,13 @@ def normalize_pure_sana_config(config):
         )
         if enabled_flag is False:
             mode = "disabled"
-        enabled = mode != "disabled"
-        meanflow_params["enabled"] = enabled
-        meanflow_params["mode"] = mode
-        if enabled:
-            if mode != "meanflow":
-                raise ValueError(
-                    "Pure SANA supports only MeanFlow 5A mode='meanflow'"
-                )
-            conditioning_mode = meanflow_params.setdefault(
-                "conditioning_mode",
-                "adaln",
+        if mode != "disabled":
+            raise ValueError(
+                "This baseline branch does not implement MeanFlow; "
+                "use the meanflow branch for that checkpoint or config."
             )
-            if conditioning_mode != "adaln":
-                raise ValueError(
-                    "Pure SANA MeanFlow supports only "
-                    "conditioning_mode='adaln'"
-                )
-            if params["decode_mode"] != "sana":
-                raise ValueError(
-                    "MeanFlow AdaLN requires decode_mode='sana'"
-                )
-            weight = float(meanflow_params.get("weight", 0.05))
-            if weight <= 0:
-                raise ValueError("MeanFlow weight must be positive")
-            meanflow_params["weight"] = weight
-            meanflow_params.setdefault("equal_time_ratio", 0.5)
-            max_steps = train.get("max_steps")
-            disc_start = loss_params.get("disc_start")
-            if (
-                max_steps is not None
-                and disc_start is not None
-                and disc_start <= max_steps
-            ):
-                raise ValueError(
-                    "MeanFlow training must be no-GAN: set disc_start "
-                    "greater than train.max_steps"
-                )
-        params["meanflow_params"] = meanflow_params
+        params.pop("meanflow_params", None)
 
-    return config
-
-
-def configure_frozen_meanflow_ablation(config, mode, init_checkpoint):
-    """Configure a fixed-bitstream Pure-vs-AdaLN-MeanFlow comparison."""
-    if mode not in FROZEN_MEANFLOW_MODES:
-        raise ValueError(
-            f"mode must be one of {FROZEN_MEANFLOW_MODES}, got {mode!r}"
-        )
-    if not init_checkpoint:
-        raise ValueError(
-            "frozen MeanFlow ablation requires --init_checkpoint"
-        )
-
-    init_checkpoint = os.path.abspath(os.path.expanduser(init_checkpoint))
-    if not os.path.isfile(init_checkpoint):
-        raise FileNotFoundError(
-            f"Pure SANA initialization checkpoint not found: {init_checkpoint}"
-        )
-
-    params = config["model"]["params"]
-    if params.get("decode_mode", "sana") != "sana":
-        raise ValueError(
-            "Frozen MeanFlow comparison requires decode_mode='sana'"
-        )
-    params.update(
-        {
-            "codec_path": init_checkpoint,
-            "freeze_codec": True,
-            "use_merge": False,
-            "require_pure_init": True,
-        }
-    )
-    meanflow_params = params.setdefault("meanflow_params", {})
-    meanflow_params.update(
-        {
-            "enabled": mode == "meanflow",
-            "mode": "meanflow" if mode == "meanflow" else "disabled",
-            "conditioning_mode": "adaln",
-            "equal_time_ratio": 0.5,
-        }
-    )
-
-    max_steps = config["train"]["max_steps"]
-    disc_start = params["loss_params"].get("disc_start", 0)
-    if disc_start <= max_steps:
-        raise ValueError(
-            "Frozen Pure-vs-MeanFlow comparison must be no-GAN: "
-            "set disc_start greater than train.max_steps"
-        )
-
-    config.setdefault("experiment", {})["frozen_meanflow_ablation"] = {
-        "mode": mode,
-        "init_checkpoint": init_checkpoint,
-    }
-    config["train"]["resume"] = False
-    config["train"].pop("resume_checkpoint", None)
-    exp_name = config["train"].get("exp_name") or "pure_sana"
-    config["train"]["exp_name"] = f"{exp_name}_frozen_{mode}"
     return config
 
 
