@@ -13,7 +13,6 @@ class PureSanaStructureTest(unittest.TestCase):
             ROOT / "ELIC" / "ckbd.py",
             ROOT / "ELIC" / "elic_official.py",
             ROOT / "models" / "foundation_models.py",
-            ROOT / "models" / "compression_meanflow.py",
             ROOT / "scripts" / "measure_codec_factorization.py",
             ROOT / "scripts" / "evaluate_correction_ownership.py",
         ]
@@ -33,6 +32,8 @@ class PureSanaStructureTest(unittest.TestCase):
             "use_self_dist",
             "use_aux_encoder",
             "use_aux_decoder",
+            "use_vf",
+            "foundation_model",
             "AuxDecoder",
             "aux_codec",
             "state_dict_prompter",

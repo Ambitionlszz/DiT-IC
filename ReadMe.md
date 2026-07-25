@@ -73,24 +73,34 @@ perceptual quality, bitrate, and the standard entropy-bottleneck quantiles.
 historical filename. It supports `disc_start`, gradient accumulation, and
 `accumulate_disc`.
 
+The migrated AdaLN-only Compression MeanFlow 5A experiment and its
+frozen-bitstream protocol are documented in
+[`MEANFLOW_ADALN_MIGRATION.md`](MEANFLOW_ADALN_MIGRATION.md).
+
 Legacy names are mapped automatically: `train.lrd` to `train.rate_weight`,
 `loss_params.kl_weight` to `loss_params.rate_weight`, `optimizer.aux_lr` to
 `optimizer.entropy_lr`, and checkpoint `opt_aux` to `opt_entropy`. Set
 `train.freeze_codec: true` (or `model.params.freeze_codec: true`) for the
 Codec-frozen variants.
 
-The paired SANA versus `g_s` residual ablation must start from one Pure SANA
+The paired Pure SANA versus MeanFlow ablation must start from one Pure SANA
 checkpoint and keeps the Codec in evaluation mode:
 
 ```bash
-bash scripts/launch_ablation.sh /absolute/path/to/common_pure_checkpoint.pt
+bash scripts/run_frozen_meanflow_ablation.sh \
+  pure configs/pure_sana_meanflow_adaln.yaml \
+  /absolute/path/to/common_pure_checkpoint.pt
+
+bash scripts/run_frozen_meanflow_ablation.sh \
+  meanflow configs/pure_sana_meanflow_adaln.yaml \
+  /absolute/path/to/common_pure_checkpoint.pt
 ```
 
 After evaluating both checkpoints with real `compress()` output, verify the
 paired bitstreams before comparing reconstruction quality:
 
 ```bash
-python scripts/compare_bitstreams.py BASELINE_BIN_DIR GS_RESIDUAL_BIN_DIR
+python scripts/compare_bitstreams.py PURE_BIN_DIR MEANFLOW_BIN_DIR
 ```
 
 ## Checkpoint contents

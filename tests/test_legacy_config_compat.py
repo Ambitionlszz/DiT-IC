@@ -5,20 +5,6 @@ from eval.testing_utils import parse_args_testing
 
 
 class LegacyConfigCompatibilityTest(unittest.TestCase):
-    def test_baseline_rejects_active_meanflow_config(self):
-        config = {
-            "model": {
-                "params": {
-                    "meanflow_params": {
-                        "enabled": True,
-                        "mode": "meanflow",
-                    }
-                }
-            }
-        }
-        with self.assertRaisesRegex(ValueError, "baseline branch"):
-            normalize_pure_sana_config(config)
-
     def test_legacy_rate_and_entropy_names_are_mapped(self):
         config = {
             "model": {
