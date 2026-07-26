@@ -16,7 +16,10 @@ import torch.nn as nn
 
 MEANFLOW_MODE = "meanflow"
 ADALN_CONDITIONING = "adaln"
+ORIGINAL_OBJECTIVE = "original"
+CODEC_OBSERVABLE_OBJECTIVE = "codec_observable"
 MEANFLOW_MODE_ID = 0
+CODEC_OBSERVABLE_MODE_ID = 1
 ADALN_CONDITIONING_ID = 1
 
 
@@ -168,15 +171,17 @@ class SanaAdaLNConditioningEmbedding(nn.Module):
 
 
 class CompressionMeanFlow(nn.Module):
-    """Compression MeanFlow 5A with AdaLN-only interval conditioning."""
+    """AdaLN Compression MeanFlow with switchable training objectives."""
 
     def __init__(
         self,
         mode: str = MEANFLOW_MODE,
         conditioning_mode: str = ADALN_CONDITIONING,
+        objective: str = ORIGINAL_OBJECTIVE,
         adaln_embedding_dim: int = 1152,
         frequency_embedding_size: int = 256,
         equal_time_ratio: float = 0.5,
+        endpoint_ratio: float = 0.0,
         time_distribution: str = "logit_normal",
         logit_mean: float = -0.4,
         logit_std: float = 1.0,
@@ -192,8 +197,27 @@ class CompressionMeanFlow(nn.Module):
             raise ValueError(
                 "Pure SANA MeanFlow supports only conditioning_mode='adaln'"
             )
+        if objective not in (
+            ORIGINAL_OBJECTIVE,
+            CODEC_OBSERVABLE_OBJECTIVE,
+        ):
+            raise ValueError(
+                "MeanFlow objective must be 'original' or "
+                "'codec_observable'"
+            )
         if not 0.0 <= equal_time_ratio <= 1.0:
             raise ValueError("equal_time_ratio must be in [0, 1]")
+        if not 0.0 <= endpoint_ratio <= 1.0:
+            raise ValueError("endpoint_ratio must be in [0, 1]")
+        if equal_time_ratio + endpoint_ratio > 1.0:
+            raise ValueError(
+                "equal_time_ratio + endpoint_ratio must not exceed 1"
+            )
+        if objective == ORIGINAL_OBJECTIVE and endpoint_ratio != 0.0:
+            raise ValueError(
+                "endpoint_ratio is supported only by the "
+                "codec_observable objective"
+            )
         if time_distribution not in ("logit_normal", "uniform"):
             raise ValueError(
                 "time_distribution must be 'logit_normal' or 'uniform'"
@@ -207,7 +231,9 @@ class CompressionMeanFlow(nn.Module):
 
         self.mode = mode
         self.conditioning_mode = conditioning_mode
+        self.objective = objective
         self.equal_time_ratio = float(equal_time_ratio)
+        self.endpoint_ratio = float(endpoint_ratio)
         self.time_distribution = time_distribution
         self.logit_mean = float(logit_mean)
         self.logit_std = float(logit_std)
@@ -215,7 +241,14 @@ class CompressionMeanFlow(nn.Module):
         self.norm_eps = float(norm_eps)
         self.register_buffer(
             "training_mode_id",
-            torch.tensor(MEANFLOW_MODE_ID, dtype=torch.int64),
+            torch.tensor(
+                (
+                    MEANFLOW_MODE_ID
+                    if objective == ORIGINAL_OBJECTIVE
+                    else CODEC_OBSERVABLE_MODE_ID
+                ),
+                dtype=torch.int64,
+            ),
             persistent=True,
         )
         self.register_buffer(
@@ -255,7 +288,7 @@ class CompressionMeanFlow(nn.Module):
         device: torch.device,
         dtype: torch.dtype,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Sample ordered pairs ``r <= t`` and force ``r=t`` by Bernoulli mask."""
+        """Sample ordered pairs plus optional diagonal and endpoint buckets."""
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
 
@@ -264,12 +297,29 @@ class CompressionMeanFlow(nn.Module):
         t = torch.maximum(first, second)
         r = torch.minimum(first, second)
 
-        if self.equal_time_ratio > 0:
-            equal_mask = (
-                torch.rand(batch_size, device=device)
-                < self.equal_time_ratio
-            )
-            r = torch.where(equal_mask, t, r)
+        if self.equal_time_ratio > 0 or self.endpoint_ratio > 0:
+            buckets = torch.rand(batch_size, device=device)
+            if self.equal_time_ratio > 0:
+                equal_mask = buckets < self.equal_time_ratio
+                r = torch.where(equal_mask, t, r)
+            if self.endpoint_ratio > 0:
+                endpoint_mask = (
+                    (buckets >= self.equal_time_ratio)
+                    & (
+                        buckets
+                        < self.equal_time_ratio + self.endpoint_ratio
+                    )
+                )
+                t = torch.where(
+                    endpoint_mask,
+                    torch.ones_like(t),
+                    t,
+                )
+                r = torch.where(
+                    endpoint_mask,
+                    torch.zeros_like(r),
+                    r,
+                )
         return t, r
 
     @staticmethod
@@ -369,6 +419,11 @@ class CompressionMeanFlow(nn.Module):
         ).flatten()
         prediction = torch.zeros_like(z_t)
         du_dt = torch.zeros_like(z_t)
+        observable_tangent_mse = torch.zeros(
+            (),
+            device=z_t.device,
+            dtype=z_t.dtype,
+        )
         device_type = z_t.device.type
 
         if nonzero_indices.numel() > 0:
@@ -393,11 +448,23 @@ class CompressionMeanFlow(nn.Module):
                     device_type=device_type,
                     enabled=False,
                 ):
+                    jvp_tangent = velocity_nonzero
+                    if self.objective == CODEC_OBSERVABLE_OBJECTIVE:
+                        with torch.no_grad():
+                            jvp_tangent = velocity_fn(
+                                z_nonzero,
+                                t_nonzero,
+                                t_nonzero,
+                                nonzero_indices,
+                            ).detach()
+                        observable_tangent_mse = (
+                            jvp_tangent - velocity_nonzero
+                        ).square().mean()
                     prediction_nonzero, du_dt_nonzero = torch.func.jvp(
                         nonzero_velocity_fn,
                         (z_nonzero, t_nonzero, r_nonzero),
                         (
-                            velocity_nonzero,
+                            jvp_tangent,
                             torch.ones_like(t_nonzero),
                             torch.zeros_like(r_nonzero),
                         ),
@@ -430,13 +497,21 @@ class CompressionMeanFlow(nn.Module):
                 prediction_equal,
             )
 
-        target, correction = self.build_target(
-            velocity,
-            du_dt,
-            t,
-            r,
-        )
-        squared_error = (prediction - target).square()
+        if self.objective == ORIGINAL_OBJECTIVE:
+            target, correction = self.build_target(
+                velocity,
+                du_dt,
+                t,
+                r,
+            )
+            loss_prediction = prediction
+        else:
+            correction = (
+                self._expand_batch(t - r, velocity) * du_dt
+            ).detach()
+            target = velocity.detach()
+            loss_prediction = prediction + correction
+        squared_error = (loss_prediction - target).square()
         reduce_dims = tuple(range(1, squared_error.ndim))
         per_sample_error = squared_error.sum(dim=reduce_dims)
         adaptive_weight = (
@@ -455,9 +530,16 @@ class CompressionMeanFlow(nn.Module):
         stats = {
             "loss": loss.detach(),
             "raw_mse": squared_error.mean().detach(),
+            "observable_tangent_mse": observable_tangent_mse.detach(),
             "correction_ratio": conditional_ratio.detach(),
             "correction_ratio_all": correction_ratio.mean().detach(),
             "mean_interval": (t - r).mean().detach(),
             "nonzero_interval_fraction": nonzero_mask.mean().detach(),
+            "endpoint_fraction": (
+                ((t == 1) & (r == 0))
+                .to(correction_ratio.dtype)
+                .mean()
+                .detach()
+            ),
         }
         return loss, stats

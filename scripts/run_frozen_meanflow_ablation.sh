@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 3 || $# -gt 4 ]]; then
-  echo "Usage: $0 <pure|meanflow> <config.yaml> <pure_checkpoint.pt> [nproc_per_node]" >&2
+  echo "Usage: $0 <pure|meanflow|co_meanflow> <config.yaml> <pure_checkpoint.pt> [nproc_per_node]" >&2
   exit 2
 fi
 
@@ -11,8 +11,8 @@ CONFIG="$2"
 INIT_CHECKPOINT="$3"
 NPROC_PER_NODE="${4:-1}"
 
-if [[ "$MODE" != "pure" && "$MODE" != "meanflow" ]]; then
-  echo "Mode must be 'pure' or 'meanflow', got: $MODE" >&2
+if [[ "$MODE" != "pure" && "$MODE" != "meanflow" && "$MODE" != "co_meanflow" ]]; then
+  echo "Mode must be 'pure', 'meanflow', or 'co_meanflow', got: $MODE" >&2
   exit 2
 fi
 

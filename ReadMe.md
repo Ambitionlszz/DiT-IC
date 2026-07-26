@@ -83,8 +83,8 @@ Legacy names are mapped automatically: `train.lrd` to `train.rate_weight`,
 `train.freeze_codec: true` (or `model.params.freeze_codec: true`) for the
 Codec-frozen variants.
 
-The paired Pure SANA versus MeanFlow ablation must start from one Pure SANA
-checkpoint and keeps the Codec in evaluation mode:
+The Pure SANA, original MF, and CO-MF runs must start from one Pure SANA
+checkpoint and keep the Codec in evaluation mode:
 
 ```bash
 bash scripts/run_frozen_meanflow_ablation.sh \
@@ -94,10 +94,14 @@ bash scripts/run_frozen_meanflow_ablation.sh \
 bash scripts/run_frozen_meanflow_ablation.sh \
   meanflow configs/pure_sana_meanflow_adaln.yaml \
   /absolute/path/to/common_pure_checkpoint.pt
+
+bash scripts/run_frozen_meanflow_ablation.sh \
+  co_meanflow configs/pure_sana_meanflow_adaln.yaml \
+  /absolute/path/to/common_pure_checkpoint.pt
 ```
 
-After evaluating both checkpoints with real `compress()` output, verify the
-paired bitstreams before comparing reconstruction quality:
+After evaluating the checkpoints with real `compress()` output, verify the
+matched bitstreams before comparing reconstruction quality:
 
 ```bash
 python scripts/compare_bitstreams.py PURE_BIN_DIR MEANFLOW_BIN_DIR

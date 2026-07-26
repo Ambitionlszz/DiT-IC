@@ -10,7 +10,7 @@ _REMOVED_FEATURE_FLAGS = (
     "use_variance_guide",
     "use_self_dist",
 )
-FROZEN_MEANFLOW_MODES = ("pure", "meanflow")
+FROZEN_MEANFLOW_MODES = ("pure", "meanflow", "co_meanflow")
 
 
 def normalize_pure_sana_config(config):
@@ -123,7 +123,41 @@ def normalize_pure_sana_config(config):
             if weight <= 0:
                 raise ValueError("MeanFlow weight must be positive")
             meanflow_params["weight"] = weight
-            meanflow_params.setdefault("equal_time_ratio", 0.5)
+            objective = meanflow_params.setdefault(
+                "objective",
+                "original",
+            )
+            if objective not in ("original", "codec_observable"):
+                raise ValueError(
+                    "MeanFlow objective must be 'original' or "
+                    "'codec_observable'"
+                )
+            equal_time_ratio = float(
+                meanflow_params.get("equal_time_ratio", 0.5)
+            )
+            endpoint_ratio = float(
+                meanflow_params.get("endpoint_ratio", 0.0)
+            )
+            if not 0.0 <= equal_time_ratio <= 1.0:
+                raise ValueError(
+                    "MeanFlow equal_time_ratio must be in [0, 1]"
+                )
+            if not 0.0 <= endpoint_ratio <= 1.0:
+                raise ValueError(
+                    "MeanFlow endpoint_ratio must be in [0, 1]"
+                )
+            if equal_time_ratio + endpoint_ratio > 1.0:
+                raise ValueError(
+                    "MeanFlow equal_time_ratio + endpoint_ratio "
+                    "must not exceed 1"
+                )
+            if objective == "original" and endpoint_ratio != 0.0:
+                raise ValueError(
+                    "MeanFlow endpoint_ratio is supported only by the "
+                    "codec_observable objective"
+                )
+            meanflow_params["equal_time_ratio"] = equal_time_ratio
+            meanflow_params["endpoint_ratio"] = endpoint_ratio
             max_steps = train.get("max_steps")
             disc_start = loss_params.get("disc_start")
             if (
@@ -171,12 +205,19 @@ def configure_frozen_meanflow_ablation(config, mode, init_checkpoint):
         }
     )
     meanflow_params = params.setdefault("meanflow_params", {})
+    enabled = mode != "pure"
     meanflow_params.update(
         {
-            "enabled": mode == "meanflow",
-            "mode": "meanflow" if mode == "meanflow" else "disabled",
+            "enabled": enabled,
+            "mode": "meanflow" if enabled else "disabled",
             "conditioning_mode": "adaln",
+            "objective": (
+                "codec_observable"
+                if mode == "co_meanflow"
+                else "original"
+            ),
             "equal_time_ratio": 0.5,
+            "endpoint_ratio": 0.25 if mode == "co_meanflow" else 0.0,
         }
     )
 

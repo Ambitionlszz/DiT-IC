@@ -7,8 +7,11 @@ try:
     from models.compression_meanflow import (
         ADALN_CONDITIONING,
         ADALN_CONDITIONING_ID,
+        CODEC_OBSERVABLE_MODE_ID,
+        CODEC_OBSERVABLE_OBJECTIVE,
         MEANFLOW_MODE,
         MEANFLOW_MODE_ID,
+        ORIGINAL_OBJECTIVE,
         AdaLNIntervalAdapter,
         CompressionMeanFlow,
         SanaAdaLNConditioningEmbedding,
@@ -96,6 +99,7 @@ class AdaLNConditioningTest(unittest.TestCase):
         )
         self.assertEqual(module.mode, MEANFLOW_MODE)
         self.assertEqual(module.conditioning_mode, ADALN_CONDITIONING)
+        self.assertEqual(module.objective, ORIGINAL_OBJECTIVE)
         self.assertEqual(int(module.training_mode_id), MEANFLOW_MODE_ID)
         self.assertEqual(
             int(module.conditioning_mode_id),
@@ -105,6 +109,25 @@ class AdaLNConditioningTest(unittest.TestCase):
             CompressionMeanFlow(conditioning_mode="text_token")
         with self.assertRaisesRegex(ValueError, "only MeanFlow 5A"):
             CompressionMeanFlow(mode="velocity_control")
+        with self.assertRaisesRegex(ValueError, "objective must be"):
+            CompressionMeanFlow(objective="unknown")
+
+        co_meanflow = CompressionMeanFlow(
+            objective=CODEC_OBSERVABLE_OBJECTIVE,
+            endpoint_ratio=0.25,
+        )
+        self.assertEqual(
+            int(co_meanflow.training_mode_id),
+            CODEC_OBSERVABLE_MODE_ID,
+        )
+        with self.assertRaisesRegex(ValueError, "supported only"):
+            CompressionMeanFlow(endpoint_ratio=0.25)
+        with self.assertRaisesRegex(ValueError, "must not exceed"):
+            CompressionMeanFlow(
+                objective=CODEC_OBSERVABLE_OBJECTIVE,
+                equal_time_ratio=0.8,
+                endpoint_ratio=0.3,
+            )
 
     def test_adaln_condition_jvp_matches_finite_difference(self):
         module = CompressionMeanFlow(
@@ -190,6 +213,108 @@ class MeanFlowObjectiveTest(unittest.TestCase):
         self.assertIsNone(compressed.grad)
         self.assertIsNotNone(velocity_model.scale.grad)
         self.assertGreater(stats["correction_ratio"].item(), 0.0)
+
+    def test_codec_observable_objective_uses_diagonal_tangent(self):
+        module = CompressionMeanFlow(
+            objective=CODEC_OBSERVABLE_OBJECTIVE,
+            adaln_embedding_dim=4,
+            frequency_embedding_size=4,
+            norm_p=0.0,
+        )
+        optimized_model = ToyVelocity()
+        reference_model = ToyVelocity()
+        reference_model.load_state_dict(optimized_model.state_dict())
+        clean = torch.randn(3, 4, requires_grad=True)
+        compressed = torch.randn(3, 4, requires_grad=True)
+        t = torch.tensor([0.9, 0.7, 0.5])
+        r = torch.tensor([0.1, 0.2, 0.3])
+
+        optimized_loss, stats = module.compute_loss(
+            lambda z, t_value, r_value, _indices: optimized_model(
+                z,
+                t_value,
+                r_value,
+            ),
+            clean,
+            compressed,
+            t=t,
+            r=r,
+        )
+        optimized_loss.backward()
+
+        clean_reference = clean.detach()
+        compressed_reference = compressed.detach()
+        velocity = compressed_reference - clean_reference
+        z_t = (
+            (1.0 - t[:, None]) * clean_reference
+            + t[:, None] * compressed_reference
+        )
+        with torch.no_grad():
+            observable_tangent = reference_model(z_t, t, t).detach()
+
+        def full_velocity_fn(z, t_value, r_value):
+            return reference_model(z, t_value, r_value)
+
+        prediction, du_dt = torch.func.jvp(
+            full_velocity_fn,
+            (z_t, t, r),
+            (
+                observable_tangent,
+                torch.ones_like(t),
+                torch.zeros_like(r),
+            ),
+        )
+        correction = (
+            (t - r)[:, None] * du_dt
+        ).detach()
+        reference_loss = (
+            (prediction + correction - velocity)
+            .square()
+            .sum(dim=1)
+            .mean()
+        )
+        reference_loss.backward()
+
+        torch.testing.assert_close(optimized_loss, reference_loss)
+        torch.testing.assert_close(
+            optimized_model.scale.grad,
+            reference_model.scale.grad,
+        )
+        torch.testing.assert_close(
+            stats["observable_tangent_mse"],
+            (observable_tangent - velocity).square().mean(),
+        )
+        self.assertIsNone(clean.grad)
+        self.assertIsNone(compressed.grad)
+
+    def test_codec_observable_sampler_has_an_exact_endpoint_bucket(self):
+        module = CompressionMeanFlow(
+            objective=CODEC_OBSERVABLE_OBJECTIVE,
+            adaln_embedding_dim=4,
+            frequency_embedding_size=4,
+            equal_time_ratio=0.5,
+            endpoint_ratio=0.25,
+        )
+        first = torch.tensor([0.2, 0.3, 0.4, 0.5])
+        second = torch.tensor([0.8, 0.7, 0.6, 0.9])
+        buckets = torch.tensor([0.1, 0.6, 0.8, 0.9])
+
+        with mock.patch.object(
+            module,
+            "_sample_time",
+            side_effect=[first, second],
+        ), mock.patch("torch.rand", return_value=buckets):
+            t, r = module.sample_tr(
+                4,
+                torch.device("cpu"),
+                torch.float32,
+            )
+
+        self.assertEqual(t[0].item(), r[0].item())
+        self.assertEqual(t[1].item(), 1.0)
+        self.assertEqual(r[1].item(), 0.0)
+        torch.testing.assert_close(t[2:], torch.tensor([0.6, 0.9]))
+        torch.testing.assert_close(r[2:], torch.tensor([0.4, 0.5]))
 
     def test_equal_time_samples_skip_jvp(self):
         module = CompressionMeanFlow(

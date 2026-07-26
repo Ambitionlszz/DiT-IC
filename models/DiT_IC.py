@@ -11,8 +11,9 @@ from decode_modes import validate_decode_checkpoint, validate_decode_mode
 from .compression_meanflow import (
     ADALN_CONDITIONING,
     ADALN_CONDITIONING_ID,
+    CODEC_OBSERVABLE_OBJECTIVE,
     MEANFLOW_MODE,
-    MEANFLOW_MODE_ID,
+    ORIGINAL_OBJECTIVE,
     CompressionMeanFlow,
     SanaAdaLNConditioningEmbedding,
 )
@@ -90,6 +91,10 @@ class Codec(nn.Module):
             configured_mode = "disabled"
         self.meanflow_enabled = configured_mode != "disabled"
         self.meanflow_weight = float(meanflow_params.get("weight", 0.05))
+        self.meanflow_objective = meanflow_params.get(
+            "objective",
+            ORIGINAL_OBJECTIVE,
+        )
         self.latest_meanflow_loss = None
         self.latest_meanflow_stats = None
         if self.meanflow_enabled:
@@ -111,6 +116,14 @@ class Codec(nn.Module):
                 )
             if self.meanflow_weight <= 0:
                 raise ValueError("MeanFlow weight must be positive")
+            if self.meanflow_objective not in (
+                ORIGINAL_OBJECTIVE,
+                CODEC_OBSERVABLE_OBJECTIVE,
+            ):
+                raise ValueError(
+                    "MeanFlow objective must be 'original' or "
+                    "'codec_observable'"
+                )
 
         if use_merge:
             vae_config = AutoencoderDC.load_config(dit_path, subfolder="vae")
@@ -139,6 +152,7 @@ class Codec(nn.Module):
                     "conditioning_mode",
                     ADALN_CONDITIONING,
                 ),
+                objective=self.meanflow_objective,
                 adaln_embedding_dim=adaln_embedding_dim,
                 frequency_embedding_size=int(
                     meanflow_params.get(
@@ -148,6 +162,9 @@ class Codec(nn.Module):
                 ),
                 equal_time_ratio=float(
                     meanflow_params.get("equal_time_ratio", 0.5)
+                ),
+                endpoint_ratio=float(
+                    meanflow_params.get("endpoint_ratio", 0.0)
                 ),
                 time_distribution=meanflow_params.get(
                     "time_distribution",
@@ -327,9 +344,11 @@ class Codec(nn.Module):
             raise ValueError(
                 f"{source} has no MeanFlow training-mode provenance"
             )
-        if int(checkpoint_mode_id.item()) != MEANFLOW_MODE_ID:
+        expected_mode_id = int(self.meanflow.training_mode_id.item())
+        if int(checkpoint_mode_id.item()) != expected_mode_id:
             raise ValueError(
-                f"{source} is not a MeanFlow 5A checkpoint"
+                f"{source} MeanFlow objective does not match configured "
+                f"objective={self.meanflow.objective!r}"
             )
         if checkpoint_conditioning_mode_id is None:
             raise ValueError(
