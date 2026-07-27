@@ -57,6 +57,62 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "removed DiT-IC features"):
             normalize_pure_sana_config(config)
 
+    def test_auxed_pair_is_allowed_with_elic_checkpoint(self):
+        config = {
+            "model": {
+                "params": {
+                    "use_aux_encoder": True,
+                    "use_aux_decoder": True,
+                    "elic_path": "/models/elic_official.pth",
+                    "use_text_condition": True,
+                    "text_encoder_path": "/models/fixed_text_embed_gemma.pt",
+                }
+            }
+        }
+        normalized = normalize_pure_sana_config(config)
+        params = normalized["model"]["params"]
+        self.assertTrue(params["use_aux_encoder"])
+        self.assertTrue(params["use_aux_decoder"])
+
+    def test_half_auxed_configuration_is_rejected(self):
+        config = {
+            "model": {
+                "params": {
+                    "use_aux_encoder": True,
+                    "use_aux_decoder": False,
+                    "elic_path": "/models/elic_official.pth",
+                    "text_encoder_path": "/models/fixed_text_embed_gemma.pt",
+                }
+            }
+        }
+        with self.assertRaisesRegex(ValueError, "AuxE and AuxD together"):
+            normalize_pure_sana_config(config)
+
+    def test_auxed_requires_elic_checkpoint(self):
+        config = {
+            "model": {
+                "params": {
+                    "use_aux_encoder": True,
+                    "use_aux_decoder": True,
+                }
+            }
+        }
+        with self.assertRaisesRegex(ValueError, "elic_path"):
+            normalize_pure_sana_config(config)
+
+    def test_auxed_rejects_stale_latent_prompt_config(self):
+        config = {
+            "model": {
+                "params": {
+                    "use_aux_encoder": True,
+                    "use_aux_decoder": True,
+                    "elic_path": "/models/elic_official.pth",
+                }
+            }
+        }
+        with self.assertRaisesRegex(ValueError, "text_encoder_path"):
+            normalize_pure_sana_config(config)
+
     def test_conflicting_rate_weight_aliases_are_rejected(self):
         config = {
             "model": {

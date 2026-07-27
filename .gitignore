@@ -5,6 +5,7 @@ output/
 logs/
 results/
 configs/*
+!configs/auxed_lrd1p0.yaml
 !configs/baseline_lrd0p4.yaml
 !configs/baseline_lrd0p4_20260722_084454.yaml
 !configs/baseline_lrd0p5.yaml

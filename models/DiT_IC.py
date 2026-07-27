@@ -8,6 +8,7 @@ from diffusers import AutoencoderDC, SanaTransformer2DModel
 from peft import LoraConfig, get_peft_model
 
 from decode_modes import validate_decode_checkpoint, validate_decode_mode
+from .elic_analysis import load_elic_analysis_encoder
 from .losses import LPIPSWithDiscriminator
 from .scheduler import OneStepFlowScheduler, make_1step_sched
 
@@ -54,6 +55,9 @@ class Codec(nn.Module):
         codec_param=None,
         loss_params=None,
         text_encoder_path=None,
+        elic_path=None,
+        use_aux_encoder=False,
+        use_aux_decoder=False,
         freeze_codec=False,
         decode_mode="sana",
         **kwargs,
@@ -62,10 +66,18 @@ class Codec(nn.Module):
 
         DiT_params = DiT_params or {}
         vae_params = vae_params or {}
-        codec_param = codec_param or {}
+        codec_param = dict(codec_param or {})
         loss_params = loss_params or {}
         self.decode_mode = validate_decode_mode(decode_mode)
         self._init_for_training = training
+        self.use_aux_encoder = bool(use_aux_encoder)
+        self.use_aux_decoder = bool(use_aux_decoder)
+        if self.use_aux_encoder != self.use_aux_decoder:
+            raise ValueError("This experiment requires AuxE and AuxD together")
+        if self.use_aux_encoder and not elic_path:
+            raise ValueError("AuxE requires elic_path")
+        if self.use_aux_encoder and use_merge:
+            raise ValueError("AuxED does not support use_merge=True")
         if freeze_codec and codec_path is None:
             raise ValueError("freeze_codec=True requires a pretrained codec_path")
 
@@ -77,7 +89,14 @@ class Codec(nn.Module):
         self.vae.requires_grad_(False)
 
         self.build_DiT(dit_path, device, use_merge)
+        codec_param["use_aux_encoder"] = self.use_aux_encoder
+        codec_param["use_aux_decoder"] = self.use_aux_decoder
         self.codec = latent_models(model_type, **codec_param)
+        self.aux_encoder = (
+            load_elic_analysis_encoder(elic_path)
+            if self.use_aux_encoder
+            else None
+        )
         self.freeze_codec = freeze_codec
         if self.freeze_codec:
             self.codec.requires_grad_(False)
@@ -122,8 +141,10 @@ class Codec(nn.Module):
         if self.freeze_codec:
             self.codec.eval()
             self.assert_frozen_codec_contract()
+        self.assert_auxed_contract()
 
-        print("Pure SANA initialization complete")
+        name = "Pure SANA AuxED" if self.use_aux_encoder else "Pure SANA"
+        print(f"{name} initialization complete")
 
     def _build_fixed_text_condition(self, text_encoder_path):
         if text_encoder_path is None:
@@ -278,9 +299,25 @@ class Codec(nn.Module):
 
     def train(self, mode=True):
         super().train(mode)
+        if self.aux_encoder is not None:
+            self.aux_encoder.eval()
         if self.freeze_codec:
             self.codec.eval()
         return self
+
+    def assert_auxed_contract(self):
+        if self.use_aux_encoder:
+            if self.aux_encoder is None:
+                raise RuntimeError("AuxE is enabled but not initialized")
+            if self.aux_encoder.training:
+                raise RuntimeError("AuxE must stay in eval mode")
+            if any(
+                parameter.requires_grad
+                for parameter in self.aux_encoder.parameters()
+            ):
+                raise RuntimeError("AuxE must stay frozen")
+        if self.use_aux_decoder != (self.codec.aux is not None):
+            raise RuntimeError("AuxD configuration does not match the codec")
 
     def assert_frozen_codec_contract(self):
         if not self.freeze_codec:
@@ -405,6 +442,8 @@ class Codec(nn.Module):
         return state_dicts
 
     def get_last_layer(self):
+        if self.use_aux_decoder:
+            return self.codec.aux.block[-1].weight
         codec_last_layer = self.codec.g_s.synthesis_transform[-1].weight
         if codec_last_layer.requires_grad:
             return codec_last_layer
@@ -430,7 +469,13 @@ class Codec(nn.Module):
         )
         return condition.to(device)
 
-    def _decode_with_sana(self, latent):
+    def _encode_aux(self, image):
+        if self.aux_encoder is None:
+            return None
+        with torch.no_grad():
+            return self.aux_encoder((image + 1) / 2)
+
+    def _decode_with_sana(self, latent, residual=None):
         condition = self._fixed_text_condition(
             latent.shape[0],
             latent.device,
@@ -446,6 +491,8 @@ class Codec(nn.Module):
             return_dict=False,
         )[0]
         denoised = self.sched.step(model_prediction, latent)
+        if residual is not None:
+            denoised = denoised + residual
         return self.vae.decode(
             denoised / self.vae.config.scaling_factor,
             return_dict=False,
@@ -453,15 +500,23 @@ class Codec(nn.Module):
 
     def forward(self, image):
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
-        codec_output = self.codec(latent)
+        aux_features = self._encode_aux(image)
+        codec_output = self.codec(latent, aux_features)
         compressed_latent = codec_output["mean"]
-        output_image = self._decode_with_sana(compressed_latent)
+        output_image = self._decode_with_sana(
+            compressed_latent,
+            codec_output["res"],
+        )
         return output_image, codec_output["likelihoods"]
 
     def compress(self, image):
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
-        return self.codec.compress(latent)
+        aux_features = self._encode_aux(image)
+        return self.codec.compress(latent, aux_features)
 
     def decompress(self, strings, shape):
-        latent = self.codec.decompress(strings, shape)
-        return self._decode_with_sana(latent)
+        codec_output = self.codec.decompress(strings, shape)
+        return self._decode_with_sana(
+            codec_output["mean"],
+            codec_output["res"],
+        )

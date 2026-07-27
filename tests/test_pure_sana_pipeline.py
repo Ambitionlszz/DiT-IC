@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PureSanaStructureTest(unittest.TestCase):
-    def test_removed_implementations_are_absent(self):
+    def test_only_auxed_is_restored(self):
         removed_paths = [
             ROOT / "ELIC" / "base.py",
             ROOT / "ELIC" / "ckbd.py",
@@ -31,17 +31,16 @@ class PureSanaStructureTest(unittest.TestCase):
             "LatentConditionAlignment",
             "use_variance_guide",
             "use_self_dist",
-            "use_aux_encoder",
-            "use_aux_decoder",
-            "AuxDecoder",
-            "aux_codec",
             "state_dict_prompter",
         )
         source = "\n".join(path.read_text(encoding="utf-8") for path in core_files)
         for symbol in banned_symbols:
             self.assertNotIn(symbol, source)
+        self.assertIn("use_aux_encoder", source)
+        self.assertIn("use_aux_decoder", source)
+        self.assertIn("AuxDecoder", source)
 
-    def test_latent_codec_has_one_reconstruction_output(self):
+    def test_latent_codec_has_only_auxed_reconstruction_outputs(self):
         source_path = ROOT / "models" / "latent_codec.py"
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         codec_class = next(
@@ -56,19 +55,19 @@ class PureSanaStructureTest(unittest.TestCase):
         }
         self.assertEqual(
             [argument.arg for argument in methods["forward"].args.args],
-            ["self", "latent"],
+            ["self", "latent", "aux_features"],
         )
         self.assertEqual(
             [argument.arg for argument in methods["compress"].args.args],
-            ["self", "latent"],
+            ["self", "latent", "aux_features"],
         )
 
         codec_source = source_path.read_text(encoding="utf-8")
         self.assertIn("self.pre1", codec_source)
-        self.assertNotIn("self.pre2", codec_source)
+        self.assertIn("self.pre2", codec_source)
         self.assertNotIn('"scale":', codec_source)
         self.assertNotIn('"prompt":', codec_source)
-        self.assertNotIn('"res":', codec_source)
+        self.assertIn('"res":', codec_source)
 
     def test_scheduler_is_fixed_one_step_flow(self):
         source = (ROOT / "models" / "scheduler.py").read_text(encoding="utf-8")
@@ -138,6 +137,17 @@ class PureSanaStructureTest(unittest.TestCase):
         )
         train_source = ast.get_source_segment(source, train_method)
         self.assertIn("self.codec.eval()", train_source)
+        self.assertIn("self.aux_encoder.eval()", train_source)
+
+    def test_aux_encoder_is_frozen_and_uses_unit_range_input(self):
+        source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
+        train_source = (
+            ROOT / "train_nogan_ddp.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("load_elic_analysis_encoder(elic_path)", source)
+        self.assertIn("self.aux_encoder((image + 1) / 2)", source)
+        self.assertIn("parameter.requires_grad", source)
+        self.assertIn("model.module.assert_auxed_contract()", train_source)
 
     def test_entropy_aux_step_uses_updated_main_model(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")

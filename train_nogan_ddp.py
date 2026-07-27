@@ -249,6 +249,7 @@ def do_train(rank, local_rank, world_size, train_config):
         update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
     model.train()
     model.module.assert_frozen_codec_contract()
+    model.module.assert_auxed_contract()
     loss_module.train()
 
     train_config['train']['resume'] if 'resume' in train_config['train'] else False

@@ -1,27 +1,30 @@
-# Pure SANA Image Compression
+# Pure SANA AuxED Experiment
 
-This branch contains one deterministic compression path:
+This branch adds only the historical auxiliary encoder and decoder to the
+clean Pure SANA baseline:
 
 ```text
 image
-  -> SANA VAE encoder
+  -> SANA VAE encoder + frozen ELIC analysis encoder (AuxE)
   -> learned latent codec and entropy model
   -> one-step SANA flow transformer with a fixed text condition
+  -> y_hat-derived latent residual (AuxD)
   -> SANA VAE decoder
   -> reconstruction
 ```
 
-The model has no secondary image encoder, residual decoder, learned latent
-prompt, reconstruction-variance head, or extra alignment loss. The entropy
-bottleneck quantile loss remains because it is part of standard learned entropy
-coding.
+AuxE adds no side information and runs only while encoding. AuxD uses the
+entropy-decoded `y_hat`, so decoding still depends only on the bitstream and
+shared model. No latent prompt, reconstruction-variance head, self-distillation,
+MeanFlow, or extra alignment loss is restored.
 
 ## Required files
 
 - SANA model configuration and weights under `SANA/`.
 - A precomputed fixed text embedding at
   `SANA/fixed_text_embed_gemma.pt`, or update `text_encoder_path` in the YAML.
-- A Pure SANA checkpoint for inference.
+- The frozen ELIC checkpoint configured by `model.params.elic_path`.
+- An AuxED checkpoint for inference.
 
 Large model weights and checkpoints are intentionally ignored by Git.
 
@@ -30,14 +33,8 @@ Large model weights and checkpoints are intentionally ignored by Git.
 Update paths if needed, then run:
 
 ```bash
-bash infer_pure_sana.sh checkpoints/best_ckpt.pt /path/to/images
-```
-
-The equivalent direct command is:
-
-```bash
 PYTHONPATH=. python compress.py \
-  --config_path configs/pure_sana_infer.yaml \
+  --config_path configs/auxed_lrd1p0.yaml \
   --codec_path checkpoints/best_ckpt.pt \
   --img_path /path/to/images \
   --gpu 0 \
@@ -59,12 +56,16 @@ PYTHONPATH=. python compress.py \
 
 ## Training
 
-Edit the dataset paths in `configs/pure_sana_train.yaml`, then run:
+Edit the dataset and model paths in `configs/auxed_lrd1p0.yaml`, then run:
 
 ```bash
 PYTHONPATH=. torchrun --standalone --nproc_per_node=1 --nnodes=1 \
-  train_nogan_ddp.py --config configs/pure_sana_train.yaml
+  train_nogan_ddp.py --config configs/auxed_lrd1p0.yaml
 ```
+
+This configuration uses `lrd: 1.0`, `resume: false`, and `codec_path: null`.
+It trains AuxED from zero in `checkpoints/auxed_lrd1p0_bs8_200k` and never
+loads or writes the existing baseline experiment directory.
 
 `global_batch_size` must be divisible by the number of processes. The supplied
 configuration keeps adversarial training disabled and optimizes reconstruction,

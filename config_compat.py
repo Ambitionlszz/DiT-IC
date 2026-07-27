@@ -4,8 +4,6 @@ from decode_modes import validate_decode_mode
 
 
 _REMOVED_FEATURE_FLAGS = (
-    "use_aux_encoder",
-    "use_aux_decoder",
     "use_variance_guide",
     "use_self_dist",
 )
@@ -31,6 +29,14 @@ def normalize_pure_sana_config(config):
             "Pure SANA requires the fixed text condition; "
             "legacy latent-conditioned checkpoints are not compatible."
         )
+    use_aux_encoder = bool(params.get("use_aux_encoder", False))
+    use_aux_decoder = bool(params.get("use_aux_decoder", False))
+    if use_aux_encoder != use_aux_decoder:
+        raise ValueError("This experiment requires AuxE and AuxD together")
+    if use_aux_encoder and not params.get("elic_path"):
+        raise ValueError("AuxE requires model.params.elic_path")
+    if use_aux_encoder and not params.get("text_encoder_path"):
+        raise ValueError("AuxED requires the fixed text_encoder_path")
 
     # Main treats train.lrd as the effective rate weight.  Resolve the legacy
     # and Pure-SANA names once so stale duplicate fields cannot silently select
