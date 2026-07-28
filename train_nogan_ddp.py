@@ -30,7 +30,9 @@ from config_compat import normalize_pure_sana_config
 
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
-ENTROPY_OPTIMIZER_VERSION = 2
+# Version 3 reproduces the historical main-branch auxiliary update: compute
+# quantile gradients before the main step and include them in global clipping.
+ENTROPY_OPTIMIZER_VERSION = 3
 
 
 
@@ -400,6 +402,10 @@ def do_train(rank, local_rank, world_size, train_config):
     accumulation_steps = train_config['train'].get('accumulation_steps', 1)
     if accumulation_steps < 1:
         raise ValueError("train.accumulation_steps must be at least 1")
+    if accumulation_steps != 1:
+        raise ValueError(
+            "Main-aligned entropy updates require train.accumulation_steps=1"
+        )
     accumulate_disc = train_config['train'].get('accumulate_disc', True)
     accum_count = 0
     disc_start = train_config['model']['params']['loss_params']['disc_start']
@@ -449,9 +455,29 @@ def do_train(rank, local_rank, world_size, train_config):
                 loss_module.discriminator.requires_grad_(True)
             loss = loss / accumulation_steps
 
+            # Match the historical main branch: form the quantile objective
+            # before either optimizer has moved.
+            if opt_entropy is not None:
+                entropy_loss = (
+                    model.module.codec.entropy_bottleneck_loss()
+                    / accumulation_steps
+                )
+            else:
+                entropy_loss = torch.tensor(0.0, device=x.device)
+
             # ---- backward pass (accumulate gradients) ----
             loss.backward()
 
+            # Include quantile gradients in the same global clipping operation
+            # as the model, matching the historical main branch.
+            if opt_entropy is not None:
+                opt_entropy.zero_grad(set_to_none=True)
+                entropy_loss.backward()
+                if not torch.isfinite(entropy_loss).item():
+                    raise FloatingPointError(
+                        "Entropy-bottleneck loss became non-finite before "
+                        f"the auxiliary update at step {train_steps}"
+                    )
             # With accumulate_disc=False, use only the boundary micro-batch so
             # the discriminator still performs one update per generator step.
             run_discriminator = disc_active and (accumulate_disc or will_step)
@@ -478,6 +504,7 @@ def do_train(rank, local_rank, world_size, train_config):
 
             # Track running losses at original scale
             running_loss += loss.item() * accumulation_steps
+            running_entropy_loss += entropy_loss.item() * accumulation_steps
             if run_discriminator:
                 running_dis_loss += discloss.item() * accumulation_steps
             log_steps += 1
@@ -486,31 +513,17 @@ def do_train(rank, local_rank, world_size, train_config):
             if accum_count == accumulation_steps:
                 # Generator step
                 if 'max_grad_norm' in train_config['optimizer']:
-                    torch.nn.utils.clip_grad_norm_(main_parameters, train_config['optimizer']['max_grad_norm'])
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(),
+                        train_config['optimizer']['max_grad_norm'],
+                    )
                 opt.step()
                 scheduler.step()
 
-                # Recompute the quantile objective after the main entropy-model
-                # parameters have moved. Keep its gradients out of main clipping.
+                # Historical main-branch ordering: apply the already-computed
+                # quantile gradients after the main optimizer has stepped.
                 if opt_entropy is not None:
-                    opt_entropy.zero_grad(set_to_none=True)
-                    entropy_loss_before_step = (
-                        model.module.codec.entropy_bottleneck_loss()
-                    )
-                    entropy_loss_before_step.backward()
                     opt_entropy.step()
-                    with torch.no_grad():
-                        entropy_loss = (
-                            model.module.codec.entropy_bottleneck_loss().detach()
-                        )
-                    if not torch.isfinite(entropy_loss).item():
-                        raise FloatingPointError(
-                            "Entropy-bottleneck loss became non-finite after "
-                            f"the auxiliary update at step {train_steps}"
-                        )
-                else:
-                    entropy_loss = torch.tensor(0.0, device=x.device)
-                running_entropy_loss += entropy_loss.item() * accumulation_steps
 
                 # Discriminator step
                 if run_discriminator:
@@ -553,7 +566,7 @@ def do_train(rank, local_rank, world_size, train_config):
 
                     lr = opt.param_groups[0]['lr']
                     if rank == 0:
-                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Entropy(post-step): {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
+                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Aux: {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
                         log = {k: float(v) for k, v in log_dict.items()}
                         logger.info(json.dumps(log, indent=2))
                         if train_steps > disc_start:

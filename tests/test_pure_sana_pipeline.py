@@ -149,7 +149,7 @@ class PureSanaStructureTest(unittest.TestCase):
         self.assertIn("parameter.requires_grad", source)
         self.assertIn("model.module.assert_auxed_contract()", train_source)
 
-    def test_entropy_aux_step_uses_updated_main_model(self):
+    def test_entropy_aux_step_matches_historical_main_semantics(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         do_train = next(
@@ -160,37 +160,42 @@ class PureSanaStructureTest(unittest.TestCase):
         train_source = ast.get_source_segment(source, do_train)
 
         main_backward = train_source.index("loss.backward()")
-        main_clip = train_source.index("clip_grad_norm_(main_parameters")
-        main_step = train_source.index("opt.step()")
+        entropy_objective = train_source.index(
+            "entropy_loss = ("
+        )
         entropy_zero = train_source.index(
             "opt_entropy.zero_grad(set_to_none=True)",
-            main_step,
-        )
-        entropy_objective = train_source.index(
-            "entropy_loss_before_step = ("
+            main_backward,
         )
         entropy_backward = train_source.index(
-            "entropy_loss_before_step.backward()"
+            "entropy_loss.backward()"
         )
+        main_clip = train_source.index("clip_grad_norm_(")
+        global_clip_parameters = train_source.index(
+            "model.parameters()",
+            main_clip,
+        )
+        main_step = train_source.index("opt.step()")
         entropy_step = train_source.index("opt_entropy.step()")
-        post_step_entropy = train_source.index(
-            "entropy_loss = (",
-            entropy_step,
-        )
         entropy_log = train_source.index(
             "running_entropy_loss += entropy_loss.item()"
         )
 
-        self.assertLess(main_backward, main_clip)
-        self.assertLess(main_clip, main_step)
-        self.assertLess(main_step, entropy_zero)
-        self.assertLess(entropy_zero, entropy_objective)
-        self.assertLess(main_step, entropy_objective)
-        self.assertLess(entropy_objective, entropy_backward)
-        self.assertLess(entropy_backward, entropy_step)
-        self.assertLess(entropy_step, post_step_entropy)
-        self.assertLess(post_step_entropy, entropy_log)
-        self.assertIn("Entropy(post-step)", train_source)
+        self.assertLess(entropy_objective, main_backward)
+        self.assertLess(main_backward, entropy_zero)
+        self.assertLess(entropy_zero, entropy_backward)
+        self.assertLess(entropy_backward, entropy_log)
+        self.assertLess(entropy_log, main_clip)
+        self.assertLess(main_clip, global_clip_parameters)
+        self.assertLess(global_clip_parameters, main_step)
+        self.assertLess(main_step, entropy_step)
+        self.assertIn("Aux:", train_source)
+        self.assertNotIn("Entropy(post-step)", train_source)
+        self.assertIn(
+            "Main-aligned entropy updates require "
+            "train.accumulation_steps=1",
+            train_source,
+        )
 
     def test_main_and_entropy_optimizer_parameters_are_disjoint_and_complete(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
