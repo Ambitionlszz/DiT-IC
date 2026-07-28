@@ -78,10 +78,23 @@ def normalize_pure_sana_config(config):
     train["rate_weight"] = rate_weight
     loss_params["rate_weight"] = rate_weight
 
-    # The old auxiliary optimizer and the current entropy optimizer own the
+    # The official auxiliary optimizer and the local entropy optimizer own the
     # same entropy-bottleneck quantile parameters.
-    if "entropy_lr" not in optimizer and "aux_lr" in optimizer:
-        optimizer["entropy_lr"] = optimizer["aux_lr"]
+    aux_lr = optimizer.get("aux_lr")
+    entropy_lr = optimizer.get("entropy_lr")
+    if (
+        aux_lr is not None
+        and entropy_lr is not None
+        and aux_lr != entropy_lr
+    ):
+        raise ValueError(
+            "Conflicting entropy learning rates: "
+            f"aux_lr={aux_lr!r} and entropy_lr={entropy_lr!r}"
+        )
+    if aux_lr is None and entropy_lr is not None:
+        optimizer["aux_lr"] = entropy_lr
+    if entropy_lr is None and aux_lr is not None:
+        optimizer["entropy_lr"] = aux_lr
 
     # Allow freeze controls to live in either the train or model section.
     if "freeze_codec" in train and "freeze_codec" not in params:
