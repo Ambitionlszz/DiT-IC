@@ -30,7 +30,9 @@ from config_compat import normalize_pure_sana_config
 
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
-ENTROPY_OPTIMIZER_VERSION = 2
+# Version 4 follows the official DiT-IC NoGAN order: main backward/clip/step,
+# then recompute and update the entropy-bottleneck quantiles.
+ENTROPY_OPTIMIZER_VERSION = 4
 
 
 
@@ -158,12 +160,17 @@ def do_train(rank, local_rank, world_size, train_config):
     opt_entropy = (
         optim.AdamW(
             entropy_parameters,
-            lr=train_config['optimizer']['entropy_lr'],
+            lr=train_config['optimizer']['aux_lr'],
             weight_decay=0,
         )
         if entropy_parameters
         else None
     )
+    if rank == 0:
+        logger.info(
+            "Entropy updates: official DiT-IC NoGAN order "
+            "(global model clip, post-main auxiliary step)"
+        )
     
     milestones = train_config['optimizer']['step_lr']
     gammas = [0.5, 0.2, 0.1]
@@ -484,29 +491,30 @@ def do_train(rank, local_rank, world_size, train_config):
             # ---- step optimizers after accumulation ----
             if accum_count == accumulation_steps:
                 # Generator step
+                # Keep the previous auxiliary gradient resident until the
+                # official post-main-step opt_entropy.zero_grad() below.
                 if 'max_grad_norm' in train_config['optimizer']:
-                    torch.nn.utils.clip_grad_norm_(main_parameters, train_config['optimizer']['max_grad_norm'])
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(),
+                        train_config['optimizer']['max_grad_norm'],
+                    )
                 opt.step()
                 scheduler.step()
 
-                # Recompute the quantile objective after the main entropy-model
-                # parameters have moved. Keep its gradients out of main clipping.
+                # Official DiT-IC NoGAN ordering: recompute the quantile
+                # objective after the main entropy-model parameters move.
                 if opt_entropy is not None:
-                    opt_entropy.zero_grad(set_to_none=True)
-                    entropy_loss_before_step = (
+                    entropy_loss = (
                         model.module.codec.entropy_bottleneck_loss()
                     )
-                    entropy_loss_before_step.backward()
-                    opt_entropy.step()
-                    with torch.no_grad():
-                        entropy_loss = (
-                            model.module.codec.entropy_bottleneck_loss().detach()
-                        )
                     if not torch.isfinite(entropy_loss).item():
                         raise FloatingPointError(
-                            "Entropy-bottleneck loss became non-finite after "
+                            "Entropy-bottleneck loss became non-finite before "
                             f"the auxiliary update at step {train_steps}"
                         )
+                    opt_entropy.zero_grad(set_to_none=True)
+                    entropy_loss.backward()
+                    opt_entropy.step()
                 else:
                     entropy_loss = torch.tensor(0.0, device=x.device)
                 running_entropy_loss += entropy_loss.item() * accumulation_steps
@@ -524,8 +532,6 @@ def do_train(rank, local_rank, world_size, train_config):
 
                 # Zero all gradients for next accumulation cycle
                 opt.zero_grad(set_to_none=True)
-                if opt_entropy is not None:
-                    opt_entropy.zero_grad(set_to_none=True)
                 opt_disc.zero_grad(set_to_none=True)
 
                 train_steps += 1
@@ -552,7 +558,7 @@ def do_train(rank, local_rank, world_size, train_config):
 
                     lr = opt.param_groups[0]['lr']
                     if rank == 0:
-                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Entropy(post-step): {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
+                        logger.info(f"(step={train_steps:07d}, lr = {lr:.6e}) Train Loss: {avg_loss:.4f}, Dis: {avg_dis_loss:.4f}, Aux: {avg_entropy_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
                         log = {k: float(v) for k, v in log_dict.items()}
                         logger.info(json.dumps(log, indent=2))
                         if train_steps > disc_start:
@@ -797,9 +803,11 @@ def set_seed(seed=903):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True, warn_only=True)
     os.environ["PYTHONHASHSEED"] = str(seed)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 

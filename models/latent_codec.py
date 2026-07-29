@@ -482,7 +482,7 @@ class LatentCodec(nn.Module):
         y = self.g_a(latent)
         z = self.h_a(y)
 
-        # torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.deterministic = True
         z_strings = self.entropy_bottleneck.compress(z)
         z_hat = self.entropy_bottleneck.decompress(z_strings, z.size()[-2:])
 
@@ -529,7 +529,7 @@ class LatentCodec(nn.Module):
         y_string = encoder.flush()
         y_strings.append(y_string)
 
-        # torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.deterministic = False
 
         return {
             "strings": [y_strings, z_strings],
@@ -538,7 +538,7 @@ class LatentCodec(nn.Module):
 
     def decompress(self, strings, shape):
 
-        # torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.deterministic = True
         y_strings = strings[0][0]
         z_strings = strings[1]
         z_hat = self.entropy_bottleneck.decompress(z_strings, shape)
@@ -582,7 +582,7 @@ class LatentCodec(nn.Module):
 
         y_hat = y_hat_0 + y_hat_1 + y_hat_2 + y_hat_3
 
-        # torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.deterministic = False
 
         mean = self.g_s(y_hat)
 

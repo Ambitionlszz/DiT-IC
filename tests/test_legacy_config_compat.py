@@ -43,7 +43,33 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
             normalized["model"]["params"]["loss_params"]["rate_weight"],
             0.4,
         )
+        self.assertEqual(normalized["optimizer"]["aux_lr"], 0.001)
         self.assertEqual(normalized["optimizer"]["entropy_lr"], 0.001)
+
+    def test_current_entropy_lr_is_mapped_to_official_aux_lr(self):
+        config = {
+            "model": {"params": {"use_text_condition": True}},
+            "optimizer": {"entropy_lr": 0.001},
+        }
+
+        normalized = normalize_pure_sana_config(config)
+
+        self.assertEqual(normalized["optimizer"]["aux_lr"], 0.001)
+
+    def test_conflicting_entropy_learning_rates_are_rejected(self):
+        config = {
+            "model": {"params": {"use_text_condition": True}},
+            "optimizer": {
+                "aux_lr": 0.001,
+                "entropy_lr": 0.002,
+            },
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Conflicting entropy learning rates",
+        ):
+            normalize_pure_sana_config(config)
 
     def test_removed_feature_cannot_be_reenabled(self):
         config = {

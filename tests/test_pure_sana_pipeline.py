@@ -139,7 +139,7 @@ class PureSanaStructureTest(unittest.TestCase):
         train_source = ast.get_source_segment(source, train_method)
         self.assertIn("self.codec.eval()", train_source)
 
-    def test_entropy_aux_step_uses_updated_main_model(self):
+    def test_entropy_aux_step_matches_official_nogan_semantics(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         do_train = next(
@@ -150,37 +150,50 @@ class PureSanaStructureTest(unittest.TestCase):
         train_source = ast.get_source_segment(source, do_train)
 
         main_backward = train_source.index("loss.backward()")
-        main_clip = train_source.index("clip_grad_norm_(main_parameters")
+        main_clip = train_source.index("clip_grad_norm_(")
+        global_clip_parameters = train_source.index(
+            "model.parameters()",
+            main_clip,
+        )
         main_step = train_source.index("opt.step()")
-        entropy_zero = train_source.index(
-            "opt_entropy.zero_grad(set_to_none=True)",
+        entropy_objective = train_source.index(
+            "entropy_loss = (",
             main_step,
         )
-        entropy_objective = train_source.index(
-            "entropy_loss_before_step = ("
+        entropy_zero = train_source.index(
+            "opt_entropy.zero_grad(set_to_none=True)",
+            entropy_objective,
         )
         entropy_backward = train_source.index(
-            "entropy_loss_before_step.backward()"
+            "entropy_loss.backward()",
+            entropy_zero,
         )
         entropy_step = train_source.index("opt_entropy.step()")
-        post_step_entropy = train_source.index(
-            "entropy_loss = (",
-            entropy_step,
-        )
         entropy_log = train_source.index(
             "running_entropy_loss += entropy_loss.item()"
         )
+        next_train_step = train_source.index("train_steps += 1")
 
         self.assertLess(main_backward, main_clip)
+        self.assertLess(main_clip, global_clip_parameters)
+        self.assertLess(global_clip_parameters, main_step)
         self.assertLess(main_clip, main_step)
-        self.assertLess(main_step, entropy_zero)
-        self.assertLess(entropy_zero, entropy_objective)
         self.assertLess(main_step, entropy_objective)
+        self.assertLess(entropy_objective, entropy_zero)
+        self.assertLess(entropy_zero, entropy_backward)
         self.assertLess(entropy_objective, entropy_backward)
         self.assertLess(entropy_backward, entropy_step)
-        self.assertLess(entropy_step, post_step_entropy)
-        self.assertLess(post_step_entropy, entropy_log)
-        self.assertIn("Entropy(post-step)", train_source)
+        self.assertLess(entropy_step, entropy_log)
+        self.assertNotIn(
+            "opt_entropy.zero_grad",
+            train_source[entropy_step:next_train_step],
+        )
+        self.assertIn("Aux:", train_source)
+        self.assertNotIn("Entropy(post-step)", train_source)
+        self.assertIn(
+            "Entropy updates: official DiT-IC NoGAN order ",
+            source,
+        )
 
     def test_main_and_entropy_optimizer_parameters_are_disjoint_and_complete(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
@@ -207,6 +220,37 @@ class PureSanaStructureTest(unittest.TestCase):
         self.assertIn(
             "if not torch.isfinite(entropy_loss).item():",
             source,
+        )
+
+    def test_official_entropy_determinism_settings_are_active(self):
+        train_source = (ROOT / "train_nogan_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        codec_source = (ROOT / "models" / "latent_codec.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("torch.backends.cudnn.benchmark = False", train_source)
+        self.assertIn("torch.backends.cudnn.deterministic = True", train_source)
+        self.assertIn(
+            "torch.use_deterministic_algorithms(True, warn_only=True)",
+            train_source,
+        )
+        self.assertIn(
+            'os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"',
+            train_source,
+        )
+        self.assertEqual(
+            codec_source.count(
+                "\n        torch.backends.cudnn.deterministic = True"
+            ),
+            2,
+        )
+        self.assertEqual(
+            codec_source.count(
+                "\n        torch.backends.cudnn.deterministic = False"
+            ),
+            2,
         )
 
     def test_legacy_entropy_optimizer_state_is_not_loaded_blindly(self):
