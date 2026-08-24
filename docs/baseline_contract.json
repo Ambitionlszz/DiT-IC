@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "stage": "multirate_reconstruction",
+  "source_checkpoint": "REQUIRED_AT_LAUNCH",
+  "source_config": "configs/baseline_lrd0p4.yaml",
+  "train_dit_lora": true,
+  "train_vae_decoder_lora": false,
+  "train_text_projection": false,
+  "freeze_codec": true,
+  "fixed_text_condition": true,
+  "decode_mode": "sana",
+  "removed_features_all_off": true,
+  "explicit_rate_embedding": false,
+  "quality_levels": 6,
+  "quality_semantics": "q0_lowest_bpp_q5_highest_bpp"
+}

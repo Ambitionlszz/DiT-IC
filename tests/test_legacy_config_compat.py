@@ -148,6 +148,44 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         normalized = normalize_pure_sana_config(config)
         self.assertTrue(normalized["model"]["params"]["freeze_codec"])
 
+    def test_multirate_plain_resolves_six_rate_codec_contract(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": True,
+                    "train_text_projection": False,
+                    "vae_params": {
+                        "vae_lora": True,
+                        "train_vae_lora": False,
+                    },
+                    "codec_param": {"variable_rate": True},
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {"enabled": True, "num_levels": 6},
+            "train": {"rate_weight": 0.0},
+        }
+        normalized = normalize_pure_sana_config(config)
+        codec = normalized["model"]["params"]["codec_param"]
+        self.assertTrue(codec["variable_rate"])
+        self.assertEqual(codec["num_quality_levels"], 6)
+
+    def test_multirate_plain_rejects_trainable_vae_lora(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": True,
+                    "train_text_projection": False,
+                    "vae_params": {"vae_lora": True},
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {"enabled": True, "num_levels": 6},
+            "train": {"rate_weight": 0.0},
+        }
+        with self.assertRaisesRegex(ValueError, "train_vae_lora=False"):
+            normalize_pure_sana_config(config)
+
 
 if __name__ == "__main__":
     unittest.main()

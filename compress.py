@@ -24,6 +24,7 @@ import time
 import gc
 from pathlib import Path
 
+from codec_packet import CodecPacket, read_codec_packet, write_codec_packet
 from eval.compress_utils import *
 from eval.testing_utils import parse_args_testing
 from eval._update_patch_fid import update_patch_fid
@@ -223,15 +224,23 @@ def preprocess_image(image_path, transform):
     return image_tensor
 
 
-def compress_one_image(net, bin_path, ori_h, ori_w, img_name, x):
+def compress_one_image(
+    net, bin_path, ori_h, ori_w, img_name, x, quality_index=None
+):
     with torch.no_grad():
-        output_dict = net.compress(x)
-    shape = output_dict["shape"]
+        packet_or_dict = net.compress(x, quality_index)
     if not os.path.exists(bin_path): os.makedirs(bin_path)
-    output = os.path.join(bin_path, img_name)
-    with Path(output).open("wb") as f:
-        write_body(f, shape, output_dict["strings"])
-    size = filesize(output)
+    output_path = os.path.join(bin_path, img_name)
+    with Path(output_path).open("wb") as f:
+        if isinstance(packet_or_dict, CodecPacket):
+            write_codec_packet(f, packet_or_dict)
+        else:
+            write_body(
+                f,
+                packet_or_dict["shape"],
+                packet_or_dict["strings"],
+            )
+    size = filesize(output_path)
     bpp = float(size) * 8 / (ori_h * ori_w)
     return bpp
 
@@ -239,9 +248,17 @@ def compress_one_image(net, bin_path, ori_h, ori_w, img_name, x):
 def decompress_one_image(net, bin_path, ori_h, ori_w, img_name):
     output = os.path.join(bin_path, img_name)
     with Path(output).open("rb") as f:
-        strings, shape = read_body(f)
+        try:
+            packet = read_codec_packet(f)
+        except ValueError:
+            f.seek(0)
+            packet = None
+            strings, shape = read_body(f)
     with torch.no_grad():
-        out_img = net.decompress(strings, shape)
+        if packet is not None:
+            out_img = net.decompress(packet)
+        else:
+            out_img = net.decompress(strings, shape)
     out_img = out_img[:, :, 0 : ori_h, 0 : ori_w]
     out_img = (out_img * 0.5 + 0.5).float().detach()
     return out_img
@@ -395,12 +412,22 @@ def main(args):
     )
     params = config["model"]["params"]
     args.codec_path = params["codec_path"]
+    variable_rate = bool(
+        (params.get("codec_param") or {}).get("variable_rate", False)
+    )
+    if variable_rate and args.quality_index is None:
+        raise ValueError("--quality_index is required for a variable-rate codec")
+    if not variable_rate and args.quality_index is not None:
+        raise ValueError("--quality_index requires codec_param.variable_rate=true")
 
     # ===== Setup results directory and logging =====
     ckpt_name = Path(args.codec_path).stem if args.codec_path else "no_ckpt"
     config_name = Path(args.config_path).stem
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"{config_name}_{ckpt_name}_{timestamp}"
+    quality_suffix = (
+        f"_q{args.quality_index}" if args.quality_index is not None else ""
+    )
+    run_name = f"{config_name}_{ckpt_name}{quality_suffix}_{timestamp}"
     run_dir = os.path.join(args.results_dir, run_name)
     os.makedirs(run_dir, exist_ok=True)
     log_tee = setup_logging(run_dir, run_name)
@@ -493,7 +520,7 @@ def main(args):
             if args.entropy_estimation:
                 N, _, H, W = img.size()
                 num_pixels = N * H * W
-                out_img, rate = net(img_padded)
+                out_img, rate = net(img_padded, args.quality_index)
                 
                 rate = sum(
                     (torch.log(likelihoods).sum() / (-math.log(2) * num_pixels))
@@ -502,7 +529,15 @@ def main(args):
                 out_img = out_img[:, :, 0 : ori_h, 0 : ori_w]
                 out_img = (out_img * 0.5 + 0.5).float().detach()
             else:
-                rate = compress_one_image(net, args.bin_path, ori_h, ori_w, fname, img_padded)
+                rate = compress_one_image(
+                    net,
+                    args.bin_path,
+                    ori_h,
+                    ori_w,
+                    fname,
+                    img_padded,
+                    args.quality_index,
+                )
                 out_img = decompress_one_image(net, args.bin_path, ori_h, ori_w, fname)
         
         # End timing and memory tracking
@@ -598,6 +633,7 @@ def main(args):
         'use_ema': args.use_ema,
         'use_merge': args.use_merge,
         'entropy_estimation': args.entropy_estimation,
+        'quality_index': args.quality_index,
         'timestamp': timestamp,
     }
 
@@ -749,9 +785,17 @@ def main(args):
                     if args.entropy_estimation:
                         N, _, H, W = img.size()
                         num_pixels = N * H * W
-                        out_img, rate = net(img_padded)
+                        out_img, rate = net(img_padded, args.quality_index)
                     else:
-                        rate = compress_one_image(net, args.bin_path, ori_h, ori_w, fname, img_padded)
+                        rate = compress_one_image(
+                            net,
+                            args.bin_path,
+                            ori_h,
+                            ori_w,
+                            fname,
+                            img_padded,
+                            args.quality_index,
+                        )
                         out_img = decompress_one_image(net, args.bin_path, ori_h, ori_w, fname)
                 
                 # End timing

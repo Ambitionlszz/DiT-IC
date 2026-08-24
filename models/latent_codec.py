@@ -6,6 +6,7 @@ import math
 from compressai.ans import BufferedRansEncoder, RansDecoder
 from compressai.entropy_models import EntropyBottleneck, GaussianConditional
 
+from codec_packet import CodecPacket, QUALITY_LEVELS
 from .modules import DepthConvBlock, ResidualBlockUpsample2, ResidualBlockWithStride2
 
 # v3_new
@@ -137,6 +138,76 @@ class UpsampleConvTranspose(nn.Module):
         return self.up(x)
 
 
+class QualityController(nn.Module):
+    """DCVC-FM-style independent encoder/decoder quality scale tables.
+
+    Adapted from the official Microsoft DCVC image-model quality tables at
+    commit 819c219b24db34310bbd15c51a720aaaf5eb2e7d (MIT License).
+    The local channel counts and insertion boundaries follow
+    docs/variable_rate_insertion_audit.md.
+    """
+
+    def __init__(self, num_levels, encoder_channels, decoder_channels):
+        super().__init__()
+        if num_levels != QUALITY_LEVELS:
+            raise ValueError(
+                f"num_levels must be {QUALITY_LEVELS}, got {num_levels}"
+            )
+        self.num_levels = num_levels
+        self.encoder_scale_table = nn.Parameter(
+            torch.ones(num_levels, encoder_channels, 1, 1)
+        )
+        self.decoder_scale_table = nn.Parameter(
+            torch.ones(num_levels, decoder_channels, 1, 1)
+        )
+
+    def validate_quality_index(self, quality_index):
+        if isinstance(quality_index, bool):
+            raise TypeError("quality_index must be an integer or integer tensor")
+        if isinstance(quality_index, int):
+            if not 0 <= quality_index < self.num_levels:
+                raise ValueError(
+                    f"quality_index must be in [0, {self.num_levels - 1}], "
+                    f"got {quality_index}"
+                )
+            return torch.tensor(
+                [quality_index],
+                dtype=torch.long,
+                device=self.encoder_scale_table.device,
+            )
+        if not isinstance(quality_index, torch.Tensor):
+            raise TypeError("quality_index must be an integer or integer tensor")
+        if quality_index.ndim > 1:
+            raise ValueError("quality_index tensor must be scalar or one-dimensional")
+        if quality_index.dtype not in (
+            torch.int8,
+            torch.int16,
+            torch.int32,
+            torch.int64,
+            torch.uint8,
+        ):
+            raise TypeError("quality_index tensor must use an integer dtype")
+        index = quality_index.reshape(-1).to(
+            device=self.encoder_scale_table.device,
+            dtype=torch.long,
+        )
+        if index.numel() == 0:
+            raise ValueError("quality_index tensor cannot be empty")
+        if torch.any(index < 0).item() or torch.any(index >= self.num_levels).item():
+            raise ValueError(
+                f"quality_index must be in [0, {self.num_levels - 1}]"
+            )
+        return index
+
+    def encoder_scale(self, quality_index):
+        index = self.validate_quality_index(quality_index)
+        return torch.index_select(self.encoder_scale_table, 0, index)
+
+    def decoder_scale(self, quality_index):
+        index = self.validate_quality_index(quality_index)
+        return torch.index_select(self.decoder_scale_table, 0, index)
+
+
 class AnalysisTransform(nn.Module):
     def __init__(self, ch_emd=32, channel=320):
         super().__init__()
@@ -152,8 +223,11 @@ class AnalysisTransform(nn.Module):
             DepthConvBlock(320, channel),
         )
 
-    def forward(self, latent):
-        return self.analysis_transform(self.pre1(latent))
+    def forward(self, latent, encoder_scale=None):
+        latent = self.pre1(latent)
+        if encoder_scale is not None:
+            latent = latent * encoder_scale
+        return self.analysis_transform(latent)
     
 class SynthesisTransform(nn.Module):
     def __init__(self, channel=320, channel_out=32, upsample_mode="pixelshuffle") -> None:
@@ -167,8 +241,11 @@ class SynthesisTransform(nn.Module):
             nn.Conv2d(320, channel_out, kernel_size=3, padding=1)
         )
 
-    def forward(self, x):
-        x = self.synthesis_transform(x)
+    def forward(self, x, decoder_scale=None):
+        for index, layer in enumerate(self.synthesis_transform):
+            x = layer(x)
+            if index == 3 and decoder_scale is not None:
+                x = x * decoder_scale
         return x
 
 class HyperAnalysis(nn.Module):
@@ -275,6 +352,8 @@ class LatentCodec(nn.Module):
                  depths=[2,2,2,2,2],
                  num_heads=[12,12,12,12,12],
                  upsample_mode="pixelshuffle",
+                 variable_rate=False,
+                 num_quality_levels=QUALITY_LEVELS,
                  **kwargs
                  ):
         super().__init__()
@@ -285,9 +364,20 @@ class LatentCodec(nn.Module):
         self.max_support_slices = max_support_slices
         num_per_slice = channel // self.num_slices
         self.upsample_mode = upsample_mode
+        self.variable_rate = bool(variable_rate)
+        self.num_quality_levels = num_quality_levels
 
         self.g_a = AnalysisTransform(ch_emd, channel)
         self.g_s = SynthesisTransform(channel, channel_out, upsample_mode=upsample_mode)
+        self.quality_controller = (
+            QualityController(
+                num_levels=num_quality_levels,
+                encoder_channels=192,
+                decoder_channels=320,
+            )
+            if self.variable_rate
+            else None
+        )
         self.h_a = HyperAnalysis(channel)
         self.h_s = HyperSynthesis(channel)
 
@@ -426,8 +516,32 @@ class LatentCodec(nn.Module):
         latent_hat = self.unsequeeze_with_mask(latent_hat, mask)
         return latent_hat, y_likelihoods
 
-    def forward(self, latent):
-        y = self.g_a(latent)
+    def _quality_scales(self, quality_index, batch_size=None):
+        if not self.variable_rate:
+            if quality_index is not None:
+                raise ValueError(
+                    "quality_index is only valid when codec_param.variable_rate=True"
+                )
+            return None, None
+        if quality_index is None:
+            raise ValueError(
+                "quality_index is required when codec_param.variable_rate=True"
+            )
+        scales = (
+            self.quality_controller.encoder_scale(quality_index),
+            self.quality_controller.decoder_scale(quality_index),
+        )
+        if batch_size is not None and scales[0].shape[0] not in (1, batch_size):
+            raise ValueError(
+                "quality_index tensor length must be 1 or match the latent batch"
+            )
+        return scales
+
+    def forward(self, latent, quality_index=None):
+        encoder_scale, decoder_scale = self._quality_scales(
+            quality_index, batch_size=latent.shape[0]
+        )
+        y = self.g_a(latent, encoder_scale)
         z = self.h_a(y)
 
         # torch.backends.cudnn.deterministic = True
@@ -471,15 +585,27 @@ class LatentCodec(nn.Module):
         y_likelihoods = y_likelihoods_0 + y_likelihoods_1 + y_likelihoods_2 + y_likelihoods_3 
         # torch.backends.cudnn.deterministic = False
         
-        mean = self.g_s(y_hat)
+        mean = self.g_s(y_hat, decoder_scale)
 
         return {
             "mean": mean,
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
         }
 
-    def compress(self, latent):
-        y = self.g_a(latent)
+    def compress(self, latent, quality_index=None):
+        encoder_scale, _ = self._quality_scales(
+            quality_index, batch_size=latent.shape[0]
+        )
+        if self.variable_rate:
+            quality_tensor = self.quality_controller.validate_quality_index(
+                quality_index
+            )
+            if quality_tensor.numel() != 1:
+                raise ValueError("compress requires one shared scalar quality_index")
+            packet_quality_index = int(quality_tensor.item())
+        else:
+            packet_quality_index = None
+        y = self.g_a(latent, encoder_scale)
         z = self.h_a(y)
 
         torch.backends.cudnn.deterministic = True
@@ -531,12 +657,33 @@ class LatentCodec(nn.Module):
 
         torch.backends.cudnn.deterministic = False
 
-        return {
+        output = {
             "strings": [y_strings, z_strings],
             "shape": z.size()[-2:],
         }
+        if self.variable_rate:
+            return CodecPacket(
+                strings=output["strings"],
+                shape=tuple(int(value) for value in output["shape"]),
+                quality_index=packet_quality_index,
+            )
+        return output
 
-    def decompress(self, strings, shape):
+    def decompress(self, packet_or_strings, shape=None, quality_index=None):
+        if isinstance(packet_or_strings, CodecPacket):
+            if shape is not None or quality_index is not None:
+                raise ValueError(
+                    "shape and quality_index must come from CodecPacket, not side inputs"
+                )
+            strings = packet_or_strings.strings
+            shape = packet_or_strings.shape
+            quality_index = packet_or_strings.quality_index
+        else:
+            strings = packet_or_strings
+            if shape is None:
+                raise ValueError("shape is required for a legacy codec payload")
+
+        _, decoder_scale = self._quality_scales(quality_index)
 
         torch.backends.cudnn.deterministic = True
         y_strings = strings[0][0]
@@ -584,7 +731,7 @@ class LatentCodec(nn.Module):
 
         torch.backends.cudnn.deterministic = False
 
-        mean = self.g_s(y_hat)
+        mean = self.g_s(y_hat, decoder_scale)
 
         return mean
 

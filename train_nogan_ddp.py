@@ -15,10 +15,12 @@ import os
 import sys
 import yaml
 import json
+import hashlib
 import random
 import logging
 import argparse
 import importlib
+import subprocess
 import numpy as np
 from time import time
 from glob import glob
@@ -33,6 +35,55 @@ from config_compat import normalize_pure_sana_config
 # Version 4 follows the official DiT-IC NoGAN order: main backward/clip/step,
 # then recompute and update the entropy-bottleneck quantiles.
 ENTROPY_OPTIMIZER_VERSION = 4
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def state_dict_sha256(state_dict):
+    digest = hashlib.sha256()
+    for name in sorted(state_dict):
+        tensor = state_dict[name].detach().cpu().contiguous()
+        digest.update(name.encode("utf-8"))
+        digest.update(str(tensor.dtype).encode("ascii"))
+        digest.update(str(tuple(tensor.shape)).encode("ascii"))
+        digest.update(tensor.reshape(-1).view(torch.uint8).numpy().tobytes())
+    return digest.hexdigest()
+
+
+def current_git_commit():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def sample_shared_quality_index(num_levels, device, generator=None):
+    """Sample one step-level quality on rank 0 and broadcast it to all ranks."""
+    if num_levels < 2:
+        raise ValueError("num_levels must be at least 2")
+    broadcast_device = device if dist.get_backend() == "nccl" else "cpu"
+    quality_index = torch.zeros((), dtype=torch.long, device=broadcast_device)
+    if dist.get_rank() == 0:
+        sampled = torch.randint(
+            low=0,
+            high=num_levels,
+            size=(),
+            generator=generator,
+            device="cpu",
+        )
+        quality_index.copy_(sampled.to(broadcast_device))
+    dist.broadcast(quality_index, src=0)
+    return quality_index.to(device)
 
 
 
@@ -61,6 +112,19 @@ def move_to_device(obj, device):
 
 def do_train(rank, local_rank, world_size, train_config):
     device = f'cuda:{local_rank}'
+    quality_config = train_config.get("quality_control", {})
+    multirate_plain = bool(quality_config.get("enabled", False))
+    num_quality_levels = int(quality_config.get("num_levels", 0))
+    if multirate_plain and num_quality_levels != 6:
+        raise ValueError("multi-rate Plain training requires exactly 6 quality levels")
+    quality_generator = None
+    quality_counts = None
+    if multirate_plain:
+        quality_generator = torch.Generator(device="cpu")
+        quality_generator.manual_seed(
+            int(train_config["train"]["global_seed"]) + 1701
+        )
+        quality_counts = torch.zeros(num_quality_levels, dtype=torch.long)
 
     # Compute the experiment name consistently across all ranks.
     experiment_index = len(glob(f"{train_config['train']['output_dir']}/*"))
@@ -91,6 +155,11 @@ def do_train(rank, local_rank, world_size, train_config):
     params = dict(train_config.get("model", {}).get("params", {}))
     params["training"] = True
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
+    source_checkpoint_sha256 = (
+        file_sha256(params["codec_path"])
+        if rank == 0 and multirate_plain
+        else None
+    )
     loss_module = model.loss
     model.loss = None
     main_parameters = model.get_trainable_params()
@@ -256,9 +325,11 @@ def do_train(rank, local_rank, world_size, train_config):
         update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
     model.train()
     model.module.assert_frozen_codec_contract()
+    model.module.assert_reconstruction_training_contract()
     loss_module.train()
 
     train_config['train']['resume'] if 'resume' in train_config['train'] else False
+    best_loss = float("inf")
 
     if train_config['train']['resume']:
         # check if the checkpoint exists
@@ -346,6 +417,18 @@ def do_train(rank, local_rank, world_size, train_config):
                 "train_steps",
                 int(checkpoint_stem) if checkpoint_stem.isdigit() else 0,
             )
+            best_loss = float(checkpoint.get("best_loss", best_loss))
+            if multirate_plain:
+                saved_quality_state = checkpoint.get("quality_generator_state")
+                if saved_quality_state is None:
+                    raise KeyError(
+                        "multi-rate resume checkpoint lacks quality_generator_state"
+                    )
+                quality_generator.set_state(saved_quality_state.cpu())
+                saved_quality_counts = checkpoint.get("quality_counts")
+                if saved_quality_counts is None:
+                    raise KeyError("multi-rate resume checkpoint lacks quality_counts")
+                quality_counts.copy_(saved_quality_counts.cpu())
             if "scheduler" in checkpoint:
                 scheduler.load_state_dict(checkpoint["scheduler"])
                 if "loss" in checkpoint and "scheduler_disc" in checkpoint:
@@ -371,6 +454,10 @@ def do_train(rank, local_rank, world_size, train_config):
 
     def make_checkpoint():
         checkpoint = {
+            "schema_version": 2,
+            "stage": (
+                "multirate_reconstruction" if multirate_plain else "baseline"
+            ),
             "model": model.module.get_state_dicts_for_save(),
             "ema": ema,
             "loss": {
@@ -382,6 +469,7 @@ def do_train(rank, local_rank, world_size, train_config):
             "scheduler": scheduler.state_dict(),
             "scheduler_disc": scheduler_disc.state_dict(),
             "train_steps": train_steps,
+            "best_loss": best_loss,
             "config": train_config,
             "entropy_bottleneck_loss": float(
                 model.module.codec.entropy_bottleneck_loss().detach().item()
@@ -393,6 +481,19 @@ def do_train(rank, local_rank, world_size, train_config):
             entropy_state = opt_entropy.state_dict()
             checkpoint["opt_entropy"] = entropy_state
             checkpoint["opt_aux"] = entropy_state
+        if multirate_plain:
+            checkpoint["quality_generator_state"] = quality_generator.get_state()
+            checkpoint["quality_counts"] = quality_counts.clone()
+            codec_state = checkpoint["model"]["state_dict_codec"]
+            checkpoint["codec_sha256"] = state_dict_sha256(codec_state)
+            checkpoint["source_checkpoint_sha256"] = source_checkpoint_sha256
+            checkpoint["git_commit"] = current_git_commit()
+            checkpoint["bitstream_format_version"] = 1
+            checkpoint["trainable_parameter_names"] = sorted(
+                name
+                for name, parameter in model.module.named_parameters()
+                if parameter.requires_grad
+            )
         return checkpoint
 
     log_steps = 0
@@ -400,7 +501,6 @@ def do_train(rank, local_rank, world_size, train_config):
     running_entropy_loss = 0
     running_dis_loss = 0
 
-    best_loss = float("inf")
     start_time = time()
     
     accumulation_steps = train_config['train'].get('accumulation_steps', 1)
@@ -413,6 +513,7 @@ def do_train(rank, local_rank, world_size, train_config):
     opt_disc.zero_grad(set_to_none=True)
     if opt_entropy is not None:
         opt_entropy.zero_grad(set_to_none=True)
+    quality_index = None
 
     while True:
         # sampler.set_epoch(train_steps)
@@ -425,9 +526,18 @@ def do_train(rank, local_rank, world_size, train_config):
             x = x.to(device)
             will_step = accum_count + 1 == accumulation_steps
             disc_active = train_steps >= disc_start
+            if multirate_plain and accum_count == 0:
+                quality_index = sample_shared_quality_index(
+                    num_quality_levels,
+                    device,
+                    generator=quality_generator,
+                )
 
             # ---- forward pass ----
-            output_image, rate = model(x)
+            if multirate_plain:
+                output_image, rate = model(x, quality_index)
+            else:
+                output_image, rate = model(x)
 
             # Generator loss
             if not disc_active:
@@ -535,6 +645,9 @@ def do_train(rank, local_rank, world_size, train_config):
                 opt_disc.zero_grad(set_to_none=True)
 
                 train_steps += 1
+                if multirate_plain:
+                    quality_counts[int(quality_index.item())] += 1
+                    quality_index = None
                 accum_count = 0
 
                 # ---- logging ----
@@ -568,6 +681,17 @@ def do_train(rank, local_rank, world_size, train_config):
                         writer.add_scalar('Loss/entropy', avg_entropy_loss, train_steps)
                         writer.add_scalar('Loss/dis', avg_dis_loss, train_steps)
                         writer.add_scalar('Params/lr', lr, train_steps)
+                        if multirate_plain:
+                            logger.info(
+                                "Quality step counts: "
+                                + json.dumps(quality_counts.tolist())
+                            )
+                            for quality, count in enumerate(quality_counts.tolist()):
+                                writer.add_scalar(
+                                    f"Quality/q{quality}_steps",
+                                    count,
+                                    train_steps,
+                                )
                         # Log all loss components to tensorboard
                         for k, v in log_dict.items():
                             if isinstance(v, (int, float)):
@@ -593,7 +717,18 @@ def do_train(rank, local_rank, world_size, train_config):
                     if rank == 0:
                         logger.info(f"Start evaluating at step {train_steps}")
 
-                    test_loss = evaluate(model, loss_module, valid_loader, device, train_steps, logger if rank==0 else None, writer if rank==0 else None)
+                    test_loss = evaluate(
+                        model,
+                        loss_module,
+                        valid_loader,
+                        device,
+                        train_steps,
+                        logger if rank==0 else None,
+                        writer if rank==0 else None,
+                        num_quality_levels=(
+                            num_quality_levels if multirate_plain else None
+                        ),
+                    )
 
                     if rank == 0:
                         is_best = test_loss < best_loss
@@ -605,6 +740,7 @@ def do_train(rank, local_rank, world_size, train_config):
                             logger.info(f"Saved best checkpoint to {checkpoint_path} at step {train_steps}")
                     dist.barrier()
                     model.train()
+                    model.module.assert_reconstruction_training_contract()
                     loss_module.train()
 
                 # ---- save checkpoint ----
@@ -626,7 +762,16 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info("Done!")
 
 @torch.no_grad()
-def evaluate(model, loss_module, test_loader, device, train_steps, logger=None, writer=None):
+def evaluate(
+    model,
+    loss_module,
+    test_loader,
+    device,
+    train_steps,
+    logger=None,
+    writer=None,
+    num_quality_levels=None,
+):
     model.eval()
     loss_module.eval()
     loss = AverageMeter()
@@ -638,25 +783,50 @@ def evaluate(model, loss_module, test_loader, device, train_steps, logger=None, 
     entropy_loss = AverageMeter()
     all_loss = AverageMeter()
     
-    for x in test_loader:
-        x = x.to(device)
+    qualities = (
+        range(num_quality_levels) if num_quality_levels is not None else [None]
+    )
+    per_quality = {}
+    for quality_index in qualities:
+        quality_loss = AverageMeter()
+        quality_psnr = AverageMeter()
+        quality_bpp = AverageMeter()
+        for x in test_loader:
+            x = x.to(device)
 
-        output_image, rate = model(x)
-        loss, rec_loss, psnr, rate_loss, p_loss = loss_module(
-            x,
-            output_image,
-            rate,
-            -1,
-            -1,
-            split="eval",
-        )
-        
-        all_loss.update(loss)
-        mse_loss.update(rec_loss)
-        psnr_loss.update(psnr)
-        lpips_loss.update(p_loss)
-        bpp_loss.update(rate_loss)
-        entropy_loss.update((model.module.codec if hasattr(model, 'module') else model.codec).entropy_bottleneck_loss())
+            if quality_index is None:
+                output_image, rate = model(x)
+            else:
+                output_image, rate = model(x, quality_index)
+            loss, rec_loss, psnr, rate_loss, p_loss = loss_module(
+                x,
+                output_image,
+                rate,
+                -1,
+                -1,
+                split="eval",
+            )
+
+            batch_size = x.shape[0]
+            all_loss.update(loss, batch_size)
+            mse_loss.update(rec_loss, batch_size)
+            psnr_loss.update(psnr, batch_size)
+            lpips_loss.update(p_loss, batch_size)
+            bpp_loss.update(rate_loss, batch_size)
+            entropy_loss.update(
+                (model.module.codec if hasattr(model, 'module') else model.codec)
+                .entropy_bottleneck_loss(),
+                batch_size,
+            )
+            quality_loss.update(loss, batch_size)
+            quality_psnr.update(psnr, batch_size)
+            quality_bpp.update(rate_loss, batch_size)
+        if quality_index is not None:
+            per_quality[quality_index] = {
+                "loss": float(quality_loss.avg),
+                "psnr": float(quality_psnr.avg),
+                "likelihood_bpp": float(quality_bpp.avg),
+            }
 
     if logger is not None:
         logger.info(
@@ -668,6 +838,8 @@ def evaluate(model, loss_module, test_loader, device, train_steps, logger=None, 
             f"Bpp loss: {bpp_loss.avg:.4f} | "
             f"Entropy loss: {entropy_loss.avg:.2f}"
         )
+        if per_quality:
+            logger.info("Per-quality validation: " + json.dumps(per_quality))
     if writer is not None:
         writer.add_scalar('Eval/loss', all_loss.avg, train_steps)
         writer.add_scalar('Eval/mse', mse_loss.avg, train_steps)
@@ -675,6 +847,11 @@ def evaluate(model, loss_module, test_loader, device, train_steps, logger=None, 
         writer.add_scalar('Eval/lpips', lpips_loss.avg, train_steps)
         writer.add_scalar('Eval/bpp', bpp_loss.avg, train_steps)
         writer.add_scalar('Eval/entropy_loss', entropy_loss.avg, train_steps)
+        for quality_index, metrics in per_quality.items():
+            for name, value in metrics.items():
+                writer.add_scalar(
+                    f"Eval/q{quality_index}_{name}", value, train_steps
+                )
 
     return all_loss.avg
     

@@ -55,6 +55,8 @@ class Codec(nn.Module):
         loss_params=None,
         text_encoder_path=None,
         freeze_codec=False,
+        train_text_projection=True,
+        strict_stage_loading=False,
         decode_mode="sana",
         **kwargs,
     ):
@@ -66,6 +68,15 @@ class Codec(nn.Module):
         loss_params = loss_params or {}
         self.decode_mode = validate_decode_mode(decode_mode)
         self._init_for_training = training
+        self.train_text_projection = bool(train_text_projection)
+        self.strict_stage_loading = bool(strict_stage_loading)
+        vae_lora_enabled = bool(vae_params.get("vae_lora", False))
+        train_vae_lora = bool(
+            vae_params.get("train_vae_lora", vae_lora_enabled)
+        )
+        if train_vae_lora and not vae_lora_enabled:
+            raise ValueError("train_vae_lora=True requires vae_lora=True")
+        self.freeze_vae = not train_vae_lora
         if freeze_codec and codec_path is None:
             raise ValueError("freeze_codec=True requires a pretrained codec_path")
 
@@ -82,6 +93,8 @@ class Codec(nn.Module):
         if self.freeze_codec:
             self.codec.requires_grad_(False)
         self._build_fixed_text_condition(text_encoder_path)
+        if not self.train_text_projection:
+            self.text_proj.requires_grad_(False)
         self.loss = (
             LPIPSWithDiscriminator(device, **loss_params)
             if training
@@ -122,6 +135,10 @@ class Codec(nn.Module):
         if self.freeze_codec:
             self.codec.eval()
             self.assert_frozen_codec_contract()
+        if self.freeze_vae:
+            self.vae.requires_grad_(False)
+            self.vae.eval()
+        self.assert_reconstruction_training_contract()
 
         print("Pure SANA initialization complete")
 
@@ -195,6 +212,17 @@ class Codec(nn.Module):
     ):
         print("[Pure SANA] Loading trained weights")
         checkpoint = torch.load(codec_path, map_location="cpu", weights_only=True)
+        if self.strict_stage_loading:
+            checkpoint_stage = checkpoint.get("stage")
+            allowed_stages = {
+                "variable_quality_codec",
+                "multirate_reconstruction",
+            }
+            if checkpoint_stage not in allowed_stages:
+                raise ValueError(
+                    "strict_stage_loading requires a variable-rate checkpoint; "
+                    f"got stage={checkpoint_stage!r} from {codec_path!r}"
+                )
         state_key = "ema" if use_ema else "model"
         if state_key not in checkpoint:
             raise KeyError(f"Checkpoint does not contain {state_key!r}: {codec_path}")
@@ -280,6 +308,8 @@ class Codec(nn.Module):
         super().train(mode)
         if self.freeze_codec:
             self.codec.eval()
+        if self.freeze_vae:
+            self.vae.eval()
         return self
 
     def assert_frozen_codec_contract(self):
@@ -296,6 +326,29 @@ class Codec(nn.Module):
             )
         if self.codec.training:
             raise RuntimeError("freeze_codec=True requires codec.eval()")
+
+    def assert_reconstruction_training_contract(self):
+        if not self.freeze_codec:
+            return
+        self.assert_frozen_codec_contract()
+        trainable_vae = [
+            name for name, parameter in self.vae.named_parameters()
+            if parameter.requires_grad
+        ]
+        if trainable_vae:
+            raise RuntimeError(
+                "multi-rate Plain training requires a frozen VAE; trainable: "
+                + ", ".join(trainable_vae[:5])
+            )
+        if not self.train_text_projection:
+            trainable_text = [
+                name for name, parameter in self.text_proj.named_parameters()
+                if parameter.requires_grad
+            ]
+            if trainable_text:
+                raise RuntimeError(
+                    "train_text_projection=False but text projection remains trainable"
+                )
 
     def build_DiT(self, dit_path, device="cuda", use_merge=False):
         base_scheduler = make_1step_sched(dit_path, device)
@@ -384,7 +437,11 @@ class Codec(nn.Module):
             for name, parameter in self.DiT.named_parameters()
             if "lora" in name and parameter.requires_grad
         )
-        parameters.extend(self.text_proj.parameters())
+        parameters.extend(
+            parameter
+            for parameter in self.text_proj.parameters()
+            if parameter.requires_grad
+        )
         return parameters
 
     def get_state_dicts_for_save(self):
@@ -451,17 +508,28 @@ class Codec(nn.Module):
             return_dict=False,
         )[0].clamp(-1, 1)
 
-    def forward(self, image):
+    def encode_clean_latent(self, image):
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
-        codec_output = self.codec(latent)
+        return latent
+
+    def decode_with_model(self, latent):
+        return self._decode_with_sana(latent)
+
+    def forward(self, image, quality_index=None):
+        latent = self.encode_clean_latent(image)
+        codec_output = self.codec(latent, quality_index)
         compressed_latent = codec_output["mean"]
-        output_image = self._decode_with_sana(compressed_latent)
+        output_image = self.decode_with_model(compressed_latent)
         return output_image, codec_output["likelihoods"]
 
-    def compress(self, image):
-        latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
-        return self.codec.compress(latent)
+    def compress(self, image, quality_index=None):
+        latent = self.encode_clean_latent(image)
+        return self.codec.compress(latent, quality_index)
 
-    def decompress(self, strings, shape):
-        latent = self.codec.decompress(strings, shape)
-        return self._decode_with_sana(latent)
+    def decompress(self, packet_or_strings, shape=None, quality_index=None):
+        latent = self.codec.decompress(
+            packet_or_strings,
+            shape=shape,
+            quality_index=quality_index,
+        )
+        return self.decode_with_model(latent)

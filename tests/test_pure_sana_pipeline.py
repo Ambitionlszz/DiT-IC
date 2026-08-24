@@ -56,11 +56,11 @@ class PureSanaStructureTest(unittest.TestCase):
         }
         self.assertEqual(
             [argument.arg for argument in methods["forward"].args.args],
-            ["self", "latent"],
+            ["self", "latent", "quality_index"],
         )
         self.assertEqual(
             [argument.arg for argument in methods["compress"].args.args],
-            ["self", "latent"],
+            ["self", "latent", "quality_index"],
         )
 
         codec_source = source_path.read_text(encoding="utf-8")

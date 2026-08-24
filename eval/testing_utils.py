@@ -8,6 +8,13 @@ def parse_args_testing(input_args=None):
     parser.add_argument("--codec_path", type=str, default=None)
     parser.add_argument("--gpu", type=int, default=0,
                        help="GPU device id to use. Default: 0")
+    parser.add_argument(
+        "--quality_index",
+        type=int,
+        default=None,
+        choices=range(6),
+        help="Variable-rate quality index (q0 lowest BPP, q5 highest BPP).",
+    )
     # testing images
     parser.add_argument("--img_path", type=str, default='/data/Kodak/')
 

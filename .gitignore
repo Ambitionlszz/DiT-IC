@@ -25,6 +25,9 @@ configs/*
 !configs/train_resume_withaux_lrd1p5.yaml
 !configs/train_resume_withaux_lrd4p0.yaml
 !configs/train_withaux_100k.yaml
+!configs/variable_rate_lic_pilot.yaml
+!configs/variable_rate_lic_main.yaml
+!configs/multirate_plain_dit.yaml
 SANA/transformer/*.safetensors
 SANA/transformer/*.bin
 SANA/vae/*.safetensors

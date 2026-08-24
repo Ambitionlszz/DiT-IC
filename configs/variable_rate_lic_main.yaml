@@ -1,0 +1,65 @@
+data:
+  data_path:
+    - /data2/luosheng/data/Datasets/DIV2K_train_HR_clean
+    - /data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png
+    - /data2/luosheng/data/Datasets/LSDIR
+    - /data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png
+  valid_path:
+    - /data2/luosheng/data/Datasets/Kodak
+  im_exts: [JPEG, png, jpg, jpeg, PNG]
+  num_workers: 8
+  path_size: [256, 256]
+
+model:
+  dit_path: SANA
+  source_checkpoint: /path/to/M0_baseline_checkpoint.pt
+  source_use_ema: true
+  vae_params:
+    vae_lora: true
+    train_vae_lora: false
+    lora_rank_vae: 64
+    lora_alpha_vae: 64
+  codec_param:
+    ch_emd: 32
+    channel: 320
+    channel_out: 32
+    num_slices: 5
+    max_support_slices: 5
+    kernel_size: 3
+    drop_path_rate: 0.1
+    depths: [2, 2, 2, 2, 2]
+    num_heads: [16, 16, 16, 16, 16]
+    upsample_mode: pixelshuffle
+    variable_rate: true
+    num_quality_levels: 6
+
+quality_control:
+  num_levels: 6
+  semantic_order: low_to_high_bpp
+  lambda_min: 0.625
+  lambda_max: 10.0
+  # Set true only after the pilot's real-rANS curves fix both endpoints.
+  calibration_confirmed: false
+
+lic_train:
+  latent_mse_weight: 1.0
+  image_mse_weight: 1.0
+
+train:
+  output_dir: checkpoints
+  exp_name: variable_rate_lic_v1_main
+  global_batch_size: 8
+  accumulation_steps: 1
+  max_steps: 100000
+  global_seed: 903
+  log_every: 100
+  eval_every: 2000
+  ckpt_every: 10000
+  resume: false
+
+optimizer:
+  lr: 0.0001
+  aux_lr: 0.001
+  beta2: 0.999
+  step_lr: [60000, 85000, 95000]
+  max_grad_norm: 4.0

@@ -95,6 +95,41 @@ def normalize_pure_sana_config(config):
         params["freeze_codec"] = bool(train["freeze_codec"])
     train.setdefault("resume", False)
 
+    quality_control = config.get("quality_control") or {}
+    if quality_control.get("enabled", False):
+        num_levels = int(quality_control.get("num_levels", 0))
+        if num_levels != 6:
+            raise ValueError(
+                "Variable-rate Pure SANA requires quality_control.num_levels=6"
+            )
+        codec_param = params.setdefault("codec_param", {})
+        configured_variable_rate = codec_param.get("variable_rate")
+        if configured_variable_rate is False:
+            raise ValueError(
+                "quality_control.enabled conflicts with codec_param.variable_rate=False"
+            )
+        codec_param["variable_rate"] = True
+        codec_param["num_quality_levels"] = num_levels
+
+        if params.get("freeze_codec", False):
+            vae_params = params.get("vae_params") or {}
+            train_vae_lora = vae_params.get(
+                "train_vae_lora", vae_params.get("vae_lora", False)
+            )
+            if train_vae_lora:
+                raise ValueError(
+                    "multi-rate Plain training requires "
+                    "vae_params.train_vae_lora=False"
+                )
+            if params.get("train_text_projection", True):
+                raise ValueError(
+                    "multi-rate Plain training requires train_text_projection=False"
+                )
+            if float(rate_weight) != 0.0:
+                raise ValueError(
+                    "multi-rate Plain checkpoint ranking requires train.rate_weight=0"
+                )
+
     params["decode_mode"] = validate_decode_mode(
         params.get("decode_mode", "sana")
     )
