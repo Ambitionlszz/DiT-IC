@@ -36,12 +36,12 @@ decoded latents are identical for q0..q5.
 
 One `lic-pilot` or `lic-main` launch runs both phases without a manual restart:
 
-1. Phase A optimizes `R + lambda_lat(q) * latent_mse` and does not run the
+1. Phase A optimizes `latent_mse + lambda_lat(q) * R` and does not run the
    frozen VAE decoder.
 2. At the configured boundary the trainer writes `phase_a_complete.pt` and
    automatically enters Phase B.
 3. Phase B drops latent MSE and optimizes
-   `R + lambda_img(q) * (pixel_l1 + lpips + dists)` through the frozen VAE
+   `(pixel_l1 + lpips + dists) + lambda_img(q) * R` through the frozen VAE
    decoder. Only the LIC is updated in both phases; there is no GAN loss.
 
 LPIPS receives images in `[-1, 1]`. DISTS receives the same images converted
@@ -55,10 +55,12 @@ resuming an existing checkpoint.
 
 ## 2. V1 pilot
 
-Both phases use the explicit quality table
-`[0.5, 1.0, 2.0, 4.0, 8.0, 16.0]`, mapped directly from q0 through q5.
+Both phases use the explicit rate-weight table
+`[16.0, 8.0, 4.0, 2.0, 1.0, 0.5]`, mapped directly from q0 through q5.
 The two phases keep separate copies of the table because their distortion
-scales differ.
+scales differ. This follows the baseline convention `D + lambda * R`: smaller
+lambda means weaker rate pressure, higher BPP, and higher quality. Therefore q0
+is the lowest-quality point and q5 is the highest-quality point.
 
 ```bash
 # Choose either one GPU...

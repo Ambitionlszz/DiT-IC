@@ -135,7 +135,7 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertIn("dists_weight: 1.0", config)
             self.assertEqual(
                 config.count(
-                    "lambda_values: [0.5, 1.0, 2.0, 4.0, 8.0, 16.0]"
+                    "lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]"
                 ),
                 2,
             )
@@ -150,6 +150,8 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         self.assertIn('phase_config["lambda_values"]', training_source)
         self.assertNotIn("log_interpolated_lambda", training_source)
+        self.assertIn("loss = distortion + current_lambda * rate", training_source)
+        self.assertNotIn("loss = rate + current_lambda * distortion", training_source)
 
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"
@@ -178,7 +180,9 @@ class VariableRateStructureTest(unittest.TestCase):
         train_source = ast.get_source_segment(source, train_function)
         phase_a_branch = train_source.index("if current_phase == PHASE_A:")
         phase_b_l1 = train_source.index("pixel_l1 = F.l1_loss", phase_a_branch)
-        next_loss = train_source.index("loss = rate + current_lambda", phase_b_l1)
+        next_loss = train_source.index(
+            "loss = distortion + current_lambda", phase_b_l1
+        )
         phase_b_source = train_source[phase_b_l1:next_loss]
         self.assertIn('phase_config["pixel_l1_weight"]', phase_b_source)
         self.assertIn('phase_config["lpips_weight"]', phase_b_source)

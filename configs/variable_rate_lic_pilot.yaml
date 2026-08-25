@@ -41,11 +41,11 @@ quality_control:
 lic_train:
   phase_a:
     steps: 2500
-    lambda_values: [0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
     latent_mse_weight: 1.0
   phase_b:
     steps: 2500
-    lambda_values: [0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
     pixel_l1_weight: 1.0
     lpips_weight: 1.0
     dists_weight: 1.0

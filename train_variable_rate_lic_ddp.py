@@ -78,11 +78,11 @@ def load_config(path):
                 f"lic_train.{phase_name}.lambda_values must contain 6 values"
             )
         if any(value <= 0 for value in lambda_values) or any(
-            left >= right for left, right in zip(lambda_values, lambda_values[1:])
+            left <= right for left, right in zip(lambda_values, lambda_values[1:])
         ):
             raise ValueError(
                 f"lic_train.{phase_name}.lambda_values must be positive and "
-                "strictly increasing"
+                "strictly decreasing from low-quality q0 to high-quality q5"
             )
     if float(phase_a.get("latent_mse_weight", 0.0)) <= 0:
         raise ValueError("lic_train.phase_a.latent_mse_weight must be positive")
@@ -370,7 +370,7 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
             current_lambda = quality_lambda(
                 quality_tensor, phase_config["lambda_values"]
             )
-            loss = rate + current_lambda * distortion
+            loss = distortion + current_lambda * rate
             totals[quality_index] += torch.tensor(
                 [
                     float(batch_size),
@@ -693,7 +693,7 @@ def train(rank, local_rank, world_size, config):
             current_lambda = quality_lambda(
                 quality_index, phase_config["lambda_values"]
             )
-            loss = rate + current_lambda * distortion
+            loss = distortion + current_lambda * rate
             (loss / accumulation_steps).backward()
             accum_count += 1
             running += torch.stack(
