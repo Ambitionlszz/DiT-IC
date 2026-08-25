@@ -36,13 +36,21 @@ model:
 quality_control:
   num_levels: 6
   semantic_order: low_to_high_bpp
-  lambda_min: 0.625
-  lambda_max: 10.0
   calibration_confirmed: false
 
 lic_train:
-  latent_mse_weight: 1.0
-  image_mse_weight: 1.0
+  phase_a:
+    steps: 2500
+    lambda_min: 0.625
+    lambda_max: 10.0
+    latent_mse_weight: 1.0
+  phase_b:
+    steps: 2500
+    lambda_min: 0.625
+    lambda_max: 10.0
+    pixel_l1_weight: 1.0
+    lpips_weight: 1.0
+    dists_weight: 1.0
 
 train:
   output_dir: checkpoints

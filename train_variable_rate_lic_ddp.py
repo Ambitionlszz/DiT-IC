@@ -16,7 +16,9 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from diffusers import AutoencoderDC
+import lpips
 from peft import LoraConfig, get_peft_model
+import pyiqa
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -36,8 +38,10 @@ from train_nogan_ddp import (
 )
 
 
-CHECKPOINT_SCHEMA_VERSION = 2
+CHECKPOINT_SCHEMA_VERSION = 3
 STAGE_NAME = "variable_quality_codec"
+PHASE_A = "latent_rd"
+PHASE_B = "pixel_perceptual_rd"
 
 
 def filter_supported_vae_modules(model):
@@ -59,10 +63,31 @@ def load_config(path):
     quality = config.get("quality_control") or {}
     if int(quality.get("num_levels", 0)) != 6:
         raise ValueError("Stage 1 requires exactly 6 quality levels")
-    lambda_min = float(quality.get("lambda_min", 0.0))
-    lambda_max = float(quality.get("lambda_max", 0.0))
-    if not 0 < lambda_min < lambda_max:
-        raise ValueError("quality_control requires 0 < lambda_min < lambda_max")
+    lic_config = config.get("lic_train") or {}
+    phase_a = lic_config.get("phase_a") or {}
+    phase_b = lic_config.get("phase_b") or {}
+    for phase_name, phase_config in (("phase_a", phase_a), ("phase_b", phase_b)):
+        steps = int(phase_config.get("steps", 0))
+        lambda_min = float(phase_config.get("lambda_min", 0.0))
+        lambda_max = float(phase_config.get("lambda_max", 0.0))
+        if steps < 1:
+            raise ValueError(f"lic_train.{phase_name}.steps must be positive")
+        if not 0 < lambda_min < lambda_max:
+            raise ValueError(
+                f"lic_train.{phase_name} requires 0 < lambda_min < lambda_max"
+            )
+    if float(phase_a.get("latent_mse_weight", 0.0)) <= 0:
+        raise ValueError("lic_train.phase_a.latent_mse_weight must be positive")
+    for weight_name in ("pixel_l1_weight", "lpips_weight", "dists_weight"):
+        if float(phase_b.get(weight_name, 0.0)) <= 0:
+            raise ValueError(
+                f"lic_train.phase_b.{weight_name} must be positive"
+            )
+    total_steps = int(phase_a["steps"]) + int(phase_b["steps"])
+    if int(config["train"]["max_steps"]) != total_steps:
+        raise ValueError(
+            "train.max_steps must equal phase_a.steps + phase_b.steps"
+        )
     if (
         int(config["train"]["max_steps"]) > 5000
         and not quality.get("calibration_confirmed", False)
@@ -74,6 +99,16 @@ def load_config(path):
     if not source_checkpoint or source_checkpoint.startswith("/path/to/"):
         raise ValueError("model.source_checkpoint must point to the M0 checkpoint")
     return config
+
+
+def training_phase(global_step, phase_a_steps):
+    return PHASE_A if global_step < phase_a_steps else PHASE_B
+
+
+def phase_step(global_step, phase_a_steps):
+    if global_step < phase_a_steps:
+        return global_step
+    return global_step - phase_a_steps
 
 
 def file_sha256(path):
@@ -213,17 +248,42 @@ class VariableRateLICStage(nn.Module):
         with torch.no_grad():
             return self.vae.encode(image).latent * self.vae.config.scaling_factor
 
-    def forward(self, image, quality_index):
+    def forward(self, image, quality_index, decode_image=False):
         clean_latent = self.encode_clean_latent(image)
         codec_output = self.codec(clean_latent, quality_index)
         reconstructed_latent = codec_output["mean"]
-        reconstruction = self.vae.decode(
-            reconstructed_latent / self.vae.config.scaling_factor,
-            return_dict=False,
-        )[0].clamp(-1, 1)
-        return clean_latent, reconstructed_latent, reconstruction, codec_output[
-            "likelihoods"
-        ]
+        reconstruction = None
+        if decode_image:
+            reconstruction = self.vae.decode(
+                reconstructed_latent / self.vae.config.scaling_factor,
+                return_dict=False,
+            )[0].clamp(-1, 1)
+        return {
+            "clean_latent": clean_latent,
+            "reconstructed_latent": reconstructed_latent,
+            "reconstruction": reconstruction,
+            "likelihoods": codec_output["likelihoods"],
+        }
+
+
+class PhaseBPerceptualLosses(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.lpips = lpips.LPIPS(net="alex")
+        self.dists = pyiqa.create_metric("dists", as_loss=True)
+        self.requires_grad_(False)
+        self.eval()
+
+    def train(self, mode=True):
+        super().train(False)
+        return self
+
+    def forward(self, reference, reconstruction):
+        lpips_loss = self.lpips(reference, reconstruction).mean()
+        reference_01 = ((reference + 1.0) * 0.5).clamp(0, 1)
+        reconstruction_01 = ((reconstruction + 1.0) * 0.5).clamp(0, 1)
+        dists_loss = self.dists(reference_01, reconstruction_01).mean()
+        return lpips_loss, dists_loss
 
 
 def create_logger(output_dir, rank):
@@ -260,31 +320,47 @@ def update_codec_ema(ema_state, codec, decay=0.999):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, config):
+def evaluate(model, loader, device, config, phase, perceptual_losses=None):
     model.eval()
-    quality_config = config["quality_control"]
-    lic_config = config["lic_train"]
-    totals = torch.zeros(6, 5, device=device, dtype=torch.float64)
+    phase_key = "phase_a" if phase == PHASE_A else "phase_b"
+    phase_config = config["lic_train"][phase_key]
+    if phase == PHASE_B and perceptual_losses is None:
+        raise ValueError("Phase B evaluation requires perceptual losses")
+    totals = torch.zeros(6, 7, device=device, dtype=torch.float64)
     for quality_index in range(6):
         for image in loader:
             image = image.to(device)
-            clean, reconstructed, output, likelihoods = model(
-                image, quality_index
+            outputs = model(
+                image, quality_index, decode_image=phase == PHASE_B
             )
             batch_size = image.shape[0]
             num_pixels = image.shape[0] * image.shape[2] * image.shape[3]
-            rate = likelihood_bpp(likelihoods, num_pixels)
-            latent_mse = F.mse_loss(clean, reconstructed)
-            image_mse = F.mse_loss(image, output)
-            distortion = (
-                float(lic_config["latent_mse_weight"]) * latent_mse
-                + float(lic_config["image_mse_weight"]) * image_mse
+            rate = likelihood_bpp(outputs["likelihoods"], num_pixels)
+            latent_mse = F.mse_loss(
+                outputs["clean_latent"], outputs["reconstructed_latent"]
             )
+            pixel_l1 = torch.zeros((), device=device)
+            lpips_loss = torch.zeros((), device=device)
+            dists_loss = torch.zeros((), device=device)
+            if phase == PHASE_A:
+                distortion = (
+                    float(phase_config["latent_mse_weight"]) * latent_mse
+                )
+            else:
+                pixel_l1 = F.l1_loss(image, outputs["reconstruction"])
+                lpips_loss, dists_loss = perceptual_losses(
+                    image, outputs["reconstruction"]
+                )
+                distortion = (
+                    float(phase_config["pixel_l1_weight"]) * pixel_l1
+                    + float(phase_config["lpips_weight"]) * lpips_loss
+                    + float(phase_config["dists_weight"]) * dists_loss
+                )
             quality_tensor = torch.tensor(quality_index, device=device)
             current_lambda = log_interpolated_lambda(
                 quality_tensor,
-                float(quality_config["lambda_min"]),
-                float(quality_config["lambda_max"]),
+                float(phase_config["lambda_min"]),
+                float(phase_config["lambda_max"]),
             )
             loss = rate + current_lambda * distortion
             totals[quality_index] += torch.tensor(
@@ -293,12 +369,14 @@ def evaluate(model, loader, device, config):
                     float(loss),
                     float(rate),
                     float(latent_mse),
-                    float(image_mse),
+                    float(pixel_l1),
+                    float(lpips_loss),
+                    float(dists_loss),
                 ],
                 device=device,
                 dtype=torch.float64,
             ) * torch.tensor(
-                [1.0, batch_size, batch_size, batch_size, batch_size],
+                [1.0] + [batch_size] * 6,
                 device=device,
                 dtype=torch.float64,
             )
@@ -312,7 +390,9 @@ def evaluate(model, loader, device, config):
             "loss": totals[quality_index, 1].item() / count,
             "likelihood_bpp": totals[quality_index, 2].item() / count,
             "latent_mse": totals[quality_index, 3].item() / count,
-            "image_mse": totals[quality_index, 4].item() / count,
+            "pixel_l1": totals[quality_index, 4].item() / count,
+            "lpips": totals[quality_index, 5].item() / count,
+            "dists": totals[quality_index, 6].item() / count,
         }
     score = sum(value["loss"] for value in metrics.values()) / 6
     return score, metrics
@@ -370,8 +450,22 @@ def train(rank, local_rank, world_size, config):
         gamma=0.5,
     )
 
-    model = DDP(stage_model, device_ids=[local_rank], static_graph=True)
+    model = DDP(stage_model, device_ids=[local_rank])
     model.train()
+
+    phase_a_steps = int(config["lic_train"]["phase_a"]["steps"])
+    phase_b_steps = int(config["lic_train"]["phase_b"]["steps"])
+    max_steps = phase_a_steps + phase_b_steps
+    perceptual_losses = PhaseBPerceptualLosses()
+    perceptual_losses_on_device = False
+
+    def get_perceptual_losses():
+        nonlocal perceptual_losses_on_device
+        if not perceptual_losses_on_device:
+            perceptual_losses.to(device)
+            perceptual_losses.eval()
+            perceptual_losses_on_device = True
+        return perceptual_losses
 
     train_transform = transforms.Compose(
         [
@@ -441,10 +535,10 @@ def train(rank, local_rank, world_size, config):
 
     quality_generator = torch.Generator(device="cpu")
     quality_generator.manual_seed(int(train_config["global_seed"]) + 1701)
-    quality_counts = torch.zeros(6, dtype=torch.long)
+    phase_quality_counts = torch.zeros(2, 6, dtype=torch.long)
     ema_codec = deepcopy(stage_model.codec.state_dict())
     train_steps = 0
-    best_score = float("inf")
+    best_scores = {PHASE_A: float("inf"), PHASE_B: float("inf")}
 
     if train_config.get("resume", False):
         resume_path = train_config.get("resume_checkpoint")
@@ -453,6 +547,17 @@ def train(rank, local_rank, world_size, config):
         resume = torch.load(resume_path, map_location="cpu", weights_only=True)
         if resume.get("stage") != STAGE_NAME:
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
+        if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
+            raise ValueError(
+                "two-phase LIC training requires a schema-version 3 checkpoint"
+            )
+        if (
+            int(resume.get("phase_a_steps", -1)) != phase_a_steps
+            or int(resume.get("phase_b_steps", -1)) != phase_b_steps
+        ):
+            raise ValueError(
+                "resume checkpoint phase boundaries do not match the config"
+            )
         model.module.codec.load_state_dict(
             resume["model"]["state_dict_codec"], strict=True
         )
@@ -460,13 +565,21 @@ def train(rank, local_rank, world_size, config):
         entropy_optimizer.load_state_dict(resume["entropy_optimizer"])
         scheduler.load_state_dict(resume["scheduler"])
         quality_generator.set_state(resume["quality_generator_state"])
-        quality_counts.copy_(resume["quality_counts"])
+        phase_quality_counts.copy_(resume["phase_quality_counts"])
         ema_codec = {
             name: value.to(device)
             for name, value in resume["ema"]["state_dict_codec"].items()
         }
         train_steps = int(resume["global_step"])
-        best_score = float(resume.get("best_score", best_score))
+        expected_phase = training_phase(train_steps, phase_a_steps)
+        if resume.get("training_phase") != expected_phase:
+            raise ValueError(
+                "resume checkpoint training_phase does not match global_step"
+            )
+        best_scores = {
+            PHASE_A: float(resume["best_scores"][PHASE_A]),
+            PHASE_B: float(resume["best_scores"][PHASE_B]),
+        }
 
     source_sha256 = file_sha256(source_path) if rank == 0 else None
 
@@ -485,8 +598,13 @@ def train(rank, local_rank, world_size, config):
             "entropy_optimizer": entropy_optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
             "global_step": train_steps,
-            "best_score": best_score,
-            "quality_counts": quality_counts.clone(),
+            "training_phase": training_phase(train_steps, phase_a_steps),
+            "phase_step": phase_step(train_steps, phase_a_steps),
+            "phase_a_steps": phase_a_steps,
+            "phase_b_steps": phase_b_steps,
+            "best_scores": dict(best_scores),
+            "phase_quality_counts": phase_quality_counts.clone(),
+            "quality_counts": phase_quality_counts.sum(dim=0),
             "quality_generator_state": quality_generator.get_state(),
             "resolved_config": config,
             "git_commit": current_git_commit(),
@@ -507,15 +625,25 @@ def train(rank, local_rank, world_size, config):
     entropy_optimizer.zero_grad(set_to_none=True)
     accum_count = 0
     quality_index = None
-    running = torch.zeros(5, device=device, dtype=torch.float64)
+    running = torch.zeros(7, device=device, dtype=torch.float64)
     log_micro_steps = 0
     started = time()
+    if rank == 0:
+        logger.info(
+            "starting phase=%s global_step=%d phase_step=%d phase_a_steps=%d "
+            "phase_b_steps=%d",
+            training_phase(train_steps, phase_a_steps),
+            train_steps,
+            phase_step(train_steps, phase_a_steps),
+            phase_a_steps,
+            phase_b_steps,
+        )
 
-    while train_steps < int(train_config["max_steps"]):
+    while train_steps < max_steps:
         epoch = (train_steps * accumulation_steps) // max(1, len(train_loader))
         train_sampler.set_epoch(epoch)
         for image in train_loader:
-            if train_steps >= int(train_config["max_steps"]):
+            if train_steps >= max_steps:
                 break
             image = image.to(device)
             if accum_count == 0:
@@ -523,21 +651,41 @@ def train(rank, local_rank, world_size, config):
                     6, device, generator=quality_generator
                 )
 
-            clean, reconstructed, output, likelihoods = model(
-                image, quality_index
+            current_phase = training_phase(train_steps, phase_a_steps)
+            phase_index = 0 if current_phase == PHASE_A else 1
+            phase_key = "phase_a" if current_phase == PHASE_A else "phase_b"
+            phase_config = config["lic_train"][phase_key]
+            outputs = model(
+                image,
+                quality_index,
+                decode_image=current_phase == PHASE_B,
             )
             num_pixels = image.shape[0] * image.shape[2] * image.shape[3]
-            rate = likelihood_bpp(likelihoods, num_pixels)
-            latent_mse = F.mse_loss(clean, reconstructed)
-            image_mse = F.mse_loss(image, output)
-            distortion = (
-                float(config["lic_train"]["latent_mse_weight"]) * latent_mse
-                + float(config["lic_train"]["image_mse_weight"]) * image_mse
+            rate = likelihood_bpp(outputs["likelihoods"], num_pixels)
+            latent_mse = F.mse_loss(
+                outputs["clean_latent"], outputs["reconstructed_latent"]
             )
+            pixel_l1 = torch.zeros((), device=device)
+            lpips_loss = torch.zeros((), device=device)
+            dists_loss = torch.zeros((), device=device)
+            if current_phase == PHASE_A:
+                distortion = (
+                    float(phase_config["latent_mse_weight"]) * latent_mse
+                )
+            else:
+                pixel_l1 = F.l1_loss(image, outputs["reconstruction"])
+                lpips_loss, dists_loss = get_perceptual_losses()(
+                    image, outputs["reconstruction"]
+                )
+                distortion = (
+                    float(phase_config["pixel_l1_weight"]) * pixel_l1
+                    + float(phase_config["lpips_weight"]) * lpips_loss
+                    + float(phase_config["dists_weight"]) * dists_loss
+                )
             current_lambda = log_interpolated_lambda(
                 quality_index,
-                float(config["quality_control"]["lambda_min"]),
-                float(config["quality_control"]["lambda_max"]),
+                float(phase_config["lambda_min"]),
+                float(phase_config["lambda_max"]),
             )
             loss = rate + current_lambda * distortion
             (loss / accumulation_steps).backward()
@@ -547,7 +695,9 @@ def train(rank, local_rank, world_size, config):
                     loss.detach().double(),
                     rate.detach().double(),
                     latent_mse.detach().double(),
-                    image_mse.detach().double(),
+                    pixel_l1.detach().double(),
+                    lpips_loss.detach().double(),
+                    dists_loss.detach().double(),
                     current_lambda.detach().double(),
                 ]
             )
@@ -570,7 +720,7 @@ def train(rank, local_rank, world_size, config):
             optimizer.zero_grad(set_to_none=True)
             update_codec_ema(ema_codec, model.module.codec)
 
-            quality_counts[int(quality_index.item())] += 1
+            phase_quality_counts[phase_index, int(quality_index.item())] += 1
             quality_index = None
             accum_count = 0
             train_steps += 1
@@ -580,30 +730,77 @@ def train(rank, local_rank, world_size, config):
                 averages = running / (log_micro_steps * world_size)
                 if rank == 0:
                     elapsed = max(time() - started, 1e-6)
+                    completed_phase_steps = (
+                        train_steps
+                        if current_phase == PHASE_A
+                        else train_steps - phase_a_steps
+                    )
                     logger.info(
-                        "step=%d loss=%.6f rate=%.6f latent_mse=%.6f "
-                        "image_mse=%.6f lambda=%.6f steps/s=%.3f q_counts=%s",
+                        "phase=%s step=%d phase_step=%d loss=%.6f rate=%.6f "
+                        "latent_mse=%.6f pixel_l1=%.6f lpips=%.6f "
+                        "dists=%.6f lambda=%.6f steps/s=%.3f q_counts=%s",
+                        current_phase,
                         train_steps,
+                        completed_phase_steps,
                         *averages.tolist(),
                         int(train_config["log_every"]) / elapsed,
-                        quality_counts.tolist(),
+                        phase_quality_counts[phase_index].tolist(),
                     )
                     writer.add_scalar("Train/loss", averages[0], train_steps)
                     writer.add_scalar("Train/rate", averages[1], train_steps)
                     writer.add_scalar("Train/latent_mse", averages[2], train_steps)
-                    writer.add_scalar("Train/image_mse", averages[3], train_steps)
+                    writer.add_scalar("Train/pixel_l1", averages[3], train_steps)
+                    writer.add_scalar("Train/lpips", averages[4], train_steps)
+                    writer.add_scalar("Train/dists", averages[5], train_steps)
                 running.zero_()
                 log_micro_steps = 0
                 started = time()
 
             if train_steps % int(train_config["eval_every"]) == 0:
-                score, metrics = evaluate(model, valid_loader, device, config)
+                evaluation_phase = current_phase
+                phase_losses = (
+                    get_perceptual_losses()
+                    if evaluation_phase == PHASE_B
+                    else None
+                )
+                score, metrics = evaluate(
+                    model,
+                    valid_loader,
+                    device,
+                    config,
+                    evaluation_phase,
+                    phase_losses,
+                )
                 if rank == 0:
-                    logger.info("validation=%s", json.dumps(metrics))
-                    is_best = score < best_score
-                    best_score = min(best_score, score)
+                    logger.info(
+                        "validation_phase=%s metrics=%s",
+                        evaluation_phase,
+                        json.dumps(metrics),
+                    )
+                    is_best = score < best_scores[evaluation_phase]
+                    best_scores[evaluation_phase] = min(
+                        best_scores[evaluation_phase], score
+                    )
                     if is_best:
-                        torch.save(make_checkpoint(), checkpoint_dir / "best_ckpt.pt")
+                        best_name = (
+                            "best_phase_a_ckpt.pt"
+                            if evaluation_phase == PHASE_A
+                            else "best_ckpt.pt"
+                        )
+                        torch.save(make_checkpoint(), checkpoint_dir / best_name)
+                dist.barrier()
+
+            if train_steps == phase_a_steps:
+                if rank == 0:
+                    torch.save(
+                        make_checkpoint(), checkpoint_dir / "phase_a_complete.pt"
+                    )
+                    logger.info(
+                        "phase A complete; automatically starting phase B"
+                    )
+                running.zero_()
+                log_micro_steps = 0
+                started = time()
                 dist.barrier()
 
             if train_steps % int(train_config["ckpt_every"]) == 0:
@@ -617,7 +814,7 @@ def train(rank, local_rank, world_size, config):
     if rank == 0:
         torch.save(make_checkpoint(), checkpoint_dir / "last_ckpt.pt")
         writer.close()
-        logger.info("Stage 1 complete")
+        logger.info("two-phase variable-rate LIC training complete")
 
 
 def main():

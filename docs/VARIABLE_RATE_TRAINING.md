@@ -32,11 +32,32 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/verify_variable_rate_v0.py \
 Do not start training unless forward tensors, likelihoods, rANS payloads, and
 decoded latents are identical for q0..q5.
 
-## 1. V1 pilot
+## 1. Automatic two-phase LIC training
 
-The pilot uses the provisional lambda endpoints `0.625` and `10.0`, derived
-from the old `D + 0.4 R` scale only as a starting point. They are not calibrated
-constants.
+One `lic-pilot` or `lic-main` launch runs both phases without a manual restart:
+
+1. Phase A optimizes `R + lambda_lat(q) * latent_mse` and does not run the
+   frozen VAE decoder.
+2. At the configured boundary the trainer writes `phase_a_complete.pt` and
+   automatically enters Phase B.
+3. Phase B drops latent MSE and optimizes
+   `R + lambda_img(q) * (pixel_l1 + lpips + dists)` through the frozen VAE
+   decoder. Only the LIC is updated in both phases; there is no GAN loss.
+
+LPIPS receives images in `[-1, 1]`. DISTS receives the same images converted
+to `[0, 1]`. The loss weights and the two phases' lambda endpoints are explicit
+under `lic_train.phase_a` and `lic_train.phase_b`.
+
+The pilot is 2.5k Phase A steps followed by 2.5k Phase B steps. The main run is
+50k + 50k. A checkpoint records the current phase and both boundaries, so
+resuming continues in the correct phase. Do not change the phase lengths when
+resuming an existing checkpoint.
+
+## 2. V1 pilot
+
+Both phases initially use the provisional lambda endpoints `0.625` and `10.0`.
+They are starting points, not calibrated constants, and Phase A and Phase B
+must be calibrated independently because their distortion scales differ.
 
 ```bash
 # Choose either one GPU...
@@ -56,13 +77,13 @@ bash scripts/run_variable_rate_eval.sh \
   configs/multirate_plain_dit.yaml
 ```
 
-Inspect real BPP ordering and per-q quality. Adjust `lambda_min/lambda_max` at
-most once in `configs/variable_rate_lic_main.yaml`, then explicitly set
-`calibration_confirmed: true`. The main run is guarded against launching before
-that confirmation and must still use the original M0 checkpoint, not a
-cherry-picked pilot checkpoint.
+Inspect real BPP ordering and per-q quality. Adjust the Phase A and Phase B
+`lambda_min`/`lambda_max` values in `configs/variable_rate_lic_main.yaml`, then
+explicitly set `calibration_confirmed: true`. The main run is guarded against
+launching before that confirmation and must still use the original M0
+checkpoint, not a cherry-picked pilot checkpoint.
 
-## 2. V1 main
+## 3. V1 main
 
 ```bash
 bash scripts/run_variable_rate_train.sh lic-main 0
@@ -73,7 +94,7 @@ Run the six-rate evaluation again. Gate A requires every q to round-trip and
 mean real BPP to satisfy `q0 < q1 < ... < q5`. Likelihood BPP is diagnostic
 only.
 
-## 3. P0 Multi-rate Plain DiT
+## 4. P0 Multi-rate Plain DiT
 
 Set `model.params.codec_path` in `configs/multirate_plain_dit.yaml` to the
 accepted V1 checkpoint. The config loads the M0 VAE decoder LoRA weights but
@@ -93,7 +114,7 @@ bash scripts/run_variable_rate_train.sh plain 0 \
   --resume_checkpoint /path/to/P0/checkpoint.pt
 ```
 
-## 4. Frozen-bitstream Gate B
+## 5. Frozen-bitstream Gate B
 
 Run `scripts/run_variable_rate_eval.sh` once with V1 and once with P0 on the
 same images. Then compare the corresponding binary trees:

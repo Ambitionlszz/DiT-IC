@@ -119,6 +119,71 @@ class VariableRateStructureTest(unittest.TestCase):
             'torch.cuda.device_count() > 1 else "gloo"', training_source
         )
 
+    def test_lic_configs_define_automatic_two_phase_schedule(self):
+        pilot = (ROOT / "configs" / "variable_rate_lic_pilot.yaml").read_text(
+            encoding="utf-8"
+        )
+        main = (ROOT / "configs" / "variable_rate_lic_main.yaml").read_text(
+            encoding="utf-8"
+        )
+        for config in (pilot, main):
+            self.assertIn("phase_a:", config)
+            self.assertIn("phase_b:", config)
+            self.assertIn("latent_mse_weight: 1.0", config)
+            self.assertIn("pixel_l1_weight: 1.0", config)
+            self.assertIn("lpips_weight: 1.0", config)
+            self.assertIn("dists_weight: 1.0", config)
+            self.assertNotIn("image_mse_weight", config)
+        self.assertEqual(pilot.count("steps: 2500"), 2)
+        self.assertEqual(main.count("steps: 50000"), 2)
+
+    def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
+        source_path = ROOT / "train_variable_rate_lic_ddp.py"
+        source = source_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        stage_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == "VariableRateLICStage"
+        )
+        forward = next(
+            node
+            for node in stage_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "forward"
+        )
+        forward_source = ast.get_source_segment(source, forward)
+        self.assertIn("if decode_image:", forward_source)
+        self.assertIn("self.vae.decode(", forward_source)
+
+        train_function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "train"
+        )
+        train_source = ast.get_source_segment(source, train_function)
+        phase_a_branch = train_source.index("if current_phase == PHASE_A:")
+        phase_b_l1 = train_source.index("pixel_l1 = F.l1_loss", phase_a_branch)
+        next_loss = train_source.index("loss = rate + current_lambda", phase_b_l1)
+        phase_b_source = train_source[phase_b_l1:next_loss]
+        self.assertIn('phase_config["pixel_l1_weight"]', phase_b_source)
+        self.assertIn('phase_config["lpips_weight"]', phase_b_source)
+        self.assertIn('phase_config["dists_weight"]', phase_b_source)
+        self.assertNotIn("latent_mse", phase_b_source)
+
+    def test_lic_checkpoint_records_phase_for_safe_resume(self):
+        source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"training_phase": training_phase(', source)
+        self.assertIn('"phase_step": phase_step(', source)
+        self.assertIn('"phase_a_steps": phase_a_steps', source)
+        self.assertIn('"phase_b_steps": phase_b_steps', source)
+        self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
+        self.assertIn(
+            '"phase A complete; automatically starting phase B"', source
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
