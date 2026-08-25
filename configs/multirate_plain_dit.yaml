@@ -64,7 +64,7 @@ quality_control:
 train:
   output_dir: checkpoints
   exp_name: multirate_plain_dit_p0
-  global_batch_size: 8
+  per_gpu_batch_size: 8
   accumulation_steps: 1
   accumulate_disc: false
   resume: false

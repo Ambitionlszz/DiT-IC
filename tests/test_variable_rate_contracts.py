@@ -92,6 +92,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("train_vae_lora: false", config.lower())
         self.assertIn("train_text_projection: false", config.lower())
         self.assertIn("variable_rate: true", config.lower())
+        self.assertIn("per_gpu_batch_size: 8", config.lower())
 
         contract = json.loads(
             (ROOT / "docs" / "baseline_contract.json").read_text(encoding="utf-8")

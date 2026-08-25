@@ -388,9 +388,18 @@ def train(rank, local_rank, world_size, config):
         config["data"]["im_exts"],
         transform=train_transform,
     )
-    if int(train_config["global_batch_size"]) % world_size:
-        raise ValueError("train.global_batch_size must be divisible by world size")
-    batch_size = int(train_config["global_batch_size"]) // world_size
+    configured_per_gpu_batch = train_config.get("per_gpu_batch_size")
+    if configured_per_gpu_batch is not None:
+        batch_size = int(configured_per_gpu_batch)
+        if batch_size < 1:
+            raise ValueError("train.per_gpu_batch_size must be positive")
+        train_config["global_batch_size"] = batch_size * world_size
+    else:
+        if int(train_config["global_batch_size"]) % world_size:
+            raise ValueError(
+                "train.global_batch_size must be divisible by world size"
+            )
+        batch_size = int(train_config["global_batch_size"]) // world_size
     train_sampler = DistributedSampler(
         train_dataset, num_replicas=world_size, rank=rank, shuffle=True
     )
@@ -636,10 +645,7 @@ def main():
     if args.per_gpu_batch_size is not None:
         if args.per_gpu_batch_size < 1:
             raise ValueError("--per_gpu_batch_size must be positive")
-        world_size = int(os.environ.get("WORLD_SIZE", "1"))
-        config["train"]["global_batch_size"] = (
-            args.per_gpu_batch_size * world_size
-        )
+        config["train"]["per_gpu_batch_size"] = args.per_gpu_batch_size
     if args.accumulation_steps is not None:
         if args.accumulation_steps < 1:
             raise ValueError("--accumulation_steps must be positive")

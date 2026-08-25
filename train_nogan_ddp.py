@@ -276,12 +276,20 @@ def do_train(rank, local_rank, world_size, train_config):
     dataset = ImageFolder(train_config['data']['data_path'], train_config['data']['im_exts'], transform=train_transforms)
     
     # batch_size_per_gpu = int(train_config['train']['global_batch_size'] / torch.cuda.device_count())
-    global_batch_size = train_config['train']['global_batch_size']
-    if global_batch_size % world_size != 0:
-        raise ValueError(
-            "train.global_batch_size must be divisible by the DDP world size"
-        )
-    batch_size_per_gpu = global_batch_size // world_size
+    per_gpu_batch_size = train_config['train'].get('per_gpu_batch_size')
+    if per_gpu_batch_size is not None:
+        batch_size_per_gpu = int(per_gpu_batch_size)
+        if batch_size_per_gpu < 1:
+            raise ValueError("train.per_gpu_batch_size must be positive")
+        global_batch_size = batch_size_per_gpu * world_size
+        train_config['train']['global_batch_size'] = global_batch_size
+    else:
+        global_batch_size = train_config['train']['global_batch_size']
+        if global_batch_size % world_size != 0:
+            raise ValueError(
+                "train.global_batch_size must be divisible by the DDP world size"
+            )
+        batch_size_per_gpu = global_batch_size // world_size
     sampler = DistributedSampler(
         dataset, num_replicas=world_size, rank=rank, shuffle=True
     )
@@ -1035,10 +1043,7 @@ if __name__ == "__main__":
     if args.per_gpu_batch_size is not None:
         if args.per_gpu_batch_size < 1:
             raise ValueError("--per_gpu_batch_size must be positive")
-        world_size = int(os.environ.get("WORLD_SIZE", "1"))
-        train_config['train']['global_batch_size'] = (
-            args.per_gpu_batch_size * world_size
-        )
+        train_config['train']['per_gpu_batch_size'] = args.per_gpu_batch_size
     if args.accumulation_steps is not None:
         if args.accumulation_steps < 1:
             raise ValueError("--accumulation_steps must be positive")
