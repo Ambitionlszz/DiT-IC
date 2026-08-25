@@ -68,13 +68,21 @@ def load_config(path):
     phase_b = lic_config.get("phase_b") or {}
     for phase_name, phase_config in (("phase_a", phase_a), ("phase_b", phase_b)):
         steps = int(phase_config.get("steps", 0))
-        lambda_min = float(phase_config.get("lambda_min", 0.0))
-        lambda_max = float(phase_config.get("lambda_max", 0.0))
+        lambda_values = [
+            float(value) for value in phase_config.get("lambda_values", [])
+        ]
         if steps < 1:
             raise ValueError(f"lic_train.{phase_name}.steps must be positive")
-        if not 0 < lambda_min < lambda_max:
+        if len(lambda_values) != 6:
             raise ValueError(
-                f"lic_train.{phase_name} requires 0 < lambda_min < lambda_max"
+                f"lic_train.{phase_name}.lambda_values must contain 6 values"
+            )
+        if any(value <= 0 for value in lambda_values) or any(
+            left >= right for left, right in zip(lambda_values, lambda_values[1:])
+        ):
+            raise ValueError(
+                f"lic_train.{phase_name}.lambda_values must be positive and "
+                "strictly increasing"
             )
     if float(phase_a.get("latent_mse_weight", 0.0)) <= 0:
         raise ValueError("lic_train.phase_a.latent_mse_weight must be positive")
@@ -141,13 +149,15 @@ def current_git_commit():
         return "unknown"
 
 
-def log_interpolated_lambda(quality_index, lambda_min, lambda_max, num_levels=6):
-    quality = quality_index.to(dtype=torch.float32)
-    normalized = quality / float(num_levels - 1)
-    return torch.exp(
-        math.log(lambda_min)
-        + normalized * (math.log(lambda_max) - math.log(lambda_min))
+def quality_lambda(quality_index, lambda_values):
+    device = (
+        quality_index.device
+        if isinstance(quality_index, torch.Tensor)
+        else None
     )
+    values = torch.as_tensor(lambda_values, device=device, dtype=torch.float32)
+    index = torch.as_tensor(quality_index, device=values.device, dtype=torch.long)
+    return values[index]
 
 
 def likelihood_bpp(likelihoods, num_pixels):
@@ -357,10 +367,8 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
                     + float(phase_config["dists_weight"]) * dists_loss
                 )
             quality_tensor = torch.tensor(quality_index, device=device)
-            current_lambda = log_interpolated_lambda(
-                quality_tensor,
-                float(phase_config["lambda_min"]),
-                float(phase_config["lambda_max"]),
+            current_lambda = quality_lambda(
+                quality_tensor, phase_config["lambda_values"]
             )
             loss = rate + current_lambda * distortion
             totals[quality_index] += torch.tensor(
@@ -682,10 +690,8 @@ def train(rank, local_rank, world_size, config):
                     + float(phase_config["lpips_weight"]) * lpips_loss
                     + float(phase_config["dists_weight"]) * dists_loss
                 )
-            current_lambda = log_interpolated_lambda(
-                quality_index,
-                float(phase_config["lambda_min"]),
-                float(phase_config["lambda_max"]),
+            current_lambda = quality_lambda(
+                quality_index, phase_config["lambda_values"]
             )
             loss = rate + current_lambda * distortion
             (loss / accumulation_steps).backward()

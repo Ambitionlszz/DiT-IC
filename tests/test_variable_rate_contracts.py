@@ -133,9 +133,23 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertIn("pixel_l1_weight: 1.0", config)
             self.assertIn("lpips_weight: 1.0", config)
             self.assertIn("dists_weight: 1.0", config)
+            self.assertEqual(
+                config.count(
+                    "lambda_values: [0.5, 1.0, 2.0, 4.0, 8.0, 16.0]"
+                ),
+                2,
+            )
+            self.assertNotIn("lambda_min", config)
+            self.assertNotIn("lambda_max", config)
             self.assertNotIn("image_mse_weight", config)
         self.assertEqual(pilot.count("steps: 2500"), 2)
         self.assertEqual(main.count("steps: 50000"), 2)
+
+        training_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('phase_config["lambda_values"]', training_source)
+        self.assertNotIn("log_interpolated_lambda", training_source)
 
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"

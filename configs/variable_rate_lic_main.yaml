@@ -36,19 +36,17 @@ model:
 quality_control:
   num_levels: 6
   semantic_order: low_to_high_bpp
-  # Set true only after the pilot fixes both phases' lambda endpoints.
+  # Set true only after the pilot confirms both phases' lambda values.
   calibration_confirmed: false
 
 lic_train:
   phase_a:
     steps: 50000
-    lambda_min: 0.625
-    lambda_max: 10.0
+    lambda_values: [0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
     latent_mse_weight: 1.0
   phase_b:
     steps: 50000
-    lambda_min: 0.625
-    lambda_max: 10.0
+    lambda_values: [0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
     pixel_l1_weight: 1.0
     lpips_weight: 1.0
     dists_weight: 1.0

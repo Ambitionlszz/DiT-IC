@@ -45,7 +45,7 @@ One `lic-pilot` or `lic-main` launch runs both phases without a manual restart:
    decoder. Only the LIC is updated in both phases; there is no GAN loss.
 
 LPIPS receives images in `[-1, 1]`. DISTS receives the same images converted
-to `[0, 1]`. The loss weights and the two phases' lambda endpoints are explicit
+to `[0, 1]`. The loss weights and the two phases' lambda values are explicit
 under `lic_train.phase_a` and `lic_train.phase_b`.
 
 The pilot is 2.5k Phase A steps followed by 2.5k Phase B steps. The main run is
@@ -55,9 +55,10 @@ resuming an existing checkpoint.
 
 ## 2. V1 pilot
 
-Both phases initially use the provisional lambda endpoints `0.625` and `10.0`.
-They are starting points, not calibrated constants, and Phase A and Phase B
-must be calibrated independently because their distortion scales differ.
+Both phases use the explicit quality table
+`[0.5, 1.0, 2.0, 4.0, 8.0, 16.0]`, mapped directly from q0 through q5.
+The two phases keep separate copies of the table because their distortion
+scales differ.
 
 ```bash
 # Choose either one GPU...
@@ -77,11 +78,10 @@ bash scripts/run_variable_rate_eval.sh \
   configs/multirate_plain_dit.yaml
 ```
 
-Inspect real BPP ordering and per-q quality. Adjust the Phase A and Phase B
-`lambda_min`/`lambda_max` values in `configs/variable_rate_lic_main.yaml`, then
-explicitly set `calibration_confirmed: true`. The main run is guarded against
-launching before that confirmation and must still use the original M0
-checkpoint, not a cherry-picked pilot checkpoint.
+Inspect real BPP ordering and per-q quality. If the six values are accepted,
+set `calibration_confirmed: true` in `configs/variable_rate_lic_main.yaml`.
+The main run is guarded against launching before that confirmation and must
+still use the original M0 checkpoint, not a cherry-picked pilot checkpoint.
 
 ## 3. V1 main
 
