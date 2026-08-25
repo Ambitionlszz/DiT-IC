@@ -1012,6 +1012,7 @@ if __name__ == "__main__":
         help='Exact training checkpoint to resume; also enables train.resume.',
     )
     parser.add_argument('--global_batch_size', type=int, default=None)
+    parser.add_argument('--per_gpu_batch_size', type=int, default=None)
     parser.add_argument('--accumulation_steps', type=int, default=None)
     parser.add_argument('--upsample_mode', type=str, default=None,
                         help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
@@ -1023,10 +1024,21 @@ if __name__ == "__main__":
     if args.resume_checkpoint is not None:
         train_config['train']['resume'] = True
         train_config['train']['resume_checkpoint'] = args.resume_checkpoint
+    if args.global_batch_size is not None and args.per_gpu_batch_size is not None:
+        raise ValueError(
+            "use only one of --global_batch_size and --per_gpu_batch_size"
+        )
     if args.global_batch_size is not None:
         if args.global_batch_size < 1:
             raise ValueError("--global_batch_size must be positive")
         train_config['train']['global_batch_size'] = args.global_batch_size
+    if args.per_gpu_batch_size is not None:
+        if args.per_gpu_batch_size < 1:
+            raise ValueError("--per_gpu_batch_size must be positive")
+        world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        train_config['train']['global_batch_size'] = (
+            args.per_gpu_batch_size * world_size
+        )
     if args.accumulation_steps is not None:
         if args.accumulation_steps < 1:
             raise ValueError("--accumulation_steps must be positive")

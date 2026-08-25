@@ -618,16 +618,28 @@ def main():
     )
     parser.add_argument("--resume_checkpoint", default=None)
     parser.add_argument("--global_batch_size", type=int, default=None)
+    parser.add_argument("--per_gpu_batch_size", type=int, default=None)
     parser.add_argument("--accumulation_steps", type=int, default=None)
     args = parser.parse_args()
     config = load_config(args.config)
     if args.resume_checkpoint is not None:
         config["train"]["resume"] = True
         config["train"]["resume_checkpoint"] = args.resume_checkpoint
+    if args.global_batch_size is not None and args.per_gpu_batch_size is not None:
+        raise ValueError(
+            "use only one of --global_batch_size and --per_gpu_batch_size"
+        )
     if args.global_batch_size is not None:
         if args.global_batch_size < 1:
             raise ValueError("--global_batch_size must be positive")
         config["train"]["global_batch_size"] = args.global_batch_size
+    if args.per_gpu_batch_size is not None:
+        if args.per_gpu_batch_size < 1:
+            raise ValueError("--per_gpu_batch_size must be positive")
+        world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        config["train"]["global_batch_size"] = (
+            args.per_gpu_batch_size * world_size
+        )
     if args.accumulation_steps is not None:
         if args.accumulation_steps < 1:
             raise ValueError("--accumulation_steps must be positive")

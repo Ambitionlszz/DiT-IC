@@ -2,18 +2,18 @@
 
 All commands run from the repository root. Replace checkpoint/model/data paths
 in the YAML files before launching. The same launcher supports one or two GPUs.
-Both forms default to `global_batch_size=8` and `accumulation_steps=1`:
+Every selected GPU uses batch size 8 and accumulation defaults to 1:
 
 ```bash
-# One GPU: batch 8 on that GPU.
+# One GPU: per-GPU batch 8, global batch 8.
 bash scripts/run_variable_rate_train.sh lic-pilot 0
 
-# Two GPUs: batch 4 per GPU.
+# Two GPUs: per-GPU batch 8, global batch 16.
 bash scripts/run_variable_rate_train.sh lic-pilot 0,1
 ```
 
 For an explicit override, prefix the command with values such as
-`GLOBAL_BATCH_SIZE=4 ACCUMULATION_STEPS=2`. The available stages are
+`PER_GPU_BATCH_SIZE=4 ACCUMULATION_STEPS=2`. The available stages are
 `lic-pilot`, `lic-main`, and `plain`.
 
 ## 0. V0 identity gate

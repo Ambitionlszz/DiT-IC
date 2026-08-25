@@ -36,17 +36,13 @@ for gpu_id in "${gpu_ids[@]}"; do
   fi
 done
 
-global_batch_size=${GLOBAL_BATCH_SIZE:-8}
+per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}
 accumulation_steps=${ACCUMULATION_STEPS:-1}
-if (( global_batch_size < 1 || accumulation_steps < 1 )); then
-  echo "GLOBAL_BATCH_SIZE and ACCUMULATION_STEPS must be positive" >&2
+if (( per_gpu_batch_size < 1 || accumulation_steps < 1 )); then
+  echo "PER_GPU_BATCH_SIZE and ACCUMULATION_STEPS must be positive" >&2
   exit 2
 fi
-if (( global_batch_size % num_gpus != 0 )); then
-  echo "GLOBAL_BATCH_SIZE must be divisible by the selected GPU count" >&2
-  exit 2
-fi
-per_gpu_batch_size=$((global_batch_size / num_gpus))
+global_batch_size=$((per_gpu_batch_size * num_gpus))
 effective_batch_size=$((global_batch_size * accumulation_steps))
 
 echo "stage=${stage} GPUs=${gpu_list} per_gpu_batch=${per_gpu_batch_size} "\
@@ -62,6 +58,6 @@ CUDA_VISIBLE_DEVICES="${gpu_list}" PYTHONPATH="${python_path}" \
   torchrun --standalone --nproc_per_node="${num_gpus}" \
   "${trainer}" \
   --config "${config}" \
-  --global_batch_size "${global_batch_size}" \
+  --per_gpu_batch_size "${per_gpu_batch_size}" \
   --accumulation_steps "${accumulation_steps}" \
   "$@"

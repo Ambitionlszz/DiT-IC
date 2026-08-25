@@ -106,7 +106,8 @@ class VariableRateStructureTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
-        self.assertIn("--global_batch_size", launcher)
+        self.assertIn("per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}", launcher)
+        self.assertIn("--per_gpu_batch_size", launcher)
         self.assertIn("--accumulation_steps", launcher)
 
         training_source = (ROOT / "train_nogan_ddp.py").read_text(
