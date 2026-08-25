@@ -989,12 +989,13 @@ def set_seed(seed=903):
 
 
 def setup_ddp():
-    backend = "nccl" if torch.cuda.device_count() > 1 else "gloo"
-    dist.init_process_group(backend)
+    if not torch.cuda.is_available():
+        raise RuntimeError("DiT-IC training requires at least one CUDA GPU")
+    backend = "nccl"
+    dist.init_process_group(backend=backend)
     rank = dist.get_rank()
     local_rank = int(os.environ["LOCAL_RANK"])
-    if backend == "nccl":
-        torch.cuda.set_device(local_rank)
+    torch.cuda.set_device(local_rank)
     return rank, dist.get_world_size(), local_rank
 
 def cleanup_ddp():
@@ -1010,6 +1011,8 @@ if __name__ == "__main__":
         default=None,
         help='Exact training checkpoint to resume; also enables train.resume.',
     )
+    parser.add_argument('--global_batch_size', type=int, default=None)
+    parser.add_argument('--accumulation_steps', type=int, default=None)
     parser.add_argument('--upsample_mode', type=str, default=None,
                         help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
@@ -1020,6 +1023,14 @@ if __name__ == "__main__":
     if args.resume_checkpoint is not None:
         train_config['train']['resume'] = True
         train_config['train']['resume_checkpoint'] = args.resume_checkpoint
+    if args.global_batch_size is not None:
+        if args.global_batch_size < 1:
+            raise ValueError("--global_batch_size must be positive")
+        train_config['train']['global_batch_size'] = args.global_batch_size
+    if args.accumulation_steps is not None:
+        if args.accumulation_steps < 1:
+            raise ValueError("--accumulation_steps must be positive")
+        train_config['train']['accumulation_steps'] = args.accumulation_steps
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()

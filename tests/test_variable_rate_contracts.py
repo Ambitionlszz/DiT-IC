@@ -100,6 +100,23 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertFalse(contract["train_vae_decoder_lora"])
         self.assertFalse(contract["train_text_projection"])
 
+    def test_launcher_supports_one_or_two_gpus_with_batch_overrides(self):
+        launcher = (
+            ROOT / "scripts" / "run_variable_rate_train.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
+        self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
+        self.assertIn("--global_batch_size", launcher)
+        self.assertIn("--accumulation_steps", launcher)
+
+        training_source = (ROOT / "train_nogan_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('backend = "nccl"', training_source)
+        self.assertNotIn(
+            'torch.cuda.device_count() > 1 else "gloo"', training_source
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

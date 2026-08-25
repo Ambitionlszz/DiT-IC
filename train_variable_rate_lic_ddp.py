@@ -617,11 +617,21 @@ def main():
         "--config", default="configs/variable_rate_lic_pilot.yaml"
     )
     parser.add_argument("--resume_checkpoint", default=None)
+    parser.add_argument("--global_batch_size", type=int, default=None)
+    parser.add_argument("--accumulation_steps", type=int, default=None)
     args = parser.parse_args()
     config = load_config(args.config)
     if args.resume_checkpoint is not None:
         config["train"]["resume"] = True
         config["train"]["resume_checkpoint"] = args.resume_checkpoint
+    if args.global_batch_size is not None:
+        if args.global_batch_size < 1:
+            raise ValueError("--global_batch_size must be positive")
+        config["train"]["global_batch_size"] = args.global_batch_size
+    if args.accumulation_steps is not None:
+        if args.accumulation_steps < 1:
+            raise ValueError("--accumulation_steps must be positive")
+        config["train"]["accumulation_steps"] = args.accumulation_steps
     set_seed(int(config["train"]["global_seed"]))
     rank, world_size, local_rank = setup_ddp()
     try:

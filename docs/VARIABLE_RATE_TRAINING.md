@@ -1,7 +1,20 @@
 # Variable-rate LIC and Multi-rate Plain DiT training
 
-All commands run from the repository root. The examples use two visible GPUs.
-Replace checkpoint/model/data paths in the YAML files before launching.
+All commands run from the repository root. Replace checkpoint/model/data paths
+in the YAML files before launching. The same launcher supports one or two GPUs.
+Both forms default to `global_batch_size=8` and `accumulation_steps=1`:
+
+```bash
+# One GPU: batch 8 on that GPU.
+bash scripts/run_variable_rate_train.sh lic-pilot 0
+
+# Two GPUs: batch 4 per GPU.
+bash scripts/run_variable_rate_train.sh lic-pilot 0,1
+```
+
+For an explicit override, prefix the command with values such as
+`GLOBAL_BATCH_SIZE=4 ACCUMULATION_STEPS=2`. The available stages are
+`lic-pilot`, `lic-main`, and `plain`.
 
 ## 0. V0 identity gate
 
@@ -26,9 +39,11 @@ from the old `D + 0.4 R` scale only as a starting point. They are not calibrated
 constants.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=. torchrun --standalone --nproc_per_node=2 \
-  train_variable_rate_lic_ddp.py \
-  --config configs/variable_rate_lic_pilot.yaml
+# Choose either one GPU...
+bash scripts/run_variable_rate_train.sh lic-pilot 0
+
+# ...or two GPUs.
+bash scripts/run_variable_rate_train.sh lic-pilot 0,1
 ```
 
 Evaluate all six real streams:
@@ -50,9 +65,8 @@ cherry-picked pilot checkpoint.
 ## 2. V1 main
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=. torchrun --standalone --nproc_per_node=2 \
-  train_variable_rate_lic_ddp.py \
-  --config configs/variable_rate_lic_main.yaml
+bash scripts/run_variable_rate_train.sh lic-main 0
+# Or: bash scripts/run_variable_rate_train.sh lic-main 0,1
 ```
 
 Run the six-rate evaluation again. Gate A requires every q to round-trip and
@@ -64,20 +78,18 @@ only.
 Set `model.params.codec_path` in `configs/multirate_plain_dit.yaml` to the
 accepted V1 checkpoint. The config loads the M0 VAE decoder LoRA weights but
 freezes them, freezes the complete LIC and text projection, and trains only DiT
-LoRA. One q is sampled on rank 0 per optimizer step and shared by both GPUs.
+LoRA. One q is sampled on rank 0 per optimizer step and shared by all selected
+GPU ranks.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=. torchrun --standalone --nproc_per_node=2 \
-  train_nogan_ddp.py \
-  --config configs/multirate_plain_dit.yaml
+bash scripts/run_variable_rate_train.sh plain 0
+# Or: bash scripts/run_variable_rate_train.sh plain 0,1
 ```
 
 Resume only from a P0 checkpoint:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=. torchrun --standalone --nproc_per_node=2 \
-  train_nogan_ddp.py \
-  --config configs/multirate_plain_dit.yaml \
+bash scripts/run_variable_rate_train.sh plain 0 \
   --resume_checkpoint /path/to/P0/checkpoint.pt
 ```
 
@@ -95,6 +107,6 @@ PYTHONPATH=. python scripts/compare_bitstreams.py \
 Repeat for q0..q5. Every file must be byte-identical before attributing a
 quality difference to Plain DiT training.
 
-CUDA/bf16, two-rank DDP, real CompressAI/rANS, memory, throughput, and full
+CUDA, one-/two-rank DDP, real CompressAI/rANS, memory, throughput, and full
 RD/RP validation must be performed on the training server; the local Windows
 environment is only suitable for static and standard-library tests.
