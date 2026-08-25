@@ -38,7 +38,8 @@ from train_nogan_ddp import (
 )
 
 
-CHECKPOINT_SCHEMA_VERSION = 3
+CHECKPOINT_SCHEMA_VERSION = 4
+OBJECTIVE_VERSION = "distortion_plus_lambda_rate_v1"
 STAGE_NAME = "variable_quality_codec"
 PHASE_A = "latent_rd"
 PHASE_B = "pixel_perceptual_rd"
@@ -117,6 +118,24 @@ def phase_step(global_step, phase_a_steps):
     if global_step < phase_a_steps:
         return global_step
     return global_step - phase_a_steps
+
+
+def objective_contract(config):
+    phase_a = config["lic_train"]["phase_a"]
+    phase_b = config["lic_train"]["phase_b"]
+    return {
+        "version": OBJECTIVE_VERSION,
+        "phase_a": {
+            "lambda_values": [float(value) for value in phase_a["lambda_values"]],
+            "latent_mse_weight": float(phase_a["latent_mse_weight"]),
+        },
+        "phase_b": {
+            "lambda_values": [float(value) for value in phase_b["lambda_values"]],
+            "pixel_l1_weight": float(phase_b["pixel_l1_weight"]),
+            "lpips_weight": float(phase_b["lpips_weight"]),
+            "dists_weight": float(phase_b["dists_weight"]),
+        },
+    }
 
 
 def file_sha256(path):
@@ -290,9 +309,7 @@ class PhaseBPerceptualLosses(nn.Module):
 
     def forward(self, reference, reconstruction):
         lpips_loss = self.lpips(reference, reconstruction).mean()
-        reference_01 = ((reference + 1.0) * 0.5).clamp(0, 1)
-        reconstruction_01 = ((reconstruction + 1.0) * 0.5).clamp(0, 1)
-        dists_loss = self.dists(reference_01, reconstruction_01).mean()
+        dists_loss = self.dists(reference, reconstruction).mean()
         return lpips_loss, dists_loss
 
 
@@ -406,6 +423,34 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
     return score, metrics
 
 
+@torch.no_grad()
+def evaluate_with_codec_state(
+    model,
+    codec_state,
+    loader,
+    device,
+    config,
+    phase,
+    perceptual_losses=None,
+):
+    live_state = {
+        name: value.detach().cpu().clone()
+        for name, value in model.module.codec.state_dict().items()
+    }
+    model.module.codec.load_state_dict(codec_state, strict=True)
+    try:
+        return evaluate(
+            model,
+            loader,
+            device,
+            config,
+            phase,
+            perceptual_losses,
+        )
+    finally:
+        model.module.codec.load_state_dict(live_state, strict=True)
+
+
 def train(rank, local_rank, world_size, config):
     device = torch.device(f"cuda:{local_rank}")
     train_config = config["train"]
@@ -418,6 +463,9 @@ def train(rank, local_rank, world_size, config):
     writer = SummaryWriter(output_dir / "tensorboard") if rank == 0 else None
 
     source_path = config["model"]["source_checkpoint"]
+    source_hash_holder = [file_sha256(source_path) if rank == 0 else None]
+    dist.broadcast_object_list(source_hash_holder, src=0)
+    source_sha256 = source_hash_holder[0]
     source_checkpoint, source_state = load_source_checkpoint(
         source_path, bool(config["model"].get("source_use_ema", False))
     )
@@ -441,29 +489,41 @@ def train(rank, local_rank, world_size, config):
     }:
         raise RuntimeError("codec and entropy optimizer parameters overlap")
 
-    optimizer = torch.optim.AdamW(
-        codec_parameters,
-        lr=float(config["optimizer"]["lr"]),
-        weight_decay=0,
-        betas=(0.9, float(config["optimizer"]["beta2"])),
-    )
-    entropy_optimizer = torch.optim.AdamW(
-        entropy_parameters,
-        lr=float(config["optimizer"]["aux_lr"]),
-        weight_decay=0,
-    )
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        optimizer,
-        milestones=list(config["optimizer"]["step_lr"]),
-        gamma=0.5,
-    )
+    phase_a_steps = int(config["lic_train"]["phase_a"]["steps"])
+    phase_b_steps = int(config["lic_train"]["phase_b"]["steps"])
+    max_steps = phase_a_steps + phase_b_steps
+
+    def build_training_state(phase):
+        optimizer = torch.optim.AdamW(
+            codec_parameters,
+            lr=float(config["optimizer"]["lr"]),
+            weight_decay=0,
+            betas=(0.9, float(config["optimizer"]["beta2"])),
+        )
+        entropy_optimizer = torch.optim.AdamW(
+            entropy_parameters,
+            lr=float(config["optimizer"]["aux_lr"]),
+            weight_decay=0,
+        )
+        offset = 0 if phase == PHASE_A else phase_a_steps
+        phase_end = phase_a_steps if phase == PHASE_A else max_steps
+        milestones = [
+            int(step) - offset
+            for step in config["optimizer"]["step_lr"]
+            if offset < int(step) <= phase_end
+        ]
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer,
+            milestones=milestones,
+            gamma=0.5,
+        )
+        return optimizer, entropy_optimizer, scheduler
+
+    optimizer, entropy_optimizer, scheduler = build_training_state(PHASE_A)
 
     model = DDP(stage_model, device_ids=[local_rank])
     model.train()
 
-    phase_a_steps = int(config["lic_train"]["phase_a"]["steps"])
-    phase_b_steps = int(config["lic_train"]["phase_b"]["steps"])
-    max_steps = phase_a_steps + phase_b_steps
     perceptual_losses = PhaseBPerceptualLosses()
     perceptual_losses_on_device = False
 
@@ -557,7 +617,15 @@ def train(rank, local_rank, world_size, config):
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
         if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(
-                "two-phase LIC training requires a schema-version 3 checkpoint"
+                "two-phase LIC training requires a schema-version 4 checkpoint"
+            )
+        if resume.get("objective_contract") != objective_contract(config):
+            raise ValueError(
+                "resume checkpoint objective/lambda contract does not match config"
+            )
+        if resume.get("source_checkpoint_sha256") != source_sha256:
+            raise ValueError(
+                "resume checkpoint was initialized from a different M0 checkpoint"
             )
         if (
             int(resume.get("phase_a_steps", -1)) != phase_a_steps
@@ -589,8 +657,6 @@ def train(rank, local_rank, world_size, config):
             PHASE_B: float(resume["best_scores"][PHASE_B]),
         }
 
-    source_sha256 = file_sha256(source_path) if rank == 0 else None
-
     def make_checkpoint():
         codec_state = model.module.codec.state_dict()
         model_payload = deepcopy(source_payload)
@@ -617,6 +683,7 @@ def train(rank, local_rank, world_size, config):
             "resolved_config": config,
             "git_commit": current_git_commit(),
             "source_checkpoint_sha256": source_sha256,
+            "objective_contract": objective_contract(config),
             "codec_sha256": state_dict_sha256(codec_state),
             "bitstream_format_version": 1,
             "trainable_parameter_names": [
@@ -769,8 +836,9 @@ def train(rank, local_rank, world_size, config):
                     if evaluation_phase == PHASE_B
                     else None
                 )
-                score, metrics = evaluate(
+                score, metrics = evaluate_with_codec_state(
                     model,
+                    ema_codec,
                     valid_loader,
                     device,
                     config,
@@ -787,7 +855,7 @@ def train(rank, local_rank, world_size, config):
                     best_scores[evaluation_phase] = min(
                         best_scores[evaluation_phase], score
                     )
-                    if is_best:
+                    if is_best and train_steps != phase_a_steps:
                         best_name = (
                             "best_phase_a_ckpt.pt"
                             if evaluation_phase == PHASE_A
@@ -797,12 +865,19 @@ def train(rank, local_rank, world_size, config):
                 dist.barrier()
 
             if train_steps == phase_a_steps:
+                optimizer, entropy_optimizer, scheduler = build_training_state(
+                    PHASE_B
+                )
+                optimizer.zero_grad(set_to_none=True)
+                entropy_optimizer.zero_grad(set_to_none=True)
+                ema_codec = deepcopy(model.module.codec.state_dict())
                 if rank == 0:
                     torch.save(
                         make_checkpoint(), checkpoint_dir / "phase_a_complete.pt"
                     )
                     logger.info(
-                        "phase A complete; automatically starting phase B"
+                        "phase A complete; reset optimizer, scheduler, and EMA; "
+                        "automatically starting phase B"
                     )
                 running.zero_()
                 log_micro_steps = 0

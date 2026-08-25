@@ -1,0 +1,67 @@
+data:
+  data_path:
+    - /data2/luosheng/data/Datasets/DIV2K_train_HR_clean
+  valid_path:
+    - /data2/luosheng/data/Datasets/Kodak
+  im_exts: [JPEG, png, jpg, jpeg, PNG]
+  num_workers: 4
+  path_size: [256, 256]
+
+model:
+  dit_path: SANA
+  source_checkpoint: /path/to/M0_baseline_checkpoint.pt
+  source_use_ema: true
+  vae_params:
+    vae_lora: true
+    train_vae_lora: false
+    lora_rank_vae: 64
+    lora_alpha_vae: 64
+  codec_param:
+    ch_emd: 32
+    channel: 320
+    channel_out: 32
+    num_slices: 5
+    max_support_slices: 5
+    kernel_size: 3
+    drop_path_rate: 0.1
+    depths: [2, 2, 2, 2, 2]
+    num_heads: [16, 16, 16, 16, 16]
+    upsample_mode: pixelshuffle
+    variable_rate: true
+    num_quality_levels: 6
+
+quality_control:
+  num_levels: 6
+  semantic_order: low_to_high_bpp
+  calibration_confirmed: false
+
+lic_train:
+  phase_a:
+    steps: 20
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    latent_mse_weight: 1.0
+  phase_b:
+    steps: 20
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    pixel_l1_weight: 1.0
+    lpips_weight: 1.0
+    dists_weight: 1.0
+
+train:
+  output_dir: checkpoints
+  exp_name: variable_rate_lic_v1_smoke
+  per_gpu_batch_size: 8
+  accumulation_steps: 1
+  max_steps: 40
+  global_seed: 903
+  log_every: 5
+  eval_every: 20
+  ckpt_every: 20
+  resume: false
+
+optimizer:
+  lr: 0.0001
+  aux_lr: 0.001
+  beta2: 0.999
+  step_lr: []
+  max_grad_norm: 4.0

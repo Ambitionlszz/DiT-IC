@@ -145,6 +145,13 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertEqual(pilot.count("steps: 2500"), 2)
         self.assertEqual(main.count("steps: 50000"), 2)
 
+        smoke = (ROOT / "configs" / "variable_rate_lic_smoke.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(smoke.count("steps: 20"), 2)
+        self.assertIn("max_steps: 40", smoke)
+        self.assertIn("per_gpu_batch_size: 8", smoke)
+
         training_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
         )
@@ -198,9 +205,49 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('"phase_a_steps": phase_a_steps', source)
         self.assertIn('"phase_b_steps": phase_b_steps', source)
         self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
+        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 4', source)
+        self.assertIn('"objective_contract": objective_contract(config)', source)
         self.assertIn(
-            '"phase A complete; automatically starting phase B"', source
+            'resume.get("source_checkpoint_sha256") != source_sha256', source
         )
+        self.assertIn("evaluate_with_codec_state(", source)
+        self.assertIn(
+            "optimizer, entropy_optimizer, scheduler = build_training_state(",
+            source,
+        )
+        self.assertIn(
+            "ema_codec = deepcopy(model.module.codec.state_dict())", source
+        )
+        self.assertIn(
+            '"automatically starting phase B"', source
+        )
+
+    def test_lic_dists_training_matches_baseline_minus_one_to_one_range(self):
+        losses_source = (ROOT / "models" / "losses.py").read_text(
+            encoding="utf-8"
+        )
+        training_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "self.dists(\n                    inputs.contiguous(),", losses_source
+        )
+        self.assertIn(
+            "dists_loss = self.dists(reference, reconstruction).mean()",
+            training_source,
+        )
+        self.assertNotIn("def _dists_inputs", losses_source)
+
+    def test_direct_lic_evaluator_round_trips_serialized_rans_packet(self):
+        source = (
+            ROOT / "scripts" / "eval_variable_rate_lic_direct.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("stage.codec.compress(clean_latent, quality_index)", source)
+        self.assertIn("write_codec_packet(file, packet)", source)
+        self.assertIn("stored_packet = read_codec_packet(file)", source)
+        self.assertIn("stage.codec.decompress(stored_packet)", source)
+        self.assertIn("stage.vae.decode(", source)
+        self.assertNotIn("models.DiT_IC", source)
 
 
 if __name__ == "__main__":

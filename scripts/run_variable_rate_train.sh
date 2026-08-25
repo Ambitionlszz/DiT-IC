@@ -5,6 +5,10 @@ stage=${1:?'usage: run_variable_rate_train.sh STAGE GPU_LIST [TRAIN_ARGS...]'}
 gpu_list=${2:?'usage: run_variable_rate_train.sh STAGE GPU_LIST [TRAIN_ARGS...]'}
 
 case "${stage}" in
+  lic-smoke)
+    trainer=train_variable_rate_lic_ddp.py
+    config=configs/variable_rate_lic_smoke.yaml
+    ;;
   lic-pilot)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_pilot.yaml
@@ -18,7 +22,7 @@ case "${stage}" in
     config=configs/multirate_plain_dit.yaml
     ;;
   *)
-    echo "STAGE must be one of: lic-pilot, lic-main, plain" >&2
+    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, plain" >&2
     exit 2
     ;;
 esac
