@@ -112,7 +112,9 @@ Set `model.params.codec_path` in `configs/multirate_plain_dit.yaml` to the
 accepted V1 checkpoint. The config loads the M0 VAE decoder LoRA weights but
 freezes them, freezes the complete LIC and text projection, and trains only DiT
 LoRA. One q is sampled on rank 0 per optimizer step and shared by all selected
-GPU ranks.
+GPU ranks. Strict loading rejects `best_phase_a_ckpt.pt` and
+`phase_a_complete.pt`; use a checkpoint that has completed at least one Phase B
+step, normally `best_ckpt.pt`.
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0

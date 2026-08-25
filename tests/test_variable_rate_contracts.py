@@ -207,6 +207,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
         self.assertIn('CHECKPOINT_SCHEMA_VERSION = 4', source)
         self.assertIn('"objective_contract": objective_contract(config)', source)
+        self.assertIn('"dists_input_range": "minus_one_to_one"', source)
         self.assertIn(
             'resume.get("source_checkpoint_sha256") != source_sha256', source
         )
@@ -248,6 +249,14 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("stage.codec.decompress(stored_packet)", source)
         self.assertIn("stage.vae.decode(", source)
         self.assertNotIn("models.DiT_IC", source)
+
+    def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
+        source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
+        self.assertIn('checkpoint_stage == "variable_quality_codec"', source)
+        self.assertIn("global_step <= phase_a_steps", source)
+        self.assertIn(
+            "multi-rate Plain requires a LIC checkpoint trained ", source
+        )
 
 
 if __name__ == "__main__":

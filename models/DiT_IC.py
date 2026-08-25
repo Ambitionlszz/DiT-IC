@@ -223,6 +223,14 @@ class Codec(nn.Module):
                     "strict_stage_loading requires a variable-rate checkpoint; "
                     f"got stage={checkpoint_stage!r} from {codec_path!r}"
                 )
+            if checkpoint_stage == "variable_quality_codec":
+                global_step = int(checkpoint.get("global_step", -1))
+                phase_a_steps = int(checkpoint.get("phase_a_steps", -1))
+                if phase_a_steps < 1 or global_step <= phase_a_steps:
+                    raise ValueError(
+                        "multi-rate Plain requires a LIC checkpoint trained "
+                        "past the Phase A boundary"
+                    )
         state_key = "ema" if use_ema else "model"
         if state_key not in checkpoint:
             raise KeyError(f"Checkpoint does not contain {state_key!r}: {codec_path}")

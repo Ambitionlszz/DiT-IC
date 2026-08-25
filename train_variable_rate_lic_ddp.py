@@ -134,6 +134,8 @@ def objective_contract(config):
             "pixel_l1_weight": float(phase_b["pixel_l1_weight"]),
             "lpips_weight": float(phase_b["lpips_weight"]),
             "dists_weight": float(phase_b["dists_weight"]),
+            "lpips_input_range": "minus_one_to_one",
+            "dists_input_range": "minus_one_to_one",
         },
     }
 
@@ -524,15 +526,12 @@ def train(rank, local_rank, world_size, config):
     model = DDP(stage_model, device_ids=[local_rank])
     model.train()
 
-    perceptual_losses = PhaseBPerceptualLosses()
-    perceptual_losses_on_device = False
+    perceptual_losses = None
 
     def get_perceptual_losses():
-        nonlocal perceptual_losses_on_device
-        if not perceptual_losses_on_device:
-            perceptual_losses.to(device)
-            perceptual_losses.eval()
-            perceptual_losses_on_device = True
+        nonlocal perceptual_losses
+        if perceptual_losses is None:
+            perceptual_losses = PhaseBPerceptualLosses().to(device).eval()
         return perceptual_losses
 
     train_transform = transforms.Compose(
