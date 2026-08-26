@@ -48,7 +48,7 @@ lic_train:
 train:
   output_dir: checkpoints
   exp_name: variable_rate_lic_v2_main
-  per_gpu_batch_size: 8
+  per_gpu_batch_size: 16
   accumulation_steps: 1
   max_steps: 100000
   global_seed: 903

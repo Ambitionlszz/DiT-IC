@@ -2,14 +2,15 @@
 
 All commands run from the repository root. Replace model/data paths in the
 YAML files before launching. The same launcher supports one or two GPUs.
-Every selected GPU uses batch size 8 and accumulation defaults to 1:
+LIC uses batch size 16 per selected GPU; Plain DiT uses batch size 8 per GPU.
+Accumulation defaults to 1:
 
 ```bash
-# One GPU: per-GPU batch 8, global batch 8.
-bash scripts/run_variable_rate_train.sh lic-pilot 0
+# One GPU LIC: per-GPU batch 16, global batch 16.
+bash scripts/run_variable_rate_train.sh lic-smoke 0
 
-# Two GPUs: per-GPU batch 8, global batch 16.
-bash scripts/run_variable_rate_train.sh lic-pilot 0,1
+# Two GPUs LIC: per-GPU batch 16, global batch 32.
+bash scripts/run_variable_rate_train.sh lic-smoke 0,1
 ```
 
 For an explicit override, prefix the command with values such as

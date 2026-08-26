@@ -8,22 +8,27 @@ case "${stage}" in
   lic-smoke)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_smoke.yaml
+    default_per_gpu_batch_size=16
     ;;
   lic-pilot)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_pilot.yaml
+    default_per_gpu_batch_size=16
     ;;
   lic-main)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_main.yaml
+    default_per_gpu_batch_size=16
     ;;
   plain-smoke)
     trainer=train_nogan_ddp.py
     config=configs/multirate_plain_dit_smoke.yaml
+    default_per_gpu_batch_size=8
     ;;
   plain)
     trainer=train_nogan_ddp.py
     config=configs/multirate_plain_dit.yaml
+    default_per_gpu_batch_size=8
     ;;
   *)
     echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, plain-smoke, plain" >&2
@@ -44,7 +49,7 @@ for gpu_id in "${gpu_ids[@]}"; do
   fi
 done
 
-per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}
+per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}
 accumulation_steps=${ACCUMULATION_STEPS:-1}
 if (( per_gpu_batch_size < 1 || accumulation_steps < 1 )); then
   echo "PER_GPU_BATCH_SIZE and ACCUMULATION_STEPS must be positive" >&2

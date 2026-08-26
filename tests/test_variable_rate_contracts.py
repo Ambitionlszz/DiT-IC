@@ -149,7 +149,12 @@ class VariableRateStructureTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
-        self.assertIn("per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}", launcher)
+        self.assertIn("default_per_gpu_batch_size=16", launcher)
+        self.assertIn("default_per_gpu_batch_size=8", launcher)
+        self.assertIn(
+            "per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}",
+            launcher,
+        )
         self.assertIn("--per_gpu_batch_size", launcher)
         self.assertIn("--accumulation_steps", launcher)
         self.assertIn("plain-smoke)", launcher)
@@ -179,6 +184,7 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertIn("pixel_l1_weight: 1.0", config)
             self.assertIn("lpips_weight: 1.0", config)
             self.assertIn("dists_weight: 1.0", config)
+            self.assertIn("per_gpu_batch_size: 16", config)
             self.assertEqual(
                 config.count(
                     "lambda_values: [16.0, 4.0, 1.0, 0.5, 0.125, 0.03125]"
@@ -196,7 +202,7 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         self.assertEqual(smoke.count("steps: 20"), 2)
         self.assertIn("max_steps: 40", smoke)
-        self.assertIn("per_gpu_batch_size: 8", smoke)
+        self.assertIn("per_gpu_batch_size: 16", smoke)
         self.assertIn("codec_initialization: scratch", smoke)
         self.assertNotIn("source_checkpoint", smoke)
 
