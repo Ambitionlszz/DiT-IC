@@ -281,6 +281,15 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("keeping fresh DiT LoRA", source)
         self.assertIn('self.codec.load_state_dict(state["state_dict_codec"]', source)
 
+    def test_multirate_plain_selects_best_checkpoint_with_ema_weights(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        self.assertIn("test_loss = evaluate_multirate_ema(", source)
+        self.assertIn('ema["state_dict_DiT"]', source)
+        self.assertIn('ema["state_dict_text_proj"]', source)
+        self.assertIn("finally:", source)
+        self.assertIn("model.DiT.load_state_dict(live_dit", source)
+        self.assertIn("model.text_proj.load_state_dict(live_text_proj", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -725,18 +725,30 @@ def do_train(rank, local_rank, world_size, train_config):
                     if rank == 0:
                         logger.info(f"Start evaluating at step {train_steps}")
 
-                    test_loss = evaluate(
-                        model,
-                        loss_module,
-                        valid_loader,
-                        device,
-                        train_steps,
-                        logger if rank==0 else None,
-                        writer if rank==0 else None,
-                        num_quality_levels=(
-                            num_quality_levels if multirate_plain else None
-                        ),
-                    )
+                    if multirate_plain:
+                        test_loss = None
+                        if rank == 0:
+                            test_loss = evaluate_multirate_ema(
+                                model.module,
+                                ema,
+                                loss_module,
+                                valid_loader,
+                                device,
+                                train_steps,
+                                logger,
+                                writer,
+                                num_quality_levels,
+                            )
+                    else:
+                        test_loss = evaluate(
+                            model,
+                            loss_module,
+                            valid_loader,
+                            device,
+                            train_steps,
+                            logger if rank==0 else None,
+                            writer if rank==0 else None,
+                        )
 
                     if rank == 0:
                         is_best = test_loss < best_loss
@@ -768,6 +780,42 @@ def do_train(rank, local_rank, world_size, train_config):
 
     if rank == 0: 
         logger.info("Done!")
+
+
+@torch.no_grad()
+def evaluate_multirate_ema(
+    model,
+    ema,
+    loss_module,
+    test_loader,
+    device,
+    train_steps,
+    logger,
+    writer,
+    num_quality_levels,
+):
+    """Evaluate the same EMA weights that downstream P0 loading will use."""
+    model.assert_reconstruction_training_contract()
+    live_state = model.get_state_dicts_for_save()
+    live_dit = deepcopy(live_state["state_dict_DiT"])
+    live_text_proj = deepcopy(live_state["state_dict_text_proj"])
+    model.DiT.load_state_dict(ema["state_dict_DiT"], strict=False)
+    model.text_proj.load_state_dict(ema["state_dict_text_proj"], strict=True)
+    try:
+        return evaluate(
+            model,
+            loss_module,
+            test_loader,
+            device,
+            train_steps,
+            logger,
+            writer,
+            num_quality_levels=num_quality_levels,
+        )
+    finally:
+        model.DiT.load_state_dict(live_dit, strict=False)
+        model.text_proj.load_state_dict(live_text_proj, strict=True)
+
 
 @torch.no_grad()
 def evaluate(
