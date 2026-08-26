@@ -36,9 +36,9 @@ from train_nogan_ddp import (
 )
 
 
-CHECKPOINT_SCHEMA_VERSION = 6
-OBJECTIVE_VERSION = "distortion_plus_lambda_rate_v1"
-VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"
+CHECKPOINT_SCHEMA_VERSION = 7
+OBJECTIVE_VERSION = "rate_plus_inverse_rate_lambda_distortion_v2"
+VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
 STAGE_NAME = "variable_quality_codec"
 PHASE_A = "latent_rd"
 PHASE_B = "pixel_perceptual_rd"
@@ -117,6 +117,7 @@ def objective_contract(config):
     phase_b = config["lic_train"]["phase_b"]
     return {
         "version": OBJECTIVE_VERSION,
+        "loss_form": "rate_plus_distortion_divided_by_rate_lambda",
         "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
         "codec_initialization": "scratch",
         "phase_a": {
@@ -173,6 +174,11 @@ def quality_lambda(quality_index, lambda_values):
     values = torch.as_tensor(lambda_values, device=device, dtype=torch.float32)
     index = torch.as_tensor(quality_index, device=values.device, dtype=torch.long)
     return values[index]
+
+
+def rate_distortion_loss(distortion, rate, rate_lambda):
+    """FlowCodec-form RD loss while preserving small-lambda/high-quality labels."""
+    return rate + distortion / rate_lambda
 
 
 def likelihood_bpp(likelihoods, num_pixels):
@@ -312,7 +318,7 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
             current_lambda = quality_lambda(
                 quality_tensor, phase_config["lambda_values"]
             )
-            loss = distortion + current_lambda * rate
+            loss = rate_distortion_loss(distortion, rate, current_lambda)
             totals[quality_index] += torch.tensor(
                 [
                     float(batch_size),
@@ -364,7 +370,7 @@ def evaluate_with_codec_state(
     }
     model.module.codec.load_state_dict(codec_state, strict=True)
     try:
-        return evaluate(
+        score, metrics = evaluate(
             model,
             loader,
             device,
@@ -372,6 +378,8 @@ def evaluate_with_codec_state(
             phase,
             perceptual_losses,
         )
+        scale_diagnostics = model.module.codec.quality_controller.diagnostics()
+        return score, metrics, scale_diagnostics
     finally:
         model.module.codec.load_state_dict(live_state, strict=True)
 
@@ -528,7 +536,7 @@ def train(rank, local_rank, world_size, config):
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
         if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(
-                "scratch two-phase LIC training requires a schema-version 6 "
+                "scratch two-phase LIC training requires a schema-version 7 "
                 "checkpoint"
             )
         if resume.get("objective_contract") != objective_contract(config):
@@ -669,7 +677,7 @@ def train(rank, local_rank, world_size, config):
             current_lambda = quality_lambda(
                 quality_index, phase_config["lambda_values"]
             )
-            loss = distortion + current_lambda * rate
+            loss = rate_distortion_loss(distortion, rate, current_lambda)
             (loss / accumulation_steps).backward()
             accum_count += 1
             running += torch.stack(
@@ -745,7 +753,7 @@ def train(rank, local_rank, world_size, config):
                     if evaluation_phase == PHASE_B
                     else None
                 )
-                score, metrics = evaluate_with_codec_state(
+                score, metrics, scale_diagnostics = evaluate_with_codec_state(
                     model,
                     ema_codec,
                     valid_loader,
@@ -755,10 +763,26 @@ def train(rank, local_rank, world_size, config):
                     phase_losses,
                 )
                 if rank == 0:
+                    bpp_values = [
+                        metrics[f"q{quality}"]["likelihood_bpp"]
+                        for quality in range(6)
+                    ]
                     logger.info(
                         "validation_phase=%s metrics=%s",
                         evaluation_phase,
                         json.dumps(metrics),
+                    )
+                    logger.info(
+                        "validation_quality_scales=%s",
+                        json.dumps(scale_diagnostics),
+                    )
+                    logger.info(
+                        "validation_bpp_span=%.8f strictly_increasing=%s",
+                        bpp_values[-1] - bpp_values[0],
+                        all(
+                            left < right
+                            for left, right in zip(bpp_values, bpp_values[1:])
+                        ),
                     )
                     is_best = score < best_scores[evaluation_phase]
                     best_scores[evaluation_phase] = min(

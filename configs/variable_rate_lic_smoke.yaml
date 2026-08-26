@@ -30,6 +30,7 @@ quality_control:
   calibration_confirmed: false
 
 lic_train:
+  # Loss uses R + distortion / lambda_rate; smaller values mean higher quality.
   phase_a:
     steps: 20
     lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
@@ -43,7 +44,7 @@ lic_train:
 
 train:
   output_dir: checkpoints
-  exp_name: variable_rate_lic_v2_smoke
+  exp_name: variable_rate_lic_v3_smoke
   per_gpu_batch_size: 8
   accumulation_steps: 1
   max_steps: 40

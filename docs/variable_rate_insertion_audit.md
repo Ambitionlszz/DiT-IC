@@ -6,11 +6,12 @@ This change migrates the complete variable-rate control path described by
 FlowCodec into the existing DiT-IC latent codec. FlowCodec cites DCVC-FM for
 this mechanism. The migration contains both parts used by the method:
 
-1. one learned per-channel analysis/synthesis scale pair `q_e/q_d` per quality;
+1. learned low/high per-channel analysis/synthesis scale endpoints, with
+   log-domain exponential interpolation producing `q_e/q_d` for each quality;
 2. content-adaptive quantization maps `w_e/w_d`, predicted jointly with the
    first entropy-prior mean and scale from the decoded hyperprior.
 
-The surrounding DiT-IC analysis/synthesis blocks, four-step context model, and
+The surrounding baseline DiT-IC analysis/synthesis blocks, four-step context model, and
 LRP remain the local baseline architecture. FlowCodec has no public reference
 implementation, so this is a formula- and upstream-source-faithful mechanism
 migration, not a claim that the entire unpublished FlowCodec codec is copied.
@@ -36,6 +37,18 @@ repository was exposed by the paper page or a targeted GitHub search, so no
 FlowCodec implementation is copied or claimed.
 
 ## Quantization-domain migration
+
+For quality index `q` in `0..5`, the encoder and decoder global scales are
+interpolated independently from their learned endpoint vectors:
+
+```text
+alpha = q / 5
+q(q) = exp(log(q_min) + alpha * (log(q_max) - log(q_min)))
+```
+
+This preserves DCVC-FM's continuous quality axis. It replaces the incorrect
+six-independent-all-ones table, which sparsely updated only the sampled row and
+allowed all operating points to collapse toward the shared codec solution.
 
 For the variable-rate codec, the first prior head emits `2M+2` channels. The
 first two channels are converted exactly as in the DCVC-FM image model:
@@ -84,22 +97,26 @@ key names.
 
 ## Adaptations and invariants
 
-- Quality indices are exactly integers `0..5`; under `D + lambda * R`, `q0`
-  uses the largest rate lambda and `q5` the smallest.
+- Quality indices are exactly integers `0..5`. Configured rate lambdas remain
+  `[16, 8, 4, 2, 1, 0.5]`, while the jointly trained loss is normalized as
+  `R + D / lambda_rate`. Thus q0 remains lowest quality/BPP and q5 remains
+  highest quality/BPP without overweighting q0's shared-network gradients.
 - One quality is sampled on rank 0 per optimizer step and broadcast to every
   DDP rank. All accumulation micro-batches for that step reuse it.
-- The complete LIC initializes randomly and both scale tables initialize to
-  ones. At step 0 all six qualities reproduce each other; there is no legacy
+- The complete LIC initializes randomly and both endpoint pairs initialize to
+  ones. At step 0 all six qualities reproduce each other, then every sampled
+  quality updates the shared endpoints through interpolation; there is no legacy
   LIC or M0 checkpoint dependency.
 - The hyperprior, context model, Gaussian conditional, and CDF architecture are
   shared. The quality-specific `q_e/q_d` change the features presented to those
   shared components; `w_e/w_d` then adapt quantization to the decoded content.
-- Checkpoint schema 6 records
-  `variable_rate_mechanism=dcvc_fm_qe_qd_we_wd_v1`. Earlier incomplete LIC
+- Checkpoint schema 7 records
+  `variable_rate_mechanism=dcvc_fm_endpoint_interp_qe_qd_we_wd_v2`. Earlier
+  independent-table or incomplete LIC
   checkpoints are rejected and cannot be silently resumed or handed to Plain.
 - The packet header carries format version and quality index. The header bytes
   are included in real BPP.
-- Stage 2 loads and freezes the V2 LIC, loads frozen pretrained SANA VAE and
+- Stage 2 loads and freezes the V3 LIC, loads frozen pretrained SANA VAE and
   DiT backbones, and trains new DiT LoRA parameters plus the fixed-condition
   text projection. VAE LoRA is disabled.
 
@@ -108,5 +125,5 @@ key names.
 Local checks cover packet round-trip, invalid quality rejection, source/config
 contracts, Python compilation, and structural freeze/sampling rules. The server
 must additionally verify all six real rANS round-trips, strict real-BPP
-ordering, DDP quality agreement, and byte-identical V2/P0 bitstreams on fixed
+ordering, DDP quality agreement, and byte-identical V3/P0 bitstreams on fixed
 image IDs.

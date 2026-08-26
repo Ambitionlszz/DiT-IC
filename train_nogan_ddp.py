@@ -32,7 +32,7 @@ from config_compat import normalize_pure_sana_config
 
 
 MULTIRATE_CHECKPOINT_SCHEMA_VERSION = 3
-VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"
+VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
 
 
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
@@ -1100,7 +1100,7 @@ if __name__ == "__main__":
         '--codec_path',
         type=str,
         default=None,
-        help='Accepted V2 LIC checkpoint used to initialize multi-rate Plain.',
+        help='Accepted V3 LIC checkpoint used to initialize multi-rate Plain.',
     )
     parser.add_argument('--global_batch_size', type=int, default=None)
     parser.add_argument('--per_gpu_batch_size', type=int, default=None)

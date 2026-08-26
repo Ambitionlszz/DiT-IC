@@ -225,13 +225,14 @@ class Codec(nn.Module):
                 )
             if checkpoint_stage == "variable_quality_codec":
                 if (
-                    int(checkpoint.get("schema_version", 0)) != 6
+                    int(checkpoint.get("schema_version", 0)) != 7
                     or checkpoint.get("variable_rate_mechanism")
-                    != "dcvc_fm_qe_qd_we_wd_v1"
+                    != "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
                 ):
                     raise ValueError(
-                        "multi-rate Plain requires a schema-version 6 LIC "
-                        "checkpoint with complete q_e/q_d and w_e/w_d control"
+                        "multi-rate Plain requires a schema-version 7 LIC "
+                        "checkpoint with endpoint-interpolated q_e/q_d and "
+                        "complete w_e/w_d control"
                     )
                 global_step = int(checkpoint.get("global_step", -1))
                 phase_a_steps = int(checkpoint.get("phase_a_steps", -1))
@@ -243,7 +244,7 @@ class Codec(nn.Module):
             elif (
                 int(checkpoint.get("schema_version", 0)) != 3
                 or checkpoint.get("variable_rate_mechanism")
-                != "dcvc_fm_qe_qd_we_wd_v1"
+                != "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
             ):
                 raise ValueError(
                     "multi-rate Plain requires a schema-version 3 P0 checkpoint "
@@ -259,7 +260,7 @@ class Codec(nn.Module):
             self.codec.load_state_dict(state["state_dict_codec"], strict=True)
             self.codec.update()
             print(
-                "[Pure SANA] Loaded frozen V2 LIC; keeping fresh DiT LoRA "
+                "[Pure SANA] Loaded frozen V3 LIC; keeping fresh DiT LoRA "
                 "and text projection initialization"
             )
             return

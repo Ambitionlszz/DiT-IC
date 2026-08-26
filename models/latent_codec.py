@@ -139,7 +139,7 @@ class UpsampleConvTranspose(nn.Module):
 
 
 class QualityController(nn.Module):
-    """DCVC-FM-style independent encoder/decoder quality scale tables.
+    """DCVC-FM-style encoder/decoder endpoint scale interpolation.
 
     Adapted from the official Microsoft DCVC image-model quality tables at
     commit 819c219b24db34310bbd15c51a720aaaf5eb2e7d (MIT License).
@@ -154,11 +154,11 @@ class QualityController(nn.Module):
                 f"num_levels must be {QUALITY_LEVELS}, got {num_levels}"
             )
         self.num_levels = num_levels
-        self.encoder_scale_table = nn.Parameter(
-            torch.ones(num_levels, encoder_channels, 1, 1)
+        self.encoder_scale_endpoints = nn.Parameter(
+            torch.ones(2, encoder_channels, 1, 1)
         )
-        self.decoder_scale_table = nn.Parameter(
-            torch.ones(num_levels, decoder_channels, 1, 1)
+        self.decoder_scale_endpoints = nn.Parameter(
+            torch.ones(2, decoder_channels, 1, 1)
         )
 
     def validate_quality_index(self, quality_index):
@@ -173,7 +173,7 @@ class QualityController(nn.Module):
             return torch.tensor(
                 [quality_index],
                 dtype=torch.long,
-                device=self.encoder_scale_table.device,
+                device=self.encoder_scale_endpoints.device,
             )
         if not isinstance(quality_index, torch.Tensor):
             raise TypeError("quality_index must be an integer or integer tensor")
@@ -188,7 +188,7 @@ class QualityController(nn.Module):
         ):
             raise TypeError("quality_index tensor must use an integer dtype")
         index = quality_index.reshape(-1).to(
-            device=self.encoder_scale_table.device,
+            device=self.encoder_scale_endpoints.device,
             dtype=torch.long,
         )
         if index.numel() == 0:
@@ -199,13 +199,49 @@ class QualityController(nn.Module):
             )
         return index
 
-    def encoder_scale(self, quality_index):
+    def _interpolate(self, endpoints, quality_index):
         index = self.validate_quality_index(quality_index)
-        return torch.index_select(self.encoder_scale_table, 0, index)
+        alpha = index.to(dtype=endpoints.dtype).view(-1, 1, 1, 1)
+        alpha = alpha / float(self.num_levels - 1)
+        minimum = endpoints[0:1].clamp_min(1e-6)
+        maximum = endpoints[1:2].clamp_min(1e-6)
+        return torch.exp(
+            torch.log(minimum)
+            + alpha * (torch.log(maximum) - torch.log(minimum))
+        )
+
+    def encoder_scale(self, quality_index):
+        return self._interpolate(
+            self.encoder_scale_endpoints,
+            quality_index,
+        )
 
     def decoder_scale(self, quality_index):
-        index = self.validate_quality_index(quality_index)
-        return torch.index_select(self.decoder_scale_table, 0, index)
+        return self._interpolate(
+            self.decoder_scale_endpoints,
+            quality_index,
+        )
+
+    @torch.no_grad()
+    def diagnostics(self):
+        encoder = torch.cat(
+            [self.encoder_scale(index) for index in range(self.num_levels)],
+            dim=0,
+        )
+        decoder = torch.cat(
+            [self.decoder_scale(index) for index in range(self.num_levels)],
+            dim=0,
+        )
+        return {
+            "encoder_mean": encoder.mean(dim=(1, 2, 3)).cpu().tolist(),
+            "decoder_mean": decoder.mean(dim=(1, 2, 3)).cpu().tolist(),
+            "encoder_endpoint_min": float(
+                self.encoder_scale_endpoints.min().detach().cpu()
+            ),
+            "decoder_endpoint_min": float(
+                self.decoder_scale_endpoints.min().detach().cpu()
+            ),
+        }
 
 
 class AnalysisTransform(nn.Module):

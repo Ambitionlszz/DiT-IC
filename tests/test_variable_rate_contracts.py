@@ -72,6 +72,13 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("class QualityController", source)
         self.assertIn("self.quality_controller.encoder_scale", source)
         self.assertIn("self.quality_controller.decoder_scale", source)
+        self.assertIn("self.encoder_scale_endpoints", source)
+        self.assertIn("self.decoder_scale_endpoints", source)
+        self.assertIn("def _interpolate(self, endpoints, quality_index)", source)
+        self.assertIn("torch.log(minimum)", source)
+        self.assertIn("torch.log(maximum) - torch.log(minimum)", source)
+        self.assertNotIn("encoder_scale_table", source)
+        self.assertNotIn("decoder_scale_table", source)
 
     def test_latent_codec_uses_complete_dcvc_fm_quantization_control(self):
         source_path = ROOT / "models" / "latent_codec.py"
@@ -210,6 +217,8 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertNotIn("image_mse_weight", config)
         self.assertEqual(pilot.count("steps: 2500"), 2)
         self.assertEqual(main.count("steps: 50000"), 2)
+        self.assertIn("exp_name: variable_rate_lic_v3_pilot", pilot)
+        self.assertIn("exp_name: variable_rate_lic_v3_main", main)
 
         smoke = (ROOT / "configs" / "variable_rate_lic_smoke.yaml").read_text(
             encoding="utf-8"
@@ -219,6 +228,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("per_gpu_batch_size: 8", smoke)
         self.assertIn("codec_initialization: scratch", smoke)
         self.assertNotIn("source_checkpoint", smoke)
+        self.assertIn("exp_name: variable_rate_lic_v3_smoke", smoke)
 
         plain_smoke = (
             ROOT / "configs" / "multirate_plain_dit_smoke.yaml"
@@ -233,8 +243,14 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         self.assertIn('phase_config["lambda_values"]', training_source)
         self.assertNotIn("log_interpolated_lambda", training_source)
-        self.assertIn("loss = distortion + current_lambda * rate", training_source)
-        self.assertNotIn("loss = rate + current_lambda * distortion", training_source)
+        self.assertIn(
+            "loss = rate_distortion_loss(distortion, rate, current_lambda)",
+            training_source,
+        )
+        self.assertIn(
+            "return rate + distortion / rate_lambda",
+            training_source,
+        )
 
     def test_main_can_require_an_explicit_calibration_override(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
@@ -276,7 +292,7 @@ class VariableRateStructureTest(unittest.TestCase):
         phase_a_branch = train_source.index("if current_phase == PHASE_A:")
         phase_b_l1 = train_source.index("pixel_l1 = F.l1_loss", phase_a_branch)
         next_loss = train_source.index(
-            "loss = distortion + current_lambda", phase_b_l1
+            "loss = rate_distortion_loss(", phase_b_l1
         )
         phase_b_source = train_source[phase_b_l1:next_loss]
         self.assertIn('phase_config["pixel_l1_weight"]', phase_b_source)
@@ -293,9 +309,10 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('"phase_a_steps": phase_a_steps', source)
         self.assertIn('"phase_b_steps": phase_b_steps', source)
         self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
-        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 6', source)
+        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 7', source)
         self.assertIn(
-            'VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"', source
+            'VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"',
+            source,
         )
         self.assertIn('"variable_rate_mechanism": VARIABLE_RATE_MECHANISM', source)
         self.assertIn('"objective_contract": objective_contract(config)', source)
@@ -317,6 +334,27 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn(
             '"automatically starting phase B"', source
         )
+        self.assertIn(
+            '"loss_form": "rate_plus_distortion_divided_by_rate_lambda"',
+            source,
+        )
+        self.assertIn("validation_quality_scales=%s", source)
+        self.assertIn("validation_bpp_span=%.8f", source)
+
+    def test_joint_multirate_loss_preserves_small_lambda_high_quality(self):
+        source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        tree = ast.parse(source)
+        function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "rate_distortion_loss"
+        )
+        function_source = ast.get_source_segment(source, function)
+        self.assertIn("return rate + distortion / rate_lambda", function_source)
+        self.assertNotIn("rate_lambda * rate", function_source)
 
     def test_lic_dists_training_matches_baseline_minus_one_to_one_range(self):
         losses_source = (ROOT / "models" / "losses.py").read_text(
@@ -352,8 +390,10 @@ class VariableRateStructureTest(unittest.TestCase):
     def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
         self.assertIn('checkpoint_stage == "variable_quality_codec"', source)
-        self.assertIn('int(checkpoint.get("schema_version", 0)) != 6', source)
-        self.assertIn('!= "dcvc_fm_qe_qd_we_wd_v1"', source)
+        self.assertIn('int(checkpoint.get("schema_version", 0)) != 7', source)
+        self.assertIn(
+            '!= "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"', source
+        )
         self.assertIn("global_step <= phase_a_steps", source)
         self.assertIn(
             "multi-rate Plain requires a LIC checkpoint trained ", source
@@ -376,7 +416,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("ema_codec_sha256", source)
         self.assertIn("codec_sha256 != ema_codec_sha256", source)
         self.assertIn(
-            'VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"',
+            'VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"',
             source,
         )
         model_source = (ROOT / "models" / "DiT_IC.py").read_text(

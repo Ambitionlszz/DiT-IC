@@ -19,7 +19,7 @@ For an explicit override, prefix the command with values such as
 The experiment DAG is:
 
 ```text
-scratch two-phase LIC -> accepted V2 LIC -> multi-rate Plain P0
+scratch two-phase LIC -> accepted V3 LIC -> multi-rate Plain P0
                                            -> Self-Flow feasibility experiments
 ```
 
@@ -32,8 +32,9 @@ Stage 1 does not load a DiT-IC baseline checkpoint. It initializes the complete
 variable-rate LIC randomly, loads only the pretrained SANA VAE, and freezes the
 VAE encoder and decoder. It uses the complete DCVC-FM control path cited by
 FlowCodec: learned per-quality `q_e/q_d` feature gains plus hyperprior-predicted
-content-adaptive `w_e/w_d` quantization maps. All six quality gain tables start
-at one and separate during training under their different lambda values.
+content-adaptive `w_e/w_d` quantization maps. The low/high `q_e/q_d` endpoint
+vectors start at one; all six qualities are produced by log-domain exponential
+interpolation and separate under their different RD weights.
 
 Each LIC config must keep `model.codec_initialization: scratch` and must not
 define `model.source_checkpoint` or VAE LoRA.
@@ -42,13 +43,13 @@ define `model.source_checkpoint` or VAE LoRA.
 
 One `lic-pilot` or `lic-main` launch runs both phases without a manual restart:
 
-1. Phase A optimizes `latent_mse + lambda_lat(q) * R` and does not run the
+1. Phase A optimizes `R + latent_mse / lambda_rate(q)` and does not run the
    frozen VAE decoder.
 2. At the configured boundary the trainer resets the optimizer, scheduler,
    and EMA, writes a Phase-B-ready `phase_a_complete.pt`, and automatically
    enters Phase B.
 3. Phase B drops latent MSE and optimizes
-   `(pixel_l1 + lpips + dists) + lambda_img(q) * R` through the frozen VAE
+   `R + (pixel_l1 + lpips + dists) / lambda_rate(q)` through the frozen VAE
    decoder. Only the LIC is updated in both phases; there is no GAN loss.
 
 The LPIPS and DISTS training losses both receive images in `[-1, 1]`, matching
@@ -70,20 +71,22 @@ bash scripts/run_variable_rate_train.sh lic-smoke 0,1
 
 ## 2. Six-rate lambda table
 
-Both phases use the initial rate-weight table
+Both phases use the rate-lambda label table
 `[16.0, 8.0, 4.0, 2.0, 1.0, 0.5]`, mapped directly from q0 through q5.
 The two phases keep separate copies of the table because their distortion
-scales differ. This follows the baseline convention `D + lambda * R`: smaller
-lambda means weaker rate pressure, higher BPP, and higher quality. Therefore q0
-is the lowest-quality point and q5 is the highest-quality point.
+scales differ. For any single q, `D + lambda_rate * R` and
+`R + D / lambda_rate` have the same optimum. The normalized second form is
+required for joint multi-rate training so the shared codec is not dominated by
+the large-lambda low-rate points. Smaller `lambda_rate` still means higher BPP
+and higher quality; q0 is the lowest-quality point and q5 the highest.
 
-The continued Phase-B run measured monotonic likelihood BPP from about
-`0.0139` at q0 to `0.0504` at q5, while all distortion and perceptual metrics
-improved monotonically. This is the accepted operating range. Serialized rANS
-BPP remains the final measurement because likelihood BPP excludes container
-overhead.
+The target operating range remains approximately `0.01` BPP at q0 through
+`0.05` BPP at q5. Earlier numbers came from the superseded independent-table
+objective and are not accepted calibration evidence for schema 7. Serialized
+rANS BPP remains the final measurement because likelihood BPP excludes
+container overhead.
 
-## 3. V2 main
+## 3. V3 main
 
 ```bash
 bash scripts/run_variable_rate_train.sh lic-main 0 --calibration_confirmed
@@ -96,8 +99,8 @@ is diagnostic only.
 
 ## 4. P0 Multi-rate Plain DiT
 
-Pass the accepted V2 checkpoint with `--codec_path`. The config loads and
-freezes only the V2 LIC, loads the pretrained SANA VAE and DiT backbones, keeps
+Pass the accepted V3 checkpoint with `--codec_path`. The config loads and
+freezes only the V3 LIC, loads the pretrained SANA VAE and DiT backbones, keeps
 the VAE frozen without LoRA, and
 trains newly initialized DiT LoRA plus the fixed-condition text projection. One
 q is sampled on rank 0 per optimizer step and shared by all selected GPU ranks.
@@ -109,35 +112,35 @@ First run the 20-step handoff smoke:
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain-smoke 0,1 \
-  --codec_path /path/to/V2_variable_rate_checkpoint.pt
+  --codec_path /path/to/V3_variable_rate_checkpoint.pt
 ```
 
 Only after this succeeds, launch the full P0 run below.
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0 \
-  --codec_path /path/to/V2_variable_rate_checkpoint.pt
+  --codec_path /path/to/V3_variable_rate_checkpoint.pt
 # Or: bash scripts/run_variable_rate_train.sh plain 0,1 \
-#   --codec_path /path/to/V2_variable_rate_checkpoint.pt
+#   --codec_path /path/to/V3_variable_rate_checkpoint.pt
 ```
 
 Resume only from a P0 checkpoint:
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0 \
-  --codec_path /path/to/V2_variable_rate_checkpoint.pt \
+  --codec_path /path/to/V3_variable_rate_checkpoint.pt \
   --resume_checkpoint /path/to/P0/checkpoint.pt
 ```
 
 ## 5. Frozen-bitstream Gate B
 
-Use the direct LIC evaluation's V2 binary tree and run
+Use the direct LIC evaluation's V3 binary tree and run
 `scripts/run_variable_rate_eval.sh` on P0 using the same images. Then compare
 the corresponding binary trees:
 
 ```bash
 PYTHONPATH=. python scripts/compare_bitstreams.py \
-  /path/to/V2_eval/q0/bin \
+  /path/to/V3_eval/q0/bin \
   /path/to/P0_eval/q0/bin
 ```
 
