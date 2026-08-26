@@ -8,17 +8,17 @@ case "${stage}" in
   lic-smoke)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_smoke.yaml
-    default_per_gpu_batch_size=16
+    default_per_gpu_batch_size=8
     ;;
   lic-pilot)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_pilot.yaml
-    default_per_gpu_batch_size=16
+    default_per_gpu_batch_size=8
     ;;
   lic-main)
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_main.yaml
-    default_per_gpu_batch_size=16
+    default_per_gpu_batch_size=8
     ;;
   plain-smoke)
     trainer=train_nogan_ddp.py

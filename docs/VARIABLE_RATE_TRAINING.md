@@ -2,14 +2,13 @@
 
 All commands run from the repository root. Replace model/data paths in the
 YAML files before launching. The same launcher supports one or two GPUs.
-LIC uses batch size 16 per selected GPU; Plain DiT uses batch size 8 per GPU.
-Accumulation defaults to 1:
+Every selected GPU uses batch size 8. Accumulation defaults to 1:
 
 ```bash
-# One GPU LIC: per-GPU batch 16, global batch 16.
+# One GPU: per-GPU batch 8, global batch 8.
 bash scripts/run_variable_rate_train.sh lic-smoke 0
 
-# Two GPUs LIC: per-GPU batch 16, global batch 32.
+# Two GPUs: per-GPU batch 8, global batch 16.
 bash scripts/run_variable_rate_train.sh lic-smoke 0,1
 ```
 
@@ -72,19 +71,17 @@ bash scripts/run_variable_rate_train.sh lic-smoke 0,1
 ## 2. Six-rate lambda table
 
 Both phases use the initial rate-weight table
-`[16.0, 4.0, 1.0, 0.5, 0.125, 0.03125]`, mapped directly from q0 through q5.
+`[16.0, 8.0, 4.0, 2.0, 1.0, 0.5]`, mapped directly from q0 through q5.
 The two phases keep separate copies of the table because their distortion
 scales differ. This follows the baseline convention `D + lambda * R`: smaller
 lambda means weaker rate pressure, higher BPP, and higher quality. Therefore q0
 is the lowest-quality point and q5 is the highest-quality point.
 
-The failed run's q0 with `lambda=16` reached about `0.0115` likelihood BPP at
-4k steps, so the low-rate endpoint remains 16. The `0.5` point retains the
-user's observed end-to-end baseline anchor of roughly `0.04 bpp`; two smaller
-weights extend the high-rate side. The intended span is roughly `0.01-0.1 bpp`,
-but that interval is a target rather than a promise: Stage A latent MSE and
-Stage B image/perceptual losses have different scales from the end-to-end
-baseline. Only serialized rANS measurements can confirm the final range.
+The continued Phase-B run measured monotonic likelihood BPP from about
+`0.0139` at q0 to `0.0504` at q5, while all distortion and perceptual metrics
+improved monotonically. This is the accepted operating range. Serialized rANS
+BPP remains the final measurement because likelihood BPP excludes container
+overhead.
 
 ## 3. V2 main
 
