@@ -24,7 +24,12 @@ import time
 import gc
 from pathlib import Path
 
-from codec_packet import CodecPacket, read_codec_packet, write_codec_packet
+from codec_packet import (
+    PACKET_MAGIC,
+    CodecPacket,
+    read_codec_packet,
+    write_codec_packet,
+)
 from eval.compress_utils import *
 from eval.testing_utils import parse_args_testing
 from eval._update_patch_fid import update_patch_fid
@@ -248,10 +253,11 @@ def compress_one_image(
 def decompress_one_image(net, bin_path, ori_h, ori_w, img_name):
     output = os.path.join(bin_path, img_name)
     with Path(output).open("rb") as f:
-        try:
+        magic = f.read(len(PACKET_MAGIC))
+        f.seek(0)
+        if magic == PACKET_MAGIC:
             packet = read_codec_packet(f)
-        except ValueError:
-            f.seek(0)
+        else:
             packet = None
             strings, shape = read_body(f)
     with torch.no_grad():

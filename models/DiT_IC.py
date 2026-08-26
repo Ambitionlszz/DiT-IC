@@ -240,6 +240,15 @@ class Codec(nn.Module):
                         "multi-rate Plain requires a LIC checkpoint trained "
                         "past the Phase A boundary"
                     )
+            elif (
+                int(checkpoint.get("schema_version", 0)) != 3
+                or checkpoint.get("variable_rate_mechanism")
+                != "dcvc_fm_qe_qd_we_wd_v1"
+            ):
+                raise ValueError(
+                    "multi-rate Plain requires a schema-version 3 P0 checkpoint "
+                    "derived from the complete q_e/q_d and w_e/w_d LIC"
+                )
         state_key = "ema" if use_ema else "model"
         if state_key not in checkpoint:
             raise KeyError(f"Checkpoint does not contain {state_key!r}: {codec_path}")
@@ -283,7 +292,7 @@ class Codec(nn.Module):
 
         codec_result = self.codec.load_state_dict(
             state["state_dict_codec"],
-            strict=False,
+            strict=checkpoint_stage == "multirate_reconstruction",
         )
         active_codec_missing = [
             key
@@ -368,14 +377,30 @@ class Codec(nn.Module):
                 "multi-rate Plain training requires a frozen VAE; trainable: "
                 + ", ".join(trainable_vae[:5])
             )
-        if not self.train_text_projection:
-            trainable_text = [
+        if self._init_for_training:
+            if not self.train_text_projection:
+                raise RuntimeError(
+                    "multi-rate Plain training requires a trainable text projection"
+                )
+            frozen_text = [
                 name for name, parameter in self.text_proj.named_parameters()
+                if not parameter.requires_grad
+            ]
+            if frozen_text:
+                raise RuntimeError(
+                    "text projection parameters unexpectedly frozen: "
+                    + ", ".join(frozen_text)
+                )
+            trainable_dit = [
+                name for name, parameter in self.DiT.named_parameters()
                 if parameter.requires_grad
             ]
-            if trainable_text:
+            if not trainable_dit or any(
+                "lora" not in name.lower() for name in trainable_dit
+            ):
                 raise RuntimeError(
-                    "train_text_projection=False but text projection remains trainable"
+                    "multi-rate Plain training requires only DiT LoRA parameters "
+                    "to be trainable"
                 )
 
     def build_DiT(self, dit_path, device="cuda", use_merge=False):

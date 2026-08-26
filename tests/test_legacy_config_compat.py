@@ -153,7 +153,7 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
             "model": {
                 "params": {
                     "freeze_codec": True,
-                    "train_text_projection": False,
+                    "train_text_projection": True,
                     "vae_params": {
                         "vae_lora": True,
                         "train_vae_lora": False,
@@ -175,7 +175,7 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
             "model": {
                 "params": {
                     "freeze_codec": True,
-                    "train_text_projection": False,
+                    "train_text_projection": True,
                     "vae_params": {"vae_lora": True},
                     "loss_params": {"rate_weight": 0.0},
                 }
@@ -184,6 +184,25 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
             "train": {"rate_weight": 0.0},
         }
         with self.assertRaisesRegex(ValueError, "train_vae_lora=False"):
+            normalize_pure_sana_config(config)
+
+    def test_multirate_plain_requires_trainable_text_projection(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": True,
+                    "train_text_projection": False,
+                    "vae_params": {
+                        "vae_lora": False,
+                        "train_vae_lora": False,
+                    },
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {"enabled": True, "num_levels": 6},
+            "train": {"rate_weight": 0.0},
+        }
+        with self.assertRaisesRegex(ValueError, "train_text_projection=True"):
             normalize_pure_sana_config(config)
 
 

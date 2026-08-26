@@ -31,6 +31,10 @@ from datasets.image import ImageFolder
 from config_compat import normalize_pure_sana_config
 
 
+MULTIRATE_CHECKPOINT_SCHEMA_VERSION = 3
+VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"
+
+
 # Bump when entropy-gradient ordering, scaling, or clipping semantics change.
 # Version 4 follows the official DiT-IC NoGAN order: main backward/clip/step,
 # then recompute and update the entropy-bottleneck quantiles.
@@ -330,7 +334,12 @@ def do_train(rank, local_rank, world_size, train_config):
     
     # Prepare models for training:
     if rank==0:
-        update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)  # Ensure EMA is initialized with  weights
+        update_ema(
+            ema,
+            model.module.get_state_dicts_for_save(),
+            decay=0.999,
+            exact_parts=("state_dict_codec",) if multirate_plain else (),
+        )
     model.train()
     model.module.assert_frozen_codec_contract()
     model.module.assert_reconstruction_training_contract()
@@ -462,7 +471,9 @@ def do_train(rank, local_rank, world_size, train_config):
 
     def make_checkpoint():
         checkpoint = {
-            "schema_version": 2,
+            "schema_version": (
+                MULTIRATE_CHECKPOINT_SCHEMA_VERSION if multirate_plain else 2
+            ),
             "stage": (
                 "multirate_reconstruction" if multirate_plain else "baseline"
             ),
@@ -493,10 +504,20 @@ def do_train(rank, local_rank, world_size, train_config):
             checkpoint["quality_generator_state"] = quality_generator.get_state()
             checkpoint["quality_counts"] = quality_counts.clone()
             codec_state = checkpoint["model"]["state_dict_codec"]
-            checkpoint["codec_sha256"] = state_dict_sha256(codec_state)
+            codec_sha256 = state_dict_sha256(codec_state)
+            ema_codec_sha256 = state_dict_sha256(
+                checkpoint["ema"]["state_dict_codec"]
+            )
+            if codec_sha256 != ema_codec_sha256:
+                raise RuntimeError(
+                    "frozen codec drifted between live and EMA checkpoint state"
+                )
+            checkpoint["codec_sha256"] = codec_sha256
+            checkpoint["ema_codec_sha256"] = ema_codec_sha256
             checkpoint["source_checkpoint_sha256"] = source_checkpoint_sha256
             checkpoint["git_commit"] = current_git_commit()
             checkpoint["bitstream_format_version"] = 1
+            checkpoint["variable_rate_mechanism"] = VARIABLE_RATE_MECHANISM
             checkpoint["trainable_parameter_names"] = sorted(
                 name
                 for name, parameter in model.module.named_parameters()
@@ -646,7 +667,14 @@ def do_train(rank, local_rank, world_size, train_config):
 
                 # EMA update
                 if rank == 0:
-                    update_ema(ema, model.module.get_state_dicts_for_save(), decay=0.999)
+                    update_ema(
+                        ema,
+                        model.module.get_state_dicts_for_save(),
+                        decay=0.999,
+                        exact_parts=("state_dict_codec",)
+                        if multirate_plain
+                        else (),
+                    )
 
                 # Zero all gradients for next accumulation cycle
                 opt.zero_grad(set_to_none=True)
@@ -946,13 +974,14 @@ class AverageMeter:
 #                     ema_tensor.copy_(model_tensor)
 
 @torch.no_grad()
-def update_ema(ema_model, model, decay=0.9999):
+def update_ema(ema_model, model, decay=0.9999, exact_parts=()):
     """
     Step the EMA model towards the current model.
     """
     for part_key in ema_model.keys():
         ema_part = ema_model[part_key]
         model_part = model.get(part_key, {})
+        copy_exactly = part_key in exact_parts
 
         for param_key in ema_part.keys():
             if param_key in model_part:
@@ -965,7 +994,7 @@ def update_ema(ema_model, model, decay=0.9999):
                     continue
 
                 # 正常 EMA 更新
-                if torch.is_floating_point(ema_tensor):
+                if torch.is_floating_point(ema_tensor) and not copy_exactly:
                     ema_tensor.mul_(decay).add_(model_tensor, alpha=1 - decay)
                 else:
                     ema_tensor.copy_(model_tensor)
@@ -1067,6 +1096,12 @@ if __name__ == "__main__":
         default=None,
         help='Exact training checkpoint to resume; also enables train.resume.',
     )
+    parser.add_argument(
+        '--codec_path',
+        type=str,
+        default=None,
+        help='Accepted V2 LIC checkpoint used to initialize multi-rate Plain.',
+    )
     parser.add_argument('--global_batch_size', type=int, default=None)
     parser.add_argument('--per_gpu_batch_size', type=int, default=None)
     parser.add_argument('--accumulation_steps', type=int, default=None)
@@ -1080,6 +1115,8 @@ if __name__ == "__main__":
     if args.resume_checkpoint is not None:
         train_config['train']['resume'] = True
         train_config['train']['resume_checkpoint'] = args.resume_checkpoint
+    if args.codec_path is not None:
+        train_config['model']['params']['codec_path'] = args.codec_path
     if args.global_batch_size is not None and args.per_gpu_batch_size is not None:
         raise ValueError(
             "use only one of --global_batch_size and --per_gpu_batch_size"

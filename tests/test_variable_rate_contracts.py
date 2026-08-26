@@ -31,6 +31,19 @@ class VariableRatePacketTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "quality_index"):
             CodecPacket(strings=[[b"y"], [b"z"]], shape=(1, 1), quality_index=6)
 
+    def test_inference_only_falls_back_when_packet_magic_is_absent(self):
+        source = (ROOT / "compress.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "decompress_one_image"
+        )
+        function_source = ast.get_source_segment(source, function)
+        self.assertIn("magic == PACKET_MAGIC", function_source)
+        self.assertNotIn("except ValueError", function_source)
+
 
 class VariableRateStructureTest(unittest.TestCase):
     def test_latent_codec_requires_quality_for_variable_rate_paths(self):
@@ -162,6 +175,7 @@ class VariableRateStructureTest(unittest.TestCase):
         training_source = (ROOT / "train_nogan_ddp.py").read_text(
             encoding="utf-8"
         )
+        self.assertIn("'--codec_path'", training_source)
         self.assertIn('backend = "nccl"', training_source)
         self.assertNotIn(
             'torch.cuda.device_count() > 1 else "gloo"', training_source
@@ -355,6 +369,27 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("finally:", source)
         self.assertIn("model.DiT.load_state_dict(live_dit", source)
         self.assertIn("model.text_proj.load_state_dict(live_text_proj", source)
+
+    def test_multirate_plain_keeps_frozen_codec_exact_in_ema(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        self.assertIn('exact_parts=("state_dict_codec",)', source)
+        self.assertIn("ema_codec_sha256", source)
+        self.assertIn("codec_sha256 != ema_codec_sha256", source)
+        self.assertIn(
+            'VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"',
+            source,
+        )
+        model_source = (ROOT / "models" / "DiT_IC.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'int(checkpoint.get("schema_version", 0)) != 3',
+            model_source,
+        )
+        self.assertIn(
+            'strict=checkpoint_stage == "multirate_reconstruction"',
+            model_source,
+        )
 
 
 if __name__ == "__main__":

@@ -96,33 +96,36 @@ is diagnostic only.
 
 ## 4. P0 Multi-rate Plain DiT
 
-Set `model.params.codec_path` in `configs/multirate_plain_dit.yaml` to the
-accepted V2 checkpoint. The config loads and freezes only the V2 LIC, loads the
-pretrained SANA VAE and DiT backbones, keeps the VAE frozen without LoRA, and
+Pass the accepted V2 checkpoint with `--codec_path`. The config loads and
+freezes only the V2 LIC, loads the pretrained SANA VAE and DiT backbones, keeps
+the VAE frozen without LoRA, and
 trains newly initialized DiT LoRA plus the fixed-condition text projection. One
 q is sampled on rank 0 per optimizer step and shared by all selected GPU ranks.
 Strict loading rejects `best_phase_a_ckpt.pt` and
 `phase_a_complete.pt`; use a checkpoint that has completed at least one Phase B
 step, normally `best_ckpt.pt`.
 
-First set `model.params.codec_path` in both Plain configs to the accepted V2
-checkpoint and run the 20-step handoff smoke:
+First run the 20-step handoff smoke:
 
 ```bash
-bash scripts/run_variable_rate_train.sh plain-smoke 0,1
+bash scripts/run_variable_rate_train.sh plain-smoke 0,1 \
+  --codec_path /path/to/V2_variable_rate_checkpoint.pt
 ```
 
 Only after this succeeds, launch the full P0 run below.
 
 ```bash
-bash scripts/run_variable_rate_train.sh plain 0
-# Or: bash scripts/run_variable_rate_train.sh plain 0,1
+bash scripts/run_variable_rate_train.sh plain 0 \
+  --codec_path /path/to/V2_variable_rate_checkpoint.pt
+# Or: bash scripts/run_variable_rate_train.sh plain 0,1 \
+#   --codec_path /path/to/V2_variable_rate_checkpoint.pt
 ```
 
 Resume only from a P0 checkpoint:
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0 \
+  --codec_path /path/to/V2_variable_rate_checkpoint.pt \
   --resume_checkpoint /path/to/P0/checkpoint.pt
 ```
 

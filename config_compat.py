@@ -121,9 +121,9 @@ def normalize_pure_sana_config(config):
                     "multi-rate Plain training requires "
                     "vae_params.train_vae_lora=False"
                 )
-            if params.get("train_text_projection", True):
+            if not params.get("train_text_projection", True):
                 raise ValueError(
-                    "multi-rate Plain training requires train_text_projection=False"
+                    "multi-rate Plain training requires train_text_projection=True"
                 )
             if float(rate_weight) != 0.0:
                 raise ValueError(
