@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "stage": "multirate_reconstruction",
-  "source_checkpoint": "V1_LIC_REQUIRED_AT_LAUNCH",
+  "source_checkpoint": "V2_LIC_REQUIRED_AT_LAUNCH",
   "source_config": "configs/multirate_plain_dit.yaml",
   "dit_backbone_initialization": "pretrained_sana",
   "dit_lora_initialization": "fresh",

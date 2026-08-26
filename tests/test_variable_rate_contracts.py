@@ -60,6 +60,45 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("self.quality_controller.encoder_scale", source)
         self.assertIn("self.quality_controller.decoder_scale", source)
 
+    def test_latent_codec_uses_complete_dcvc_fm_quantization_control(self):
+        source_path = ROOT / "models" / "latent_codec.py"
+        source = source_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        codec_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "LatentCodec"
+        )
+        methods = {
+            node.name: ast.get_source_segment(source, node)
+            for node in codec_class.body
+            if isinstance(node, ast.FunctionDef)
+        }
+
+        prior_source = methods["_first_prior_parameters"]
+        self.assertIn("M * 2 + (2 if self.variable_rate else 0)", source)
+        self.assertIn("params[:, :2, :, :]", prior_source)
+        self.assertIn("torch.sigmoid(quantization_control) * 1.5 + 0.5", prior_source)
+        self.assertIn(
+            "scales, means = params[:, 2:, :, :].chunk(2, 1)", prior_source
+        )
+
+        forward_source = methods["forward"]
+        self.assertIn("y_quant = y * w_e", forward_source)
+        self.assertEqual(forward_source.count("self.forward_with_mask(y_quant"), 4)
+        self.assertIn("y_hat = y_hat * w_d", forward_source)
+
+        compress_source = methods["compress"]
+        self.assertIn("y_quant = y * w_e", compress_source)
+        self.assertEqual(
+            compress_source.count("self.compress_group_with_mask("), 4
+        )
+        self.assertEqual(compress_source.count(", y_quant,"), 4)
+
+        decompress_source = methods["decompress"]
+        self.assertIn("_, w_d, means_0_supp", decompress_source)
+        self.assertIn("y_hat = y_hat * w_d", decompress_source)
+
     def test_multirate_plain_samples_one_ddp_quality_per_step(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -142,7 +181,7 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertIn("dists_weight: 1.0", config)
             self.assertEqual(
                 config.count(
-                    "lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]"
+                    "lambda_values: [16.0, 4.0, 1.0, 0.5, 0.125, 0.03125]"
                 ),
                 2,
             )
@@ -176,6 +215,18 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertNotIn("log_interpolated_lambda", training_source)
         self.assertIn("loss = distortion + current_lambda * rate", training_source)
         self.assertNotIn("loss = rate + current_lambda * distortion", training_source)
+
+    def test_main_can_require_an_explicit_calibration_override(self):
+        source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'parser.add_argument("--calibration_confirmed", action="store_true")',
+            source,
+        )
+        self.assertIn(
+            "calibration_confirmed=args.calibration_confirmed", source
+        )
 
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"
@@ -222,7 +273,11 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('"phase_a_steps": phase_a_steps', source)
         self.assertIn('"phase_b_steps": phase_b_steps', source)
         self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
-        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 5', source)
+        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 6', source)
+        self.assertIn(
+            'VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"', source
+        )
+        self.assertIn('"variable_rate_mechanism": VARIABLE_RATE_MECHANISM', source)
         self.assertIn('"objective_contract": objective_contract(config)', source)
         self.assertIn('"dists_input_range": "minus_one_to_one"', source)
         self.assertIn(
@@ -268,12 +323,17 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("stored_packet = read_codec_packet(file)", source)
         self.assertIn("stage.codec.decompress(stored_packet)", source)
         self.assertIn("stage.vae.decode(", source)
+        self.assertIn(
+            "load_config(args.config, calibration_confirmed=True)", source
+        )
         self.assertNotIn("models.DiT_IC", source)
         self.assertNotIn("source_checkpoint", source)
 
     def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
         self.assertIn('checkpoint_stage == "variable_quality_codec"', source)
+        self.assertIn('int(checkpoint.get("schema_version", 0)) != 6', source)
+        self.assertIn('!= "dcvc_fm_qe_qd_we_wd_v1"', source)
         self.assertIn("global_step <= phase_a_steps", source)
         self.assertIn(
             "multi-rate Plain requires a LIC checkpoint trained ", source

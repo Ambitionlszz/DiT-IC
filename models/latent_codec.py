@@ -384,7 +384,11 @@ class LatentCodec(nn.Module):
         context_dim = M * 2
         self.adapter_in = nn.ModuleList(Adapter(in_ch=M, out_ch=context_dim) for i in range(4))
         self.g_c = SpatialContext(in_ch=context_dim)
-        self.adapter_out = nn.ModuleList(Adapter(in_ch=context_dim, out_ch=M * 2) for i in range(4))
+        first_prior_channels = M * 2 + (2 if self.variable_rate else 0)
+        self.adapter_out = nn.ModuleList(
+            [Adapter(in_ch=context_dim, out_ch=first_prior_channels)]
+            + [Adapter(in_ch=context_dim, out_ch=M * 2) for _ in range(3)]
+        )
         self.LRP = nn.ModuleList(LRP(in_ch=M * 2, out_ch=M) for i in range(4))
 
         self.entropy_bottleneck = EntropyBottleneck(channel // 2)
@@ -537,6 +541,20 @@ class LatentCodec(nn.Module):
             )
         return scales
 
+    def _first_prior_parameters(self, base):
+        """Split the first entropy prior, including DCVC-FM w_e/w_d maps."""
+        params = self.adapter_out[0](self.g_c(self.adapter_in[0](base)))
+        if not self.variable_rate:
+            means, scales = params.chunk(2, 1)
+            return None, None, means, scales
+
+        quantization_control = params[:, :2, :, :]
+        w_e, w_d = (
+            torch.sigmoid(quantization_control) * 1.5 + 0.5
+        ).chunk(2, 1)
+        scales, means = params[:, 2:, :, :].chunk(2, 1)
+        return w_e, w_d, means, scales
+
     def forward(self, latent, quality_index=None):
         encoder_scale, decoder_scale = self._quality_scales(
             quality_index, batch_size=latent.shape[0]
@@ -554,34 +572,37 @@ class LatentCodec(nn.Module):
         mask_0, mask_1, mask_2, mask_3 = self.get_mask_four_parts(B, C, H, W, device=y.device)
         
         base = self.h_s(z_hat)
-        means_0_supp, scales_0_supp = self.adapter_out[0](self.g_c(self.adapter_in[0](base))).chunk(2, 1)
-        y_hat_0, y_likelihoods_0 = self.forward_with_mask(y, scales_0_supp, means_0_supp, mask_0)
+        w_e, w_d, means_0_supp, scales_0_supp = self._first_prior_parameters(base)
+        y_quant = y * w_e if w_e is not None else y
+        y_hat_0, y_likelihoods_0 = self.forward_with_mask(y_quant, scales_0_supp, means_0_supp, mask_0)
         lrp = self.LRP[0](torch.cat([y_hat_0, base], dim=1)) * mask_0
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_0 = y_hat_0 + lrp
         
         base = base * (1 - mask_0) + y_hat_0
         means_1_supp, scales_1_supp = self.adapter_out[1](self.g_c(self.adapter_in[1](base))).chunk(2, 1)
-        y_hat_1, y_likelihoods_1 = self.forward_with_mask(y, scales_1_supp, means_1_supp, mask_1)
+        y_hat_1, y_likelihoods_1 = self.forward_with_mask(y_quant, scales_1_supp, means_1_supp, mask_1)
         lrp = self.LRP[1](torch.cat([y_hat_1, base], dim=1)) * mask_1
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_1 = y_hat_1 + lrp
 
         base = base * (1 - mask_1) + y_hat_1
         means_2_supp, scales_2_supp = self.adapter_out[2](self.g_c(self.adapter_in[2](base))).chunk(2, 1)
-        y_hat_2, y_likelihoods_2 = self.forward_with_mask(y, scales_2_supp, means_2_supp, mask_2)
+        y_hat_2, y_likelihoods_2 = self.forward_with_mask(y_quant, scales_2_supp, means_2_supp, mask_2)
         lrp = self.LRP[2](torch.cat([y_hat_2, base], dim=1)) * mask_2
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_2 = y_hat_2 + lrp
         
         base = base * (1 - mask_2) + y_hat_2
         means_3_supp, scales_3_supp = self.adapter_out[3](self.g_c(self.adapter_in[3](base))).chunk(2, 1)
-        y_hat_3, y_likelihoods_3 = self.forward_with_mask(y, scales_3_supp, means_3_supp, mask_3)
+        y_hat_3, y_likelihoods_3 = self.forward_with_mask(y_quant, scales_3_supp, means_3_supp, mask_3)
         lrp = self.LRP[3](torch.cat([y_hat_3, base], dim=1)) * mask_3
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_3 = y_hat_3 + lrp
         
         y_hat = y_hat_0 + y_hat_1 + y_hat_2 + y_hat_3
+        if w_d is not None:
+            y_hat = y_hat * w_d
         y_likelihoods = y_likelihoods_0 + y_likelihoods_1 + y_likelihoods_2 + y_likelihoods_3 
         # torch.backends.cudnn.deterministic = False
         
@@ -624,32 +645,37 @@ class LatentCodec(nn.Module):
         mask_0, mask_1, mask_2, mask_3 = self.get_mask_four_parts(B, C, H, W, device=y.device)
 
         base = self.h_s(z_hat)
-        means_0_supp, scales_0_supp = self.adapter_out[0](self.g_c(self.adapter_in[0](base))).chunk(2, 1)
-        y_hat_0 = self.compress_group_with_mask(self.gaussian_conditional, y, scales_0_supp, means_0_supp, mask_0, symbols_list, indexes_list)
+        w_e, w_d, means_0_supp, scales_0_supp = self._first_prior_parameters(base)
+        y_quant = y * w_e if w_e is not None else y
+        y_hat_0 = self.compress_group_with_mask(self.gaussian_conditional, y_quant, scales_0_supp, means_0_supp, mask_0, symbols_list, indexes_list)
         lrp = self.LRP[0](torch.cat([y_hat_0, base], dim=1)) * mask_0
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_0 = y_hat_0 + lrp
 
         base = base * (1 - mask_0) + y_hat_0
         means_1_supp, scales_1_supp = self.adapter_out[1](self.g_c(self.adapter_in[1](base))).chunk(2, 1)
-        y_hat_1 = self.compress_group_with_mask(self.gaussian_conditional, y, scales_1_supp, means_1_supp, mask_1, symbols_list, indexes_list)
+        y_hat_1 = self.compress_group_with_mask(self.gaussian_conditional, y_quant, scales_1_supp, means_1_supp, mask_1, symbols_list, indexes_list)
         lrp = self.LRP[1](torch.cat([y_hat_1, base], dim=1)) * mask_1
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_1 = y_hat_1 + lrp
 
         base = base * (1 - mask_1) + y_hat_1
         means_2_supp, scales_2_supp = self.adapter_out[2](self.g_c(self.adapter_in[2](base))).chunk(2, 1)
-        y_hat_2 = self.compress_group_with_mask(self.gaussian_conditional, y, scales_2_supp, means_2_supp, mask_2, symbols_list, indexes_list)
+        y_hat_2 = self.compress_group_with_mask(self.gaussian_conditional, y_quant, scales_2_supp, means_2_supp, mask_2, symbols_list, indexes_list)
         lrp = self.LRP[2](torch.cat([y_hat_2, base], dim=1)) * mask_2
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_2 = y_hat_2 + lrp
 
         base = base * (1 - mask_2) + y_hat_2
         means_3_supp, scales_3_supp = self.adapter_out[3](self.g_c(self.adapter_in[3](base))).chunk(2, 1)
-        y_hat_3 = self.compress_group_with_mask(self.gaussian_conditional, y, scales_3_supp, means_3_supp, mask_3, symbols_list, indexes_list)
+        y_hat_3 = self.compress_group_with_mask(self.gaussian_conditional, y_quant, scales_3_supp, means_3_supp, mask_3, symbols_list, indexes_list)
         lrp = self.LRP[3](torch.cat([y_hat_3, base], dim=1)) * mask_3
         lrp = 0.5 * torch.tanh(lrp)
         y_hat_3 = y_hat_3 + lrp
+
+        y_hat = y_hat_0 + y_hat_1 + y_hat_2 + y_hat_3
+        if w_d is not None:
+            y_hat = y_hat * w_d
 
         encoder.encode_with_indexes(symbols_list, indexes_list, cdf, cdf_lengths, offsets)
         y_string = encoder.flush()
@@ -700,7 +726,7 @@ class LatentCodec(nn.Module):
         mask_0, mask_1, mask_2, mask_3 = self.get_mask_four_parts(B, C * 2, H * 4, W * 4, device=z_hat.device)
 
         base = self.h_s(z_hat)
-        means_0_supp, scales_0_supp = self.adapter_out[0](self.g_c(self.adapter_in[0](base))).chunk(2, 1)
+        _, w_d, means_0_supp, scales_0_supp = self._first_prior_parameters(base)
         y_hat_0 = self.decompress_group_with_mask(self.gaussian_conditional, scales_0_supp, means_0_supp, mask_0, decoder, cdf, cdf_lengths, offsets)
         lrp = self.LRP[0](torch.cat([y_hat_0, base], dim=1)) * mask_0
         lrp = 0.5 * torch.tanh(lrp)
@@ -728,6 +754,8 @@ class LatentCodec(nn.Module):
         y_hat_3 = y_hat_3 + lrp
 
         y_hat = y_hat_0 + y_hat_1 + y_hat_2 + y_hat_3
+        if w_d is not None:
+            y_hat = y_hat * w_d
 
         torch.backends.cudnn.deterministic = False
 

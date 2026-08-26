@@ -164,7 +164,7 @@ def main():
         raise ValueError(f"no images found in {args.image_dir}")
 
     device = torch.device(f"cuda:{args.gpu}")
-    config = load_config(args.config)
+    config = load_config(args.config, calibration_confirmed=True)
     stage = load_stage(config, args.checkpoint, args.weights, device)
     metrics = {
         "ms_ssim": pyiqa.create_metric("ms_ssim").to(device).eval(),

@@ -36,18 +36,18 @@ quality_control:
 lic_train:
   phase_a:
     steps: 50000
-    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    lambda_values: [16.0, 4.0, 1.0, 0.5, 0.125, 0.03125]
     latent_mse_weight: 1.0
   phase_b:
     steps: 50000
-    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    lambda_values: [16.0, 4.0, 1.0, 0.5, 0.125, 0.03125]
     pixel_l1_weight: 1.0
     lpips_weight: 1.0
     dists_weight: 1.0
 
 train:
   output_dir: checkpoints
-  exp_name: variable_rate_lic_v1_main
+  exp_name: variable_rate_lic_v2_main
   per_gpu_batch_size: 8
   accumulation_steps: 1
   max_steps: 100000

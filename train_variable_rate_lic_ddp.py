@@ -36,16 +36,19 @@ from train_nogan_ddp import (
 )
 
 
-CHECKPOINT_SCHEMA_VERSION = 5
+CHECKPOINT_SCHEMA_VERSION = 6
 OBJECTIVE_VERSION = "distortion_plus_lambda_rate_v1"
+VARIABLE_RATE_MECHANISM = "dcvc_fm_qe_qd_we_wd_v1"
 STAGE_NAME = "variable_quality_codec"
 PHASE_A = "latent_rd"
 PHASE_B = "pixel_perceptual_rd"
 
 
-def load_config(path):
+def load_config(path, calibration_confirmed=False):
     with open(path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
+    if calibration_confirmed:
+        config.setdefault("quality_control", {})["calibration_confirmed"] = True
     quality = config.get("quality_control") or {}
     if int(quality.get("num_levels", 0)) != 6:
         raise ValueError("Stage 1 requires exactly 6 quality levels")
@@ -114,6 +117,7 @@ def objective_contract(config):
     phase_b = config["lic_train"]["phase_b"]
     return {
         "version": OBJECTIVE_VERSION,
+        "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
         "codec_initialization": "scratch",
         "phase_a": {
             "lambda_values": [float(value) for value in phase_a["lambda_values"]],
@@ -524,7 +528,7 @@ def train(rank, local_rank, world_size, config):
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
         if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(
-                "scratch two-phase LIC training requires a schema-version 5 "
+                "scratch two-phase LIC training requires a schema-version 6 "
                 "checkpoint"
             )
         if resume.get("objective_contract") != objective_contract(config):
@@ -590,6 +594,7 @@ def train(rank, local_rank, world_size, config):
             "objective_contract": objective_contract(config),
             "codec_sha256": state_dict_sha256(codec_state),
             "bitstream_format_version": 1,
+            "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
             "trainable_parameter_names": [
                 name
                 for name, parameter in model.module.codec.named_parameters()
@@ -811,8 +816,12 @@ def main():
     parser.add_argument("--global_batch_size", type=int, default=None)
     parser.add_argument("--per_gpu_batch_size", type=int, default=None)
     parser.add_argument("--accumulation_steps", type=int, default=None)
+    parser.add_argument("--calibration_confirmed", action="store_true")
     args = parser.parse_args()
-    config = load_config(args.config)
+    config = load_config(
+        args.config,
+        calibration_confirmed=args.calibration_confirmed,
+    )
     if args.resume_checkpoint is not None:
         config["train"]["resume"] = True
         config["train"]["resume_checkpoint"] = args.resume_checkpoint
