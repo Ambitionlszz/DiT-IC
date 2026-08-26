@@ -16,9 +16,8 @@ from train_variable_rate_lic_ddp import (
     CHECKPOINT_SCHEMA_VERSION,
     STAGE_NAME,
     VariableRateLICStage,
-    file_sha256,
+    initialization_contract,
     load_config,
-    load_source_checkpoint,
     objective_contract,
 )
 
@@ -27,7 +26,6 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 
 def load_stage(config, checkpoint_path, weights, device):
-    source_path = config["model"]["source_checkpoint"]
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if checkpoint.get("stage") != STAGE_NAME:
         raise ValueError(f"checkpoint stage is not {STAGE_NAME!r}")
@@ -37,13 +35,10 @@ def load_stage(config, checkpoint_path, weights, device):
         )
     if checkpoint.get("objective_contract") != objective_contract(config):
         raise ValueError("checkpoint objective/lambda contract does not match config")
-    if checkpoint.get("source_checkpoint_sha256") != file_sha256(source_path):
-        raise ValueError("checkpoint was initialized from a different M0 checkpoint")
+    if checkpoint.get("initialization_contract") != initialization_contract(config):
+        raise ValueError("checkpoint initialization contract does not match config")
 
-    _, source_state = load_source_checkpoint(
-        source_path, bool(config["model"].get("source_use_ema", False))
-    )
-    stage = VariableRateLICStage(config, source_state)
+    stage = VariableRateLICStage(config)
     stage.codec.load_state_dict(
         checkpoint[weights]["state_dict_codec"], strict=True
     )

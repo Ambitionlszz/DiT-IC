@@ -212,8 +212,8 @@ class Codec(nn.Module):
     ):
         print("[Pure SANA] Loading trained weights")
         checkpoint = torch.load(codec_path, map_location="cpu", weights_only=True)
+        checkpoint_stage = checkpoint.get("stage")
         if self.strict_stage_loading:
-            checkpoint_stage = checkpoint.get("stage")
             allowed_stages = {
                 "variable_quality_codec",
                 "multirate_reconstruction",
@@ -235,6 +235,17 @@ class Codec(nn.Module):
         if state_key not in checkpoint:
             raise KeyError(f"Checkpoint does not contain {state_key!r}: {codec_path}")
         state = checkpoint[state_key]
+        if checkpoint_stage == "variable_quality_codec":
+            if "state_dict_codec" not in state:
+                raise KeyError("Stage 1 checkpoint lacks state_dict_codec")
+            self.codec.load_state_dict(state["state_dict_codec"], strict=True)
+            self.codec.update()
+            print(
+                "[Pure SANA] Loaded frozen V1 LIC; keeping fresh DiT LoRA "
+                "and text projection initialization"
+            )
+            return
+
         required = {
             "state_dict_codec",
             "state_dict_vae",

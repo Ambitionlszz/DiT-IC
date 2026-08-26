@@ -85,12 +85,14 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertLess(sample_position, forward_position)
         self.assertLess(forward_position, step_position)
 
-    def test_multirate_config_freezes_codec_vae_and_text_projection(self):
+    def test_multirate_config_freezes_codec_vae_and_trains_dit_components(self):
         config_path = ROOT / "configs" / "multirate_plain_dit.yaml"
         config = config_path.read_text(encoding="utf-8")
         self.assertIn("freeze_codec: true", config.lower())
+        self.assertIn("vae_lora: false", config.lower())
         self.assertIn("train_vae_lora: false", config.lower())
-        self.assertIn("train_text_projection: false", config.lower())
+        self.assertIn("train_text_projection: true", config.lower())
+        self.assertIn("dit_lora: true", config.lower())
         self.assertIn("variable_rate: true", config.lower())
         self.assertIn("per_gpu_batch_size: 8", config.lower())
 
@@ -99,7 +101,8 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         self.assertTrue(contract["freeze_codec"])
         self.assertFalse(contract["train_vae_decoder_lora"])
-        self.assertFalse(contract["train_text_projection"])
+        self.assertTrue(contract["train_text_projection"])
+        self.assertEqual(contract["dit_lora_initialization"], "fresh")
 
     def test_launcher_supports_one_or_two_gpus_with_batch_overrides(self):
         launcher = (
@@ -110,6 +113,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}", launcher)
         self.assertIn("--per_gpu_batch_size", launcher)
         self.assertIn("--accumulation_steps", launcher)
+        self.assertIn("plain-smoke)", launcher)
 
         training_source = (ROOT / "train_nogan_ddp.py").read_text(
             encoding="utf-8"
@@ -127,6 +131,9 @@ class VariableRateStructureTest(unittest.TestCase):
             encoding="utf-8"
         )
         for config in (pilot, main):
+            self.assertIn("codec_initialization: scratch", config)
+            self.assertNotIn("source_checkpoint", config)
+            self.assertNotIn("vae_lora", config)
             self.assertIn("phase_a:", config)
             self.assertIn("phase_b:", config)
             self.assertIn("latent_mse_weight: 1.0", config)
@@ -151,6 +158,16 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertEqual(smoke.count("steps: 20"), 2)
         self.assertIn("max_steps: 40", smoke)
         self.assertIn("per_gpu_batch_size: 8", smoke)
+        self.assertIn("codec_initialization: scratch", smoke)
+        self.assertNotIn("source_checkpoint", smoke)
+
+        plain_smoke = (
+            ROOT / "configs" / "multirate_plain_dit_smoke.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("max_steps: 20", plain_smoke)
+        self.assertIn("per_gpu_batch_size: 8", plain_smoke)
+        self.assertIn("freeze_codec: true", plain_smoke)
+        self.assertIn("train_text_projection: true", plain_smoke)
 
         training_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
@@ -205,12 +222,15 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('"phase_a_steps": phase_a_steps', source)
         self.assertIn('"phase_b_steps": phase_b_steps', source)
         self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
-        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 4', source)
+        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 5', source)
         self.assertIn('"objective_contract": objective_contract(config)', source)
         self.assertIn('"dists_input_range": "minus_one_to_one"', source)
         self.assertIn(
-            'resume.get("source_checkpoint_sha256") != source_sha256', source
+            'resume.get("initialization_contract") != initialization_contract(config)',
+            source,
         )
+        self.assertIn('"model": {"state_dict_codec": codec_state}', source)
+        self.assertNotIn("load_source_checkpoint", source)
         self.assertIn("evaluate_with_codec_state(", source)
         self.assertIn(
             "optimizer, entropy_optimizer, scheduler = build_training_state(",
@@ -249,6 +269,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("stage.codec.decompress(stored_packet)", source)
         self.assertIn("stage.vae.decode(", source)
         self.assertNotIn("models.DiT_IC", source)
+        self.assertNotIn("source_checkpoint", source)
 
     def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
@@ -257,6 +278,8 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn(
             "multi-rate Plain requires a LIC checkpoint trained ", source
         )
+        self.assertIn("keeping fresh DiT LoRA", source)
+        self.assertIn('self.codec.load_state_dict(state["state_dict_codec"]', source)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ import logging
 import math
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 from time import time
@@ -17,7 +16,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from diffusers import AutoencoderDC
 import lpips
-from peft import LoraConfig, get_peft_model
 import pyiqa
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
@@ -38,24 +36,11 @@ from train_nogan_ddp import (
 )
 
 
-CHECKPOINT_SCHEMA_VERSION = 4
+CHECKPOINT_SCHEMA_VERSION = 5
 OBJECTIVE_VERSION = "distortion_plus_lambda_rate_v1"
 STAGE_NAME = "variable_quality_codec"
 PHASE_A = "latent_rd"
 PHASE_B = "pixel_perceptual_rd"
-
-
-def filter_supported_vae_modules(model):
-    pattern = re.compile(
-        r"^decoder\..*(conv1|conv2|conv_in|conv_shortcut|conv_inverted|"
-        r"conv_point|to_k|to_q|to_v|to_out\.0)$"
-    )
-    supported = (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.Linear)
-    return [
-        name
-        for name, module in model.named_modules()
-        if pattern.match(name) and isinstance(module, supported)
-    ]
 
 
 def load_config(path):
@@ -104,9 +89,13 @@ def load_config(path):
         raise ValueError(
             "A main Stage 1 run requires quality_control.calibration_confirmed=true"
         )
-    source_checkpoint = config["model"].get("source_checkpoint")
-    if not source_checkpoint or source_checkpoint.startswith("/path/to/"):
-        raise ValueError("model.source_checkpoint must point to the M0 checkpoint")
+    model_config = config["model"]
+    if model_config.get("codec_initialization") != "scratch":
+        raise ValueError("Stage 1 requires model.codec_initialization=scratch")
+    if model_config.get("source_checkpoint"):
+        raise ValueError("scratch Stage 1 must not define model.source_checkpoint")
+    if (model_config.get("vae_params") or {}).get("vae_lora", False):
+        raise ValueError("scratch Stage 1 uses the frozen pretrained VAE without LoRA")
     return config
 
 
@@ -125,6 +114,7 @@ def objective_contract(config):
     phase_b = config["lic_train"]["phase_b"]
     return {
         "version": OBJECTIVE_VERSION,
+        "codec_initialization": "scratch",
         "phase_a": {
             "lambda_values": [float(value) for value in phase_a["lambda_values"]],
             "latent_mse_weight": float(phase_a["latent_mse_weight"]),
@@ -140,12 +130,12 @@ def objective_contract(config):
     }
 
 
-def file_sha256(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def initialization_contract(config):
+    return {
+        "codec": "random",
+        "vae": "pretrained_frozen",
+        "vae_source": str(config["model"]["dit_path"]),
+    }
 
 
 def state_dict_sha256(state_dict):
@@ -188,87 +178,16 @@ def likelihood_bpp(likelihoods, num_pixels):
     )
 
 
-def load_source_checkpoint(path, use_ema):
-    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    state_key = "ema" if use_ema else "model"
-    if state_key not in checkpoint:
-        raise KeyError(f"source checkpoint lacks {state_key!r}: {path}")
-    source_state = checkpoint[state_key]
-    required = {
-        "state_dict_codec",
-        "state_dict_vae",
-        "state_dict_DiT",
-        "state_dict_text_proj",
-    }
-    missing = sorted(required.difference(source_state))
-    if missing:
-        raise KeyError(f"source checkpoint lacks Pure SANA state: {missing}")
-    return checkpoint, source_state
-
-
 class VariableRateLICStage(nn.Module):
-    def __init__(self, config, source_state):
+    def __init__(self, config):
         super().__init__()
         model_config = config["model"]
         self.vae = AutoencoderDC.from_pretrained(
             model_config["dit_path"], subfolder="vae"
         )
-        vae_params = model_config.get("vae_params") or {}
-        if vae_params.get("vae_lora", False):
-            lora_config = LoraConfig(
-                r=int(vae_params["lora_rank_vae"]),
-                lora_alpha=int(vae_params["lora_alpha_vae"]),
-                target_modules=filter_supported_vae_modules(self.vae),
-                bias="none",
-                init_lora_weights="gaussian",
-            )
-            self.vae = get_peft_model(self.vae, lora_config)
-            expected_lora = {
-                name for name in self.vae.state_dict() if "lora" in name
-            }
-            missing_lora = sorted(
-                expected_lora.difference(source_state["state_dict_vae"])
-            )
-            if missing_lora:
-                raise RuntimeError(
-                    "M0 checkpoint lacks configured VAE LoRA weights: "
-                    + ", ".join(missing_lora[:5])
-                )
-            load_result = self.vae.load_state_dict(
-                source_state["state_dict_vae"], strict=False
-            )
-            if load_result.unexpected_keys:
-                raise RuntimeError(
-                    "M0 VAE LoRA keys do not match the configured VAE: "
-                    + ", ".join(load_result.unexpected_keys[:5])
-                )
-        elif source_state["state_dict_vae"]:
-            raise RuntimeError(
-                "M0 contains VAE LoRA weights but model.vae_params.vae_lora is false"
-            )
         self.vae.requires_grad_(False)
         self.vae.eval()
         self.codec = LatentCodec(**model_config["codec_param"])
-
-        load_result = self.codec.load_state_dict(
-            source_state["state_dict_codec"], strict=False
-        )
-        allowed_missing = {
-            "quality_controller.encoder_scale_table",
-            "quality_controller.decoder_scale_table",
-        }
-        active_missing = set(load_result.missing_keys).difference(allowed_missing)
-        if active_missing or load_result.unexpected_keys:
-            raise RuntimeError(
-                "M0 codec is incompatible with the variable-rate adapter; "
-                f"missing={sorted(active_missing)}, "
-                f"unexpected={sorted(load_result.unexpected_keys)}"
-            )
-        if set(load_result.missing_keys) != allowed_missing:
-            raise RuntimeError(
-                "M0 initialization must miss exactly the identity quality tables; "
-                f"got {sorted(load_result.missing_keys)}"
-            )
 
     def train(self, mode=True):
         super().train(mode)
@@ -464,18 +383,7 @@ def train(rank, local_rank, world_size, config):
     logger = create_logger(output_dir, rank)
     writer = SummaryWriter(output_dir / "tensorboard") if rank == 0 else None
 
-    source_path = config["model"]["source_checkpoint"]
-    source_hash_holder = [file_sha256(source_path) if rank == 0 else None]
-    dist.broadcast_object_list(source_hash_holder, src=0)
-    source_sha256 = source_hash_holder[0]
-    source_checkpoint, source_state = load_source_checkpoint(
-        source_path, bool(config["model"].get("source_use_ema", False))
-    )
-    stage_model = VariableRateLICStage(config, source_state).to(device)
-    del source_checkpoint
-    source_payload = source_state if rank == 0 else None
-    if rank != 0:
-        del source_state
+    stage_model = VariableRateLICStage(config).to(device)
     codec_parameters = [
         parameter
         for name, parameter in stage_model.codec.named_parameters()
@@ -616,15 +524,16 @@ def train(rank, local_rank, world_size, config):
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
         if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(
-                "two-phase LIC training requires a schema-version 4 checkpoint"
+                "scratch two-phase LIC training requires a schema-version 5 "
+                "checkpoint"
             )
         if resume.get("objective_contract") != objective_contract(config):
             raise ValueError(
                 "resume checkpoint objective/lambda contract does not match config"
             )
-        if resume.get("source_checkpoint_sha256") != source_sha256:
+        if resume.get("initialization_contract") != initialization_contract(config):
             raise ValueError(
-                "resume checkpoint was initialized from a different M0 checkpoint"
+                "resume checkpoint initialization contract does not match config"
             )
         if (
             int(resume.get("phase_a_steps", -1)) != phase_a_steps
@@ -658,15 +567,11 @@ def train(rank, local_rank, world_size, config):
 
     def make_checkpoint():
         codec_state = model.module.codec.state_dict()
-        model_payload = deepcopy(source_payload)
-        model_payload["state_dict_codec"] = codec_state
-        ema_payload = deepcopy(source_payload)
-        ema_payload["state_dict_codec"] = ema_codec
         return {
             "schema_version": CHECKPOINT_SCHEMA_VERSION,
             "stage": STAGE_NAME,
-            "model": model_payload,
-            "ema": ema_payload,
+            "model": {"state_dict_codec": codec_state},
+            "ema": {"state_dict_codec": ema_codec},
             "optimizer": optimizer.state_dict(),
             "entropy_optimizer": entropy_optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
@@ -681,7 +586,7 @@ def train(rank, local_rank, world_size, config):
             "quality_generator_state": quality_generator.get_state(),
             "resolved_config": config,
             "git_commit": current_git_commit(),
-            "source_checkpoint_sha256": source_sha256,
+            "initialization_contract": initialization_contract(config),
             "objective_contract": objective_contract(config),
             "codec_sha256": state_dict_sha256(codec_state),
             "bitstream_format_version": 1,

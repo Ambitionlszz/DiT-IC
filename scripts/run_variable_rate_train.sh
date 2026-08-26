@@ -17,12 +17,16 @@ case "${stage}" in
     trainer=train_variable_rate_lic_ddp.py
     config=configs/variable_rate_lic_main.yaml
     ;;
+  plain-smoke)
+    trainer=train_nogan_ddp.py
+    config=configs/multirate_plain_dit_smoke.yaml
+    ;;
   plain)
     trainer=train_nogan_ddp.py
     config=configs/multirate_plain_dit.yaml
     ;;
   *)
-    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, plain" >&2
+    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, plain-smoke, plain" >&2
     exit 2
     ;;
 esac

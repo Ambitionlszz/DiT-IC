@@ -9,13 +9,7 @@ data:
 
 model:
   dit_path: SANA
-  source_checkpoint: /path/to/M0_baseline_checkpoint.pt
-  source_use_ema: true
-  vae_params:
-    vae_lora: true
-    train_vae_lora: false
-    lora_rank_vae: 64
-    lora_alpha_vae: 64
+  codec_initialization: scratch
   codec_param:
     ch_emd: 32
     channel: 320

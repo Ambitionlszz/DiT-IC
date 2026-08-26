@@ -59,25 +59,25 @@ key names.
 
 ## Adaptations and invariants
 
-- Quality indices are exactly integers `0..5`; `q0` is assigned the smallest
-  distortion lambda and `q5` the largest.
+- Quality indices are exactly integers `0..5`; under `D + lambda * R`, `q0`
+  uses the largest rate lambda and `q5` the smallest.
 - One quality is sampled on rank 0 per optimizer step and broadcast to every
   DDP rank. All accumulation micro-batches for that step reuse it.
-- Both scale tables initialize to ones. At initialization all six qualities
-  reproduce the legacy forward and rANS payload.
+- The complete LIC initializes randomly and both scale tables initialize to
+  ones. At step 0 all six qualities reproduce each other; there is no legacy
+  LIC or M0 checkpoint dependency.
 - The hyperprior, context model, Gaussian conditional, and CDF architecture are
   shared and receive no explicit quality embedding.
 - The packet header carries format version and quality index. The header bytes
   are included in real BPP.
-- Stage 2 loads the M0 VAE decoder LoRA structure and weights but freezes them,
-  freezes codec parameters, and keeps both modules in evaluation mode. The
-  fixed-text projection is also frozen; only configured DiT LoRA parameters
-  train.
+- Stage 2 loads and freezes the V1 LIC, loads frozen pretrained SANA VAE and
+  DiT backbones, and trains new DiT LoRA parameters plus the fixed-condition
+  text projection. VAE LoRA is disabled.
 
 ## Required parity and server checks
 
 Local checks cover packet round-trip, invalid quality rejection, source/config
 contracts, Python compilation, and structural freeze/sampling rules. The server
-must additionally verify all six real rANS round-trips, V0 payload identity,
-strict real-BPP ordering, DDP quality agreement, and byte-identical V1/P0
-bitstreams on fixed image IDs.
+must additionally verify all six real rANS round-trips, strict real-BPP
+ordering, DDP quality agreement, and byte-identical V1/P0 bitstreams on fixed
+image IDs.

@@ -1,7 +1,7 @@
 # Variable-rate LIC and Multi-rate Plain DiT training
 
-All commands run from the repository root. Replace checkpoint/model/data paths
-in the YAML files before launching. The same launcher supports one or two GPUs.
+All commands run from the repository root. Replace model/data paths in the
+YAML files before launching. The same launcher supports one or two GPUs.
 Every selected GPU uses batch size 8 and accumulation defaults to 1:
 
 ```bash
@@ -14,23 +14,28 @@ bash scripts/run_variable_rate_train.sh lic-pilot 0,1
 
 For an explicit override, prefix the command with values such as
 `PER_GPU_BATCH_SIZE=4 ACCUMULATION_STEPS=2`. The available stages are
-`lic-smoke`, `lic-pilot`, `lic-main`, and `plain`.
+`lic-smoke`, `lic-pilot`, `lic-main`, `plain-smoke`, and `plain`.
 
-## 0. V0 identity gate
+The experiment DAG is:
 
-Set `model.source_checkpoint` in `configs/variable_rate_lic_pilot.yaml` to the
-M0 Pure/Plain checkpoint. Keep `source_use_ema` consistent with the M0 weights
-that define the baseline.
-
-```bash
-CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/verify_variable_rate_v0.py \
-  --config configs/variable_rate_lic_pilot.yaml \
-  --image /path/to/Kodak/01.png \
-  --gpu 0
+```text
+scratch two-phase LIC -> accepted V1 LIC -> multi-rate Plain P0
+                                           -> Self-Flow feasibility experiments
 ```
 
-Do not start training unless forward tensors, likelihoods, rANS payloads, and
-decoded latents are identical for q0..q5.
+Self-Flow is intentionally deferred until P0 passes its six-rate and frozen
+bitstream gates.
+
+## 0. Scratch initialization contract
+
+Stage 1 does not load a DiT-IC baseline checkpoint. It initializes the complete
+variable-rate LIC randomly, loads only the pretrained SANA VAE, and freezes the
+VAE encoder and decoder. All six quality scale tables start at one, so the six
+rates are identical to each other before optimization and separate during
+training under their different lambda values.
+
+Each LIC config must keep `model.codec_initialization: scratch` and must not
+define `model.source_checkpoint` or VAE LoRA.
 
 ## 1. Automatic two-phase LIC training
 
@@ -51,14 +56,15 @@ explicit under `lic_train.phase_a` and `lic_train.phase_b`.
 
 The pilot is 2.5k Phase A steps followed by 2.5k Phase B steps. The main run is
 50k + 50k. A checkpoint records the current phase and both boundaries, so
-resuming continues in the correct phase. Resume also requires the same M0
-SHA256, formula version, lambda tables, and loss weights.
+resuming continues in the correct phase. Resume also requires the same scratch
+initialization contract, pretrained VAE source, formula version, lambda tables,
+and loss weights.
 
 Before a pilot, run the throwaway 20+20-step path once to catch loading,
 validation, phase-switch, and checkpoint errors:
 
 ```bash
-bash scripts/run_variable_rate_train.sh lic-smoke 0
+bash scripts/run_variable_rate_train.sh lic-smoke 0,1
 ```
 
 ## 2. V1 pilot
@@ -93,7 +99,7 @@ bash scripts/run_variable_rate_lic_direct_eval.sh \
 Inspect real BPP ordering and per-q quality. If the six values are accepted,
 set `calibration_confirmed: true` in `configs/variable_rate_lic_main.yaml`.
 The main run is guarded against launching before that confirmation and must
-still use the original M0 checkpoint, not a cherry-picked pilot checkpoint.
+start a new scratch LIC run rather than continuing a cherry-picked pilot.
 
 ## 3. V1 main
 
@@ -109,12 +115,22 @@ is diagnostic only.
 ## 4. P0 Multi-rate Plain DiT
 
 Set `model.params.codec_path` in `configs/multirate_plain_dit.yaml` to the
-accepted V1 checkpoint. The config loads the M0 VAE decoder LoRA weights but
-freezes them, freezes the complete LIC and text projection, and trains only DiT
-LoRA. One q is sampled on rank 0 per optimizer step and shared by all selected
-GPU ranks. Strict loading rejects `best_phase_a_ckpt.pt` and
+accepted V1 checkpoint. The config loads and freezes only the V1 LIC, loads the
+pretrained SANA VAE and DiT backbones, keeps the VAE frozen without LoRA, and
+trains newly initialized DiT LoRA plus the fixed-condition text projection. One
+q is sampled on rank 0 per optimizer step and shared by all selected GPU ranks.
+Strict loading rejects `best_phase_a_ckpt.pt` and
 `phase_a_complete.pt`; use a checkpoint that has completed at least one Phase B
 step, normally `best_ckpt.pt`.
+
+First set `model.params.codec_path` in both Plain configs to the accepted V1
+checkpoint and run the 20-step handoff smoke:
+
+```bash
+bash scripts/run_variable_rate_train.sh plain-smoke 0,1
+```
+
+Only after this succeeds, launch the full P0 run below.
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0
@@ -130,8 +146,9 @@ bash scripts/run_variable_rate_train.sh plain 0 \
 
 ## 5. Frozen-bitstream Gate B
 
-Run `scripts/run_variable_rate_eval.sh` once with V1 and once with P0 on the
-same images. Then compare the corresponding binary trees:
+Use the direct LIC evaluation's V1 binary tree and run
+`scripts/run_variable_rate_eval.sh` on P0 using the same images. Then compare
+the corresponding binary trees:
 
 ```bash
 PYTHONPATH=. python scripts/compare_bitstreams.py \
