@@ -77,13 +77,15 @@ for path in candidates:
         continue
     if "ema" not in checkpoint or "state_dict_codec" not in checkpoint["ema"]:
         continue
-global_step = int(checkpoint.get("global_step", -1))
-if 0 <= global_step <= total_steps:
-    if global_step == total_steps and checkpoint.get("training_phase") != (
-        "pixel_perceptual_rd"
-    ):
-        raise SystemExit(f"completed V4 checkpoint is not marked as Phase B: {path}")
-    valid.append((global_step, path))
+    global_step = int(checkpoint.get("global_step", -1))
+    if 0 <= global_step <= total_steps:
+        if global_step == total_steps and checkpoint.get("training_phase") != (
+            "pixel_perceptual_rd"
+        ):
+            raise SystemExit(
+                f"completed V4 checkpoint is not marked as Phase B: {path}"
+            )
+        valid.append((global_step, path))
 
 if not valid:
     print("missing")

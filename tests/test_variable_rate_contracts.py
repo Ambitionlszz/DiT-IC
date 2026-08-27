@@ -1,6 +1,7 @@
 import ast
 import io
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -279,6 +280,31 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('bash scripts/run_variable_rate_train.sh plain', source)
         self.assertIn('--codec_path "${lic_checkpoint}"', source)
         self.assertIn('Plain DiT exited without a complete checkpoint', source)
+
+    def test_v4_launcher_scans_each_candidate_before_using_global_step(self):
+        source = (ROOT / "scripts" / "run_v4_then_dit.sh").read_text(
+            encoding="utf-8"
+        )
+        blocks = re.findall(r"<<'PY'\n(.*?)\nPY", source, re.DOTALL)
+        self.assertGreaterEqual(len(blocks), 1)
+        tree = ast.parse(blocks[0])
+        loops = [node for node in ast.walk(tree) if isinstance(node, ast.For)]
+        assignments = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "global_step"
+                for target in node.targets
+            )
+        ]
+        self.assertTrue(
+            any(
+                any(node is assignment for node in ast.walk(loop))
+                for loop in loops
+                for assignment in assignments
+            )
+        )
 
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"
