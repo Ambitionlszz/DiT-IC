@@ -31,8 +31,12 @@ model:
       lora_alpha_DiT: 128
       channel_in: 32
     vae_params:
-      vae_lora: false
-      train_vae_lora: false
+      # Keep the analysis encoder fixed; adapt only the synthesis decoder.
+      vae_lora: true
+      train_vae_lora: true
+      decoder_lora_only: true
+      lora_rank_vae: 32
+      lora_alpha_vae: 32
     codec_param:
       ch_emd: 32
       channel: 320

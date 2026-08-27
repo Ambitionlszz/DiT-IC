@@ -76,6 +76,8 @@ class Codec(nn.Module):
         )
         if train_vae_lora and not vae_lora_enabled:
             raise ValueError("train_vae_lora=True requires vae_lora=True")
+        if train_vae_lora and not vae_params.get("decoder_lora_only", False):
+            raise ValueError("trainable VAE LoRA must be decoder-only")
         self.freeze_vae = not train_vae_lora
         if freeze_codec and codec_path is None:
             raise ValueError("freeze_codec=True requires a pretrained codec_path")
@@ -138,6 +140,8 @@ class Codec(nn.Module):
         if self.freeze_vae:
             self.vae.requires_grad_(False)
             self.vae.eval()
+        else:
+            self._set_vae_encoder_eval()
         self.assert_reconstruction_training_contract()
 
         print("Pure SANA initialization complete")
@@ -348,7 +352,22 @@ class Codec(nn.Module):
             self.codec.eval()
         if self.freeze_vae:
             self.vae.eval()
+        else:
+            self._set_vae_encoder_eval()
         return self
+
+    def _set_vae_encoder_eval(self):
+        encoders = [
+            module
+            for name, module in self.vae.named_modules()
+            if name == "encoder" or name.endswith(".encoder")
+        ]
+        if len(encoders) != 1:
+            raise RuntimeError(
+                "decoder-LoRA training requires exactly one VAE encoder module"
+            )
+        encoders[0].requires_grad_(False)
+        encoders[0].eval()
 
     def assert_frozen_codec_contract(self):
         if not self.freeze_codec:
@@ -373,11 +392,26 @@ class Codec(nn.Module):
             name for name, parameter in self.vae.named_parameters()
             if parameter.requires_grad
         ]
-        if trainable_vae:
+        if self.freeze_vae and trainable_vae:
             raise RuntimeError(
                 "multi-rate Plain training requires a frozen VAE; trainable: "
                 + ", ".join(trainable_vae[:5])
             )
+        if not self.freeze_vae:
+            unexpected_vae = [
+                name
+                for name in trainable_vae
+                if "decoder." not in name or "lora_" not in name
+            ]
+            if unexpected_vae:
+                raise RuntimeError(
+                    "multi-rate Plain permits only decoder LoRA in the VAE; "
+                    "trainable: " + ", ".join(unexpected_vae[:5])
+                )
+            if not trainable_vae:
+                raise RuntimeError(
+                    "decoder-LoRA training requires trainable VAE decoder LoRA"
+                )
         if self._init_for_training:
             if not self.train_text_projection:
                 raise RuntimeError(

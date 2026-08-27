@@ -116,10 +116,10 @@ def normalize_pure_sana_config(config):
             train_vae_lora = vae_params.get(
                 "train_vae_lora", vae_params.get("vae_lora", False)
             )
-            if train_vae_lora:
+            if train_vae_lora and not vae_params.get("decoder_lora_only", False):
                 raise ValueError(
                     "multi-rate Plain training requires "
-                    "vae_params.train_vae_lora=False"
+                    "decoder-only VAE LoRA"
                 )
             if not params.get("train_text_projection", True):
                 raise ValueError(

@@ -145,16 +145,24 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertLess(sample_position, forward_position)
         self.assertLess(forward_position, step_position)
 
-    def test_multirate_config_freezes_codec_vae_and_trains_dit_components(self):
+    def test_multirate_config_freezes_codec_and_trains_decoder_dit_components(self):
         config_path = ROOT / "configs" / "multirate_plain_dit.yaml"
         config = config_path.read_text(encoding="utf-8")
         self.assertIn("freeze_codec: true", config.lower())
-        self.assertIn("vae_lora: false", config.lower())
-        self.assertIn("train_vae_lora: false", config.lower())
+        self.assertIn("vae_lora: true", config.lower())
+        self.assertIn("train_vae_lora: true", config.lower())
+        self.assertIn("decoder_lora_only: true", config.lower())
+        self.assertIn("lora_rank_vae: 32", config.lower())
         self.assertIn("train_text_projection: true", config.lower())
         self.assertIn("dit_lora: true", config.lower())
         self.assertIn("variable_rate: true", config.lower())
         self.assertIn("per_gpu_batch_size: 8", config.lower())
+
+        smoke = (
+            ROOT / "configs" / "multirate_plain_dit_smoke.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("decoder_lora_only: true", smoke.lower())
+        self.assertIn("lora_rank_vae: 32", smoke.lower())
 
         contract = json.loads(
             (ROOT / "docs" / "baseline_contract.json").read_text(encoding="utf-8")

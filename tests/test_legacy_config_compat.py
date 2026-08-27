@@ -170,21 +170,46 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         self.assertTrue(codec["variable_rate"])
         self.assertEqual(codec["num_quality_levels"], 6)
 
-    def test_multirate_plain_rejects_trainable_vae_lora(self):
+    def test_multirate_plain_requires_decoder_only_trainable_vae_lora(self):
         config = {
             "model": {
                 "params": {
                     "freeze_codec": True,
                     "train_text_projection": True,
-                    "vae_params": {"vae_lora": True},
+                    "vae_params": {
+                        "vae_lora": True,
+                        "train_vae_lora": True,
+                    },
                     "loss_params": {"rate_weight": 0.0},
                 }
             },
             "quality_control": {"enabled": True, "num_levels": 6},
             "train": {"rate_weight": 0.0},
         }
-        with self.assertRaisesRegex(ValueError, "train_vae_lora=False"):
+        with self.assertRaisesRegex(ValueError, "decoder-only VAE LoRA"):
             normalize_pure_sana_config(config)
+
+    def test_multirate_plain_allows_decoder_only_trainable_vae_lora(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": True,
+                    "train_text_projection": True,
+                    "vae_params": {
+                        "vae_lora": True,
+                        "train_vae_lora": True,
+                        "decoder_lora_only": True,
+                    },
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {"enabled": True, "num_levels": 6},
+            "train": {"rate_weight": 0.0},
+        }
+        normalized = normalize_pure_sana_config(config)
+        self.assertTrue(
+            normalized["model"]["params"]["vae_params"]["decoder_lora_only"]
+        )
 
     def test_multirate_plain_requires_trainable_text_projection(self):
         config = {

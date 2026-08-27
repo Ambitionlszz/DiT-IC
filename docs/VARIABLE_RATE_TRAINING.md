@@ -122,11 +122,12 @@ latest valid V4 state. It also finds the latest Plain DiT numbered checkpoint wh
 `source_checkpoint_sha256` matches this V4 file, so rerunning the same command
 resumes Plain DiT after an interruption instead of restarting it.
 
-Pass the accepted V4 checkpoint with `--codec_path`. The config loads and
-freezes only the V4 LIC, loads the pretrained SANA VAE and DiT backbones, keeps
-the VAE frozen without LoRA, and
-trains newly initialized DiT LoRA plus the fixed-condition text projection. One
-q is sampled on rank 0 per optimizer step and shared by all selected GPU ranks.
+Pass the accepted V4 checkpoint with `--codec_path`. The config completely
+freezes the V4 LIC, its entropy model, and the VAE encoder. It trains only
+decoder-side VAE LoRA (rank/alpha 32), newly initialized DiT LoRA, and the
+fixed-condition text projection; all pretrained base weights remain frozen.
+One q is sampled on rank 0 per optimizer step and shared by all selected GPU
+ranks.
 Strict loading rejects `best_phase_a_ckpt.pt` and
 `phase_a_complete.pt`; use a checkpoint that has completed at least one Phase B
 step, normally `best_ckpt.pt`.
