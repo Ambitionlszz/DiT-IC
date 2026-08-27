@@ -34,24 +34,25 @@ quality_control:
   calibration_confirmed: false
 
 lic_train:
-  # Loss uses R + distortion / lambda_rate; smaller values mean higher quality.
+  # q0->q5 is low-to-high BPP, so lambda values are bound in descending order.
+  # Phase B uses MSE + LPIPS + 0.2 * DISTS, then adds lambda * rate.
   phase_a:
     steps: 50000
-    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    lambda_values: [64.0, 32.0, 16.0, 8.0, 4.0, 2.0]
     latent_mse_weight: 1.0
   phase_b:
-    steps: 50000
-    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
-    pixel_l1_weight: 1.0
+    steps: 100000
+    lambda_values: [64.0, 32.0, 16.0, 8.0, 4.0, 2.0]
+    pixel_mse_weight: 1.0
     lpips_weight: 1.0
-    dists_weight: 1.0
+    dists_weight: 0.2
 
 train:
   output_dir: checkpoints
-  exp_name: variable_rate_lic_v3_main
+  exp_name: variable_rate_lic_v4_main
   per_gpu_batch_size: 8
   accumulation_steps: 1
-  max_steps: 100000
+  max_steps: 150000
   global_seed: 903
   log_every: 100
   eval_every: 2000
@@ -62,5 +63,5 @@ optimizer:
   lr: 0.0001
   aux_lr: 0.001
   beta2: 0.999
-  step_lr: [60000, 85000, 95000]
+  step_lr: [100000, 130000, 145000]
   max_grad_norm: 4.0

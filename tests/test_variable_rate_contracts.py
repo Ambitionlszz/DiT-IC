@@ -202,13 +202,13 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertIn("phase_a:", config)
             self.assertIn("phase_b:", config)
             self.assertIn("latent_mse_weight: 1.0", config)
-            self.assertIn("pixel_l1_weight: 1.0", config)
+            self.assertIn("pixel_mse_weight: 1.0", config)
             self.assertIn("lpips_weight: 1.0", config)
-            self.assertIn("dists_weight: 1.0", config)
+            self.assertIn("dists_weight: 0.2", config)
             self.assertIn("per_gpu_batch_size: 8", config)
             self.assertEqual(
                 config.count(
-                    "lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]"
+                    "lambda_values: [64.0, 32.0, 16.0, 8.0, 4.0, 2.0]"
                 ),
                 2,
             )
@@ -216,9 +216,10 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertNotIn("lambda_max", config)
             self.assertNotIn("image_mse_weight", config)
         self.assertEqual(pilot.count("steps: 2500"), 2)
-        self.assertEqual(main.count("steps: 50000"), 2)
-        self.assertIn("exp_name: variable_rate_lic_v3_pilot", pilot)
-        self.assertIn("exp_name: variable_rate_lic_v3_main", main)
+        self.assertIn("steps: 50000", main)
+        self.assertIn("steps: 100000", main)
+        self.assertIn("exp_name: variable_rate_lic_v4_pilot", pilot)
+        self.assertIn("exp_name: variable_rate_lic_v4_main", main)
 
         smoke = (ROOT / "configs" / "variable_rate_lic_smoke.yaml").read_text(
             encoding="utf-8"
@@ -228,7 +229,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("per_gpu_batch_size: 8", smoke)
         self.assertIn("codec_initialization: scratch", smoke)
         self.assertNotIn("source_checkpoint", smoke)
-        self.assertIn("exp_name: variable_rate_lic_v3_smoke", smoke)
+        self.assertIn("exp_name: variable_rate_lic_v4_smoke", smoke)
 
         plain_smoke = (
             ROOT / "configs" / "multirate_plain_dit_smoke.yaml"
@@ -247,10 +248,7 @@ class VariableRateStructureTest(unittest.TestCase):
             "loss = rate_distortion_loss(distortion, rate, current_lambda)",
             training_source,
         )
-        self.assertIn(
-            "return rate + distortion / rate_lambda",
-            training_source,
-        )
+        self.assertIn("return distortion + rate_lambda * rate", training_source)
 
     def test_main_can_require_an_explicit_calibration_override(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
@@ -290,12 +288,12 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         train_source = ast.get_source_segment(source, train_function)
         phase_a_branch = train_source.index("if current_phase == PHASE_A:")
-        phase_b_l1 = train_source.index("pixel_l1 = F.l1_loss", phase_a_branch)
+        phase_b_mse = train_source.index("pixel_mse = F.mse_loss", phase_a_branch)
         next_loss = train_source.index(
-            "loss = rate_distortion_loss(", phase_b_l1
+            "loss = rate_distortion_loss(", phase_b_mse
         )
-        phase_b_source = train_source[phase_b_l1:next_loss]
-        self.assertIn('phase_config["pixel_l1_weight"]', phase_b_source)
+        phase_b_source = train_source[phase_b_mse:next_loss]
+        self.assertIn('phase_config["pixel_mse_weight"]', phase_b_source)
         self.assertIn('phase_config["lpips_weight"]', phase_b_source)
         self.assertIn('phase_config["dists_weight"]', phase_b_source)
         self.assertNotIn("latent_mse", phase_b_source)
@@ -309,7 +307,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('"phase_a_steps": phase_a_steps', source)
         self.assertIn('"phase_b_steps": phase_b_steps', source)
         self.assertIn('checkpoint_dir / "phase_a_complete.pt"', source)
-        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 7', source)
+        self.assertIn('CHECKPOINT_SCHEMA_VERSION = 8', source)
         self.assertIn(
             'VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"',
             source,
@@ -334,14 +332,11 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn(
             '"automatically starting phase B"', source
         )
-        self.assertIn(
-            '"loss_form": "rate_plus_distortion_divided_by_rate_lambda"',
-            source,
-        )
+        self.assertIn('"loss_form": "distortion_plus_rate_lambda"', source)
         self.assertIn("validation_quality_scales=%s", source)
         self.assertIn("validation_bpp_span=%.8f", source)
 
-    def test_joint_multirate_loss_preserves_small_lambda_high_quality(self):
+    def test_joint_multirate_loss_matches_baseline_lambda_convention(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
         )
@@ -353,8 +348,8 @@ class VariableRateStructureTest(unittest.TestCase):
             and node.name == "rate_distortion_loss"
         )
         function_source = ast.get_source_segment(source, function)
-        self.assertIn("return rate + distortion / rate_lambda", function_source)
-        self.assertNotIn("rate_lambda * rate", function_source)
+        self.assertIn("return distortion + rate_lambda * rate", function_source)
+        self.assertNotIn("distortion / rate_lambda", function_source)
 
     def test_lic_dists_training_matches_baseline_minus_one_to_one_range(self):
         losses_source = (ROOT / "models" / "losses.py").read_text(
@@ -390,7 +385,7 @@ class VariableRateStructureTest(unittest.TestCase):
     def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
         self.assertIn('checkpoint_stage == "variable_quality_codec"', source)
-        self.assertIn('int(checkpoint.get("schema_version", 0)) != 7', source)
+        self.assertIn('int(checkpoint.get("schema_version", 0)) != 8', source)
         self.assertIn(
             '!= "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"', source
         )

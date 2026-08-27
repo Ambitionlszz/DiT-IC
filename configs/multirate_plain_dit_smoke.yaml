@@ -14,7 +14,7 @@ model:
     use_text_condition: true
     text_encoder_path: /data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers/text_encoder
     dit_path: SANA
-    codec_path: /path/to/V3_variable_rate_checkpoint.pt
+    codec_path: /path/to/V4_variable_rate_checkpoint.pt
     use_ema: true
     use_merge: false
     training: true

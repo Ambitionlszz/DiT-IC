@@ -97,10 +97,11 @@ key names.
 
 ## Adaptations and invariants
 
-- Quality indices are exactly integers `0..5`. Configured rate lambdas remain
-  `[16, 8, 4, 2, 1, 0.5]`, while the jointly trained loss is normalized as
-  `R + D / lambda_rate`. Thus q0 remains lowest quality/BPP and q5 remains
-  highest quality/BPP without overweighting q0's shared-network gradients.
+- Quality indices are exactly integers `0..5`. The requested lambda set is
+  `[2, 4, 8, 16, 32, 64]`, bound in descending order as
+  `[64, 32, 16, 8, 4, 2]` from q0 through q5. The jointly trained loss is the
+  baseline/FlowCodec form `D + lambda_rate * R`, so q0 remains lowest BPP and
+  q5 remains highest BPP.
 - One quality is sampled on rank 0 per optimizer step and broadcast to every
   DDP rank. All accumulation micro-batches for that step reuse it.
 - The complete LIC initializes randomly and both endpoint pairs initialize to
@@ -110,13 +111,13 @@ key names.
 - The hyperprior, context model, Gaussian conditional, and CDF architecture are
   shared. The quality-specific `q_e/q_d` change the features presented to those
   shared components; `w_e/w_d` then adapt quantization to the decoded content.
-- Checkpoint schema 7 records
+- Checkpoint schema 8 records
   `variable_rate_mechanism=dcvc_fm_endpoint_interp_qe_qd_we_wd_v2`. Earlier
   independent-table or incomplete LIC
   checkpoints are rejected and cannot be silently resumed or handed to Plain.
 - The packet header carries format version and quality index. The header bytes
   are included in real BPP.
-- Stage 2 loads and freezes the V3 LIC, loads frozen pretrained SANA VAE and
+- Stage 2 loads and freezes the V4 LIC, loads frozen pretrained SANA VAE and
   DiT backbones, and trains new DiT LoRA parameters plus the fixed-condition
   text projection. VAE LoRA is disabled.
 
@@ -125,5 +126,5 @@ key names.
 Local checks cover packet round-trip, invalid quality rejection, source/config
 contracts, Python compilation, and structural freeze/sampling rules. The server
 must additionally verify all six real rANS round-trips, strict real-BPP
-ordering, DDP quality agreement, and byte-identical V3/P0 bitstreams on fixed
+ordering, DDP quality agreement, and byte-identical V4/P0 bitstreams on fixed
 image IDs.

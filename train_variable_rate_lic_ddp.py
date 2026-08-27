@@ -36,8 +36,8 @@ from train_nogan_ddp import (
 )
 
 
-CHECKPOINT_SCHEMA_VERSION = 7
-OBJECTIVE_VERSION = "rate_plus_inverse_rate_lambda_distortion_v2"
+CHECKPOINT_SCHEMA_VERSION = 8
+OBJECTIVE_VERSION = "distortion_plus_lambda_rate_v2"
 VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
 STAGE_NAME = "variable_quality_codec"
 PHASE_A = "latent_rd"
@@ -75,7 +75,7 @@ def load_config(path, calibration_confirmed=False):
             )
     if float(phase_a.get("latent_mse_weight", 0.0)) <= 0:
         raise ValueError("lic_train.phase_a.latent_mse_weight must be positive")
-    for weight_name in ("pixel_l1_weight", "lpips_weight", "dists_weight"):
+    for weight_name in ("pixel_mse_weight", "lpips_weight", "dists_weight"):
         if float(phase_b.get(weight_name, 0.0)) <= 0:
             raise ValueError(
                 f"lic_train.phase_b.{weight_name} must be positive"
@@ -117,7 +117,7 @@ def objective_contract(config):
     phase_b = config["lic_train"]["phase_b"]
     return {
         "version": OBJECTIVE_VERSION,
-        "loss_form": "rate_plus_distortion_divided_by_rate_lambda",
+        "loss_form": "distortion_plus_rate_lambda",
         "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
         "codec_initialization": "scratch",
         "phase_a": {
@@ -126,7 +126,7 @@ def objective_contract(config):
         },
         "phase_b": {
             "lambda_values": [float(value) for value in phase_b["lambda_values"]],
-            "pixel_l1_weight": float(phase_b["pixel_l1_weight"]),
+            "pixel_mse_weight": float(phase_b["pixel_mse_weight"]),
             "lpips_weight": float(phase_b["lpips_weight"]),
             "dists_weight": float(phase_b["dists_weight"]),
             "lpips_input_range": "minus_one_to_one",
@@ -177,8 +177,8 @@ def quality_lambda(quality_index, lambda_values):
 
 
 def rate_distortion_loss(distortion, rate, rate_lambda):
-    """FlowCodec-form RD loss while preserving small-lambda/high-quality labels."""
-    return rate + distortion / rate_lambda
+    """FlowCodec/baseline RD loss: distortion plus lambda-weighted rate."""
+    return distortion + rate_lambda * rate
 
 
 def likelihood_bpp(likelihoods, num_pixels):
@@ -284,7 +284,7 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
     phase_config = config["lic_train"][phase_key]
     if phase == PHASE_B and perceptual_losses is None:
         raise ValueError("Phase B evaluation requires perceptual losses")
-    totals = torch.zeros(6, 7, device=device, dtype=torch.float64)
+    totals = torch.zeros(6, 8, device=device, dtype=torch.float64)
     for quality_index in range(6):
         for image in loader:
             image = image.to(device)
@@ -297,6 +297,7 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
             latent_mse = F.mse_loss(
                 outputs["clean_latent"], outputs["reconstructed_latent"]
             )
+            pixel_mse = torch.zeros((), device=device)
             pixel_l1 = torch.zeros((), device=device)
             lpips_loss = torch.zeros((), device=device)
             dists_loss = torch.zeros((), device=device)
@@ -305,12 +306,13 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
                     float(phase_config["latent_mse_weight"]) * latent_mse
                 )
             else:
+                pixel_mse = F.mse_loss(image, outputs["reconstruction"])
                 pixel_l1 = F.l1_loss(image, outputs["reconstruction"])
                 lpips_loss, dists_loss = perceptual_losses(
                     image, outputs["reconstruction"]
                 )
                 distortion = (
-                    float(phase_config["pixel_l1_weight"]) * pixel_l1
+                    float(phase_config["pixel_mse_weight"]) * pixel_mse
                     + float(phase_config["lpips_weight"]) * lpips_loss
                     + float(phase_config["dists_weight"]) * dists_loss
                 )
@@ -325,6 +327,7 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
                     float(loss),
                     float(rate),
                     float(latent_mse),
+                    float(pixel_mse),
                     float(pixel_l1),
                     float(lpips_loss),
                     float(dists_loss),
@@ -332,7 +335,7 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
                 device=device,
                 dtype=torch.float64,
             ) * torch.tensor(
-                [1.0] + [batch_size] * 6,
+                [1.0] + [batch_size] * 7,
                 device=device,
                 dtype=torch.float64,
             )
@@ -346,9 +349,10 @@ def evaluate(model, loader, device, config, phase, perceptual_losses=None):
             "loss": totals[quality_index, 1].item() / count,
             "likelihood_bpp": totals[quality_index, 2].item() / count,
             "latent_mse": totals[quality_index, 3].item() / count,
-            "pixel_l1": totals[quality_index, 4].item() / count,
-            "lpips": totals[quality_index, 5].item() / count,
-            "dists": totals[quality_index, 6].item() / count,
+            "pixel_mse": totals[quality_index, 4].item() / count,
+            "pixel_l1": totals[quality_index, 5].item() / count,
+            "lpips": totals[quality_index, 6].item() / count,
+            "dists": totals[quality_index, 7].item() / count,
         }
     score = sum(value["loss"] for value in metrics.values()) / 6
     return score, metrics
@@ -536,7 +540,7 @@ def train(rank, local_rank, world_size, config):
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
         if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(
-                "scratch two-phase LIC training requires a schema-version 7 "
+                "scratch two-phase LIC training requires a schema-version 8 "
                 "checkpoint"
             )
         if resume.get("objective_contract") != objective_contract(config):
@@ -617,7 +621,7 @@ def train(rank, local_rank, world_size, config):
     entropy_optimizer.zero_grad(set_to_none=True)
     accum_count = 0
     quality_index = None
-    running = torch.zeros(7, device=device, dtype=torch.float64)
+    running = torch.zeros(8, device=device, dtype=torch.float64)
     log_micro_steps = 0
     started = time()
     if rank == 0:
@@ -657,6 +661,7 @@ def train(rank, local_rank, world_size, config):
             latent_mse = F.mse_loss(
                 outputs["clean_latent"], outputs["reconstructed_latent"]
             )
+            pixel_mse = torch.zeros((), device=device)
             pixel_l1 = torch.zeros((), device=device)
             lpips_loss = torch.zeros((), device=device)
             dists_loss = torch.zeros((), device=device)
@@ -665,12 +670,13 @@ def train(rank, local_rank, world_size, config):
                     float(phase_config["latent_mse_weight"]) * latent_mse
                 )
             else:
+                pixel_mse = F.mse_loss(image, outputs["reconstruction"])
                 pixel_l1 = F.l1_loss(image, outputs["reconstruction"])
                 lpips_loss, dists_loss = get_perceptual_losses()(
                     image, outputs["reconstruction"]
                 )
                 distortion = (
-                    float(phase_config["pixel_l1_weight"]) * pixel_l1
+                    float(phase_config["pixel_mse_weight"]) * pixel_mse
                     + float(phase_config["lpips_weight"]) * lpips_loss
                     + float(phase_config["dists_weight"]) * dists_loss
                 )
@@ -685,6 +691,7 @@ def train(rank, local_rank, world_size, config):
                     loss.detach().double(),
                     rate.detach().double(),
                     latent_mse.detach().double(),
+                    pixel_mse.detach().double(),
                     pixel_l1.detach().double(),
                     lpips_loss.detach().double(),
                     dists_loss.detach().double(),
@@ -727,8 +734,8 @@ def train(rank, local_rank, world_size, config):
                     )
                     logger.info(
                         "phase=%s step=%d phase_step=%d loss=%.6f rate=%.6f "
-                        "latent_mse=%.6f pixel_l1=%.6f lpips=%.6f "
-                        "dists=%.6f lambda=%.6f steps/s=%.3f q_counts=%s",
+                        "latent_mse=%.6f pixel_mse=%.6f pixel_l1=%.6f "
+                        "lpips=%.6f dists=%.6f lambda=%.6f steps/s=%.3f q_counts=%s",
                         current_phase,
                         train_steps,
                         completed_phase_steps,
@@ -739,9 +746,10 @@ def train(rank, local_rank, world_size, config):
                     writer.add_scalar("Train/loss", averages[0], train_steps)
                     writer.add_scalar("Train/rate", averages[1], train_steps)
                     writer.add_scalar("Train/latent_mse", averages[2], train_steps)
-                    writer.add_scalar("Train/pixel_l1", averages[3], train_steps)
-                    writer.add_scalar("Train/lpips", averages[4], train_steps)
-                    writer.add_scalar("Train/dists", averages[5], train_steps)
+                    writer.add_scalar("Train/pixel_mse", averages[3], train_steps)
+                    writer.add_scalar("Train/pixel_l1", averages[4], train_steps)
+                    writer.add_scalar("Train/lpips", averages[5], train_steps)
+                    writer.add_scalar("Train/dists", averages[6], train_steps)
                 running.zero_()
                 log_micro_steps = 0
                 started = time()
