@@ -14,6 +14,9 @@ lic_checkpoint=${lic_checkpoint_dir}/last_ckpt.pt
 plain_checkpoint_dir=${PLAIN_CHECKPOINT_DIR:-checkpoints/multirate_plain_dit_p0/checkpoints}
 per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}
 accumulation_steps=${ACCUMULATION_STEPS:-1}
+gate_gpu=${GATE_GPU:-${gpu_list%%,*}}
+gate_output_root=${GATE_OUTPUT_ROOT:-"results/v4_then_dit_gate_$(date +%Y%m%d_%H%M%S)"}
+gate_image_dir=${GATE_IMAGE_DIR:-}
 
 if [[ ! -f "${lic_config}" ]]; then
   echo "Missing LIC config: ${lic_config}" >&2
@@ -21,6 +24,25 @@ if [[ ! -f "${lic_config}" ]]; then
 fi
 if [[ ! -f "${plain_config}" ]]; then
   echo "Missing Plain DiT config: ${plain_config}" >&2
+  exit 1
+fi
+
+if [[ -z "${gate_image_dir}" ]]; then
+  gate_image_dir="$(python - "${lic_config}" <<'PY'
+import sys
+import yaml
+
+config = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+paths = config.get("data", {}).get("valid_path", [])
+if not paths:
+    raise SystemExit("LIC config has no data.valid_path; set GATE_IMAGE_DIR")
+print(paths[0])
+PY
+)"
+fi
+
+if [[ ! -d "${gate_image_dir}" ]]; then
+  echo "Gate image directory does not exist: ${gate_image_dir}" >&2
   exit 1
 fi
 
@@ -159,10 +181,90 @@ if not candidates:
 
 train_steps, path = max(candidates, key=lambda item: item[0])
 if train_steps == expected_steps:
-    print("complete")
+    print(f"complete:{path}")
 else:
     print(f"resume:{path}")
 PY
+}
+
+run_lic_direct_eval() {
+  local checkpoint=$1
+  local output_dir=$2
+  if [[ -f "${output_dir}/summary.json" ]]; then
+    echo "Reusing LIC Gate-A evaluation: ${output_dir}"
+    return
+  fi
+  CUDA_VISIBLE_DEVICES="${gate_gpu}" PYTHONPATH=. python -u \
+    scripts/eval_variable_rate_lic_direct.py \
+      --config "${lic_config}" \
+      --checkpoint "${checkpoint}" \
+      --image_dir "${gate_image_dir}" \
+      --output_dir "${output_dir}" \
+      --gpu 0 \
+      --weights ema
+}
+
+run_gate_a() {
+  local last_checkpoint="${lic_checkpoint}"
+  local last_eval_dir="${gate_output_root}/lic_last"
+  local best_checkpoint="${lic_checkpoint_dir}/best_ckpt.pt"
+  local best_eval_dir="${gate_output_root}/lic_best"
+  local gate_a_report="${gate_output_root}/gate_a.json"
+
+  if [[ ! -f "${last_checkpoint}" ]]; then
+    echo "Completed V4 LIC checkpoint is missing ${last_checkpoint}" >&2
+    exit 1
+  fi
+  run_lic_direct_eval "${last_checkpoint}" "${last_eval_dir}"
+
+  local best_args=()
+  if [[ -f "${best_checkpoint}" ]]; then
+    run_lic_direct_eval "${best_checkpoint}" "${best_eval_dir}"
+    best_args=(
+      --best-checkpoint "${best_checkpoint}"
+      --best-summary "${best_eval_dir}/summary.json"
+      --best-eval-dir "${best_eval_dir}"
+    )
+  fi
+
+  PYTHONPATH=. python scripts/variable_rate_gate.py select-lic \
+    --last-checkpoint "${last_checkpoint}" \
+    --last-summary "${last_eval_dir}/summary.json" \
+    --last-eval-dir "${last_eval_dir}" \
+    "${best_args[@]}" \
+    --output "${gate_a_report}" >/dev/null
+
+  lic_checkpoint="$(python - "${gate_a_report}" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["selected"]["checkpoint"])
+PY
+)"
+  lic_eval_dir="$(python - "${gate_a_report}" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["selected"]["evaluation_dir"])
+PY
+)"
+  echo "Gate A accepted ${lic_checkpoint}; report: ${gate_a_report}"
+}
+
+run_gate_b() {
+  local plain_checkpoint=$1
+  local p0_eval_root="${gate_output_root}/plain_p0"
+  local gate_b_report="${gate_output_root}/gate_b.json"
+  if [[ -f "${gate_b_report}" ]]; then
+    echo "Gate B already accepted: ${gate_b_report}"
+    return
+  fi
+  bash scripts/run_variable_rate_eval.sh \
+    "${plain_checkpoint}" "${gate_image_dir}" "${gate_gpu}" \
+    "${plain_config}" "${p0_eval_root}"
+  PYTHONPATH=. python scripts/variable_rate_gate.py verify-p0 \
+    --lic-summary "${lic_eval_dir}/summary.json" \
+    --lic-eval-dir "${lic_eval_dir}" \
+    --p0-root "${p0_eval_root}" \
+    --output "${gate_b_report}"
 }
 
 lic_state="$(inspect_lic_checkpoints)"
@@ -219,11 +321,13 @@ if [[ "${lic_state_after}" != complete:* ]]; then
   exit 1
 fi
 lic_checkpoint=${lic_state_after#complete:}
+run_gate_a
 
 plain_state="$(inspect_plain_checkpoints)"
 case "${plain_state}" in
-  complete)
+  complete:*)
     echo "Plain DiT is complete; the three-stage chain is already finished."
+    plain_checkpoint=${plain_state#complete:}
     ;;
   resume:*)
     plain_resume_checkpoint=${plain_state#resume:}
@@ -247,8 +351,11 @@ case "${plain_state}" in
     ;;
 esac
 
-if [[ "$(inspect_plain_checkpoints)" != "complete" ]]; then
+plain_state_after="$(inspect_plain_checkpoints)"
+if [[ "${plain_state_after}" != complete:* ]]; then
   echo "Plain DiT exited without a complete checkpoint; rerun the same command to resume." >&2
   exit 1
 fi
-echo "V4 LIC, Phase B, and Plain DiT training are complete."
+plain_checkpoint=${plain_state_after#complete:}
+run_gate_b "${plain_checkpoint}"
+echo "V4 LIC, Phase B, Plain DiT, and both real-rANS gates are complete."

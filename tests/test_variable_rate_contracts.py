@@ -286,8 +286,9 @@ class VariableRateStructureTest(unittest.TestCase):
             encoding="utf-8"
         )
         blocks = re.findall(r"<<'PY'\n(.*?)\nPY", source, re.DOTALL)
-        self.assertGreaterEqual(len(blocks), 1)
-        tree = ast.parse(blocks[0])
+        checkpoint_blocks = [block for block in blocks if "global_step" in block]
+        self.assertEqual(len(checkpoint_blocks), 1)
+        tree = ast.parse(checkpoint_blocks[0])
         loops = [node for node in ast.walk(tree) if isinstance(node, ast.For)]
         assignments = [
             node

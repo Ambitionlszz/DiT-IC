@@ -92,9 +92,13 @@ bash scripts/run_variable_rate_train.sh lic-main 0 --calibration_confirmed
 # Or: bash scripts/run_variable_rate_train.sh lic-main 0,1 --calibration_confirmed
 ```
 
-Run the direct LIC six-rate evaluation again. Gate A requires every q to
-round-trip and mean real BPP to satisfy `q0 < q1 < ... < q5`. Likelihood BPP
-is diagnostic only.
+The chained launcher performs this direct LIC evaluation itself before it
+starts DiT. Gate A uses serialized rANS packets and requires every q to
+round-trip, `q0 < q1 < ... < q5`, a BPP span of at least `0.02`, `q0 <= 0.03`,
+and `0.045 <= q5 <= 0.08`. It evaluates the latest completed candidate and
+`best_ckpt.pt` (when present), then selects the accepted one by mean PSNR, with
+LPIPS, DISTS, and BPP as deterministic tie-breakers. Likelihood BPP is
+diagnostic only.
 
 ## 4. P0 Multi-rate Plain DiT
 
@@ -111,11 +115,10 @@ PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0
 PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0,1
 ```
 
-The default handoff checkpoint is
-`checkpoints/variable_rate_lic_v4_main/checkpoints/last_ckpt.pt`. The launcher
-also scans V4 numbered checkpoints when `last_ckpt.pt` does not yet exist, so a
-run interrupted before the final save resumes from the latest valid V4 state.
-It also finds the latest Plain DiT numbered checkpoint whose recorded
+The launcher evaluates the accepted V4 checkpoint rather than assuming a
+particular filename. It scans V4 numbered checkpoints when `last_ckpt.pt` does
+not yet exist, so a run interrupted before the final save resumes from the
+latest valid V4 state. It also finds the latest Plain DiT numbered checkpoint whose recorded
 `source_checkpoint_sha256` matches this V4 file, so rerunning the same command
 resumes Plain DiT after an interruption instead of restarting it.
 
@@ -154,18 +157,14 @@ bash scripts/run_variable_rate_train.sh plain 0 \
 
 ## 5. Frozen-bitstream Gate B
 
-Use the direct LIC evaluation's V4 binary tree and run
-`scripts/run_variable_rate_eval.sh` on P0 using the same images. Then compare
-the corresponding binary trees:
-
-```bash
-PYTHONPATH=. python scripts/compare_bitstreams.py \
-  /path/to/V4_eval/q0/bin \
-  /path/to/P0_eval/q0/bin
-```
-
-Repeat for q0..q5. Every file must be byte-identical before attributing a
-quality difference to Plain DiT training.
+After P0 completes, the same chained launcher runs all six P0 real-rANS
+evaluations and Gate B automatically checks every q's packets against the
+accepted LIC evaluation. Every corresponding file must be byte-identical, and
+the P0 rate ladder must remain strictly increasing before attributing a quality
+difference to Plain DiT training. Both gate reports and their evaluation trees
+are written under `results/v4_then_dit_gate_<timestamp>/`. Override the image
+set or report directory only when needed with `GATE_IMAGE_DIR=...` or
+`GATE_OUTPUT_ROOT=...`.
 
 CUDA, one-/two-rank DDP, real CompressAI/rANS, memory, throughput, and full
 RD/RP validation must be performed on the training server; the local Windows
