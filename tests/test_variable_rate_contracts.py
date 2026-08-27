@@ -266,16 +266,19 @@ class VariableRateStructureTest(unittest.TestCase):
         source = (ROOT / "scripts" / "run_v4_then_dit.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn("expected_schema = 8", source)
-        self.assertIn('expected_stage = "variable_quality_codec"', source)
+        self.assertIn('checkpoint.get("schema_version", -1)) != 8', source)
+        self.assertIn('checkpoint.get("stage") != "variable_quality_codec"', source)
         self.assertIn(
-            'expected_mechanism = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"',
-            source,
+            '"dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"', source
         )
-        self.assertIn('training_phase") != "pixel_perceptual_rd"', source)
+        self.assertIn('"pixel_perceptual_rd"', source)
         self.assertIn("--resume_checkpoint", source)
+        self.assertIn("source_checkpoint_sha256", source)
+        self.assertIn('expected_steps = int(config["train"]["max_steps"])', source)
+        self.assertIn('checkpoint.get("stage") != "multirate_reconstruction"', source)
         self.assertIn('bash scripts/run_variable_rate_train.sh plain', source)
         self.assertIn('--codec_path "${lic_checkpoint}"', source)
+        self.assertIn('Plain DiT exited without a complete checkpoint', source)
 
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"

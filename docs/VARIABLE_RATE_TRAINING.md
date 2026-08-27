@@ -112,7 +112,12 @@ PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0,1
 ```
 
 The default handoff checkpoint is
-`checkpoints/variable_rate_lic_v4_main/checkpoints/last_ckpt.pt`.
+`checkpoints/variable_rate_lic_v4_main/checkpoints/last_ckpt.pt`. The launcher
+also scans V4 numbered checkpoints when `last_ckpt.pt` does not yet exist, so a
+run interrupted before the final save resumes from the latest valid V4 state.
+It also finds the latest Plain DiT numbered checkpoint whose recorded
+`source_checkpoint_sha256` matches this V4 file, so rerunning the same command
+resumes Plain DiT after an interruption instead of restarting it.
 
 Pass the accepted V4 checkpoint with `--codec_path`. The config loads and
 freezes only the V4 LIC, loads the pretrained SANA VAE and DiT backbones, keeps
