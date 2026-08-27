@@ -98,6 +98,22 @@ is diagnostic only.
 
 ## 4. P0 Multi-rate Plain DiT
 
+To run the complete V4-to-DiT handoff without monitoring the phase boundary,
+use the chained launcher. It validates the V4 checkpoint before starting Plain
+DiT, resumes an incomplete but valid V4 run, and refuses to launch DiT for an
+invalid or incomplete checkpoint:
+
+```bash
+# One GPU; each selected GPU uses batch size 8.
+PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0
+
+# Two GPUs; each GPU still uses batch size 8.
+PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0,1
+```
+
+The default handoff checkpoint is
+`checkpoints/variable_rate_lic_v4_main/checkpoints/last_ckpt.pt`.
+
 Pass the accepted V4 checkpoint with `--codec_path`. The config loads and
 freezes only the V4 LIC, loads the pretrained SANA VAE and DiT backbones, keeps
 the VAE frozen without LoRA, and

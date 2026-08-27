@@ -262,6 +262,21 @@ class VariableRateStructureTest(unittest.TestCase):
             "calibration_confirmed=args.calibration_confirmed", source
         )
 
+    def test_v4_then_dit_launcher_validates_and_chains_checkpoint(self):
+        source = (ROOT / "scripts" / "run_v4_then_dit.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("expected_schema = 8", source)
+        self.assertIn('expected_stage = "variable_quality_codec"', source)
+        self.assertIn(
+            'expected_mechanism = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"',
+            source,
+        )
+        self.assertIn('training_phase") != "pixel_perceptual_rd"', source)
+        self.assertIn("--resume_checkpoint", source)
+        self.assertIn('bash scripts/run_variable_rate_train.sh plain', source)
+        self.assertIn('--codec_path "${lic_checkpoint}"', source)
+
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"
         source = source_path.read_text(encoding="utf-8")
