@@ -61,7 +61,9 @@ class VariableRateGateTests(unittest.TestCase):
                     q5_max_bpp=0.08,
                 )
             )
-            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["selected"]["name"], "best")
+            gate_report = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(gate_report["selected"]["name"], "best")
+            self.assertIn("matched_mean_psnr", gate_report["candidates"][0])
 
     def test_gate_a_rejects_non_monotonic_real_bpp(self):
         metrics = {

@@ -96,9 +96,9 @@ The chained launcher performs this direct LIC evaluation itself before it
 starts DiT. Gate A uses serialized rANS packets and requires every q to
 round-trip, `q0 < q1 < ... < q5`, a BPP span of at least `0.02`, `q0 <= 0.03`,
 and `0.045 <= q5 <= 0.08`. It evaluates the latest completed candidate and
-`best_ckpt.pt` (when present), then selects the accepted one by mean PSNR, with
-LPIPS, DISTS, and BPP as deterministic tie-breakers. Likelihood BPP is
-diagnostic only.
+`best_ckpt.pt` (when present), then selects the accepted one by PSNR
+interpolated over their shared real-BPP interval, with LPIPS, DISTS, and BPP as
+deterministic tie-breakers. Likelihood BPP is diagnostic only.
 
 ## 4. P0 Multi-rate Plain DiT
 

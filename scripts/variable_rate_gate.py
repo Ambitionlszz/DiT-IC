@@ -66,6 +66,36 @@ def mean_metric(metrics, key):
     return sum(metrics[quality][key] for quality in QUALITY_NAMES) / len(QUALITY_NAMES)
 
 
+def interpolate_metric(metrics, key, target_bpp):
+    points = [(metrics[quality]["bpp"], metrics[quality][key]) for quality in QUALITY_NAMES]
+    for (left_bpp, left_value), (right_bpp, right_value) in zip(points, points[1:]):
+        if left_bpp <= target_bpp <= right_bpp:
+            fraction = (target_bpp - left_bpp) / (right_bpp - left_bpp)
+            return left_value + fraction * (right_value - left_value)
+    raise ValueError(f"cannot interpolate {key} at BPP {target_bpp:.6f}")
+
+
+def attach_matched_rd_scores(candidates):
+    if len(candidates) == 1:
+        candidates[0]["matched_mean_psnr"] = candidates[0]["mean_psnr"]
+        candidates[0]["matched_bpp_range"] = [
+            candidates[0]["qualities"]["q0"]["bpp"],
+            candidates[0]["qualities"]["q5"]["bpp"],
+        ]
+        return
+    lower = max(candidate["qualities"]["q0"]["bpp"] for candidate in candidates)
+    upper = min(candidate["qualities"]["q5"]["bpp"] for candidate in candidates)
+    if lower >= upper:
+        raise ValueError("accepted LIC candidates have no common real-BPP interval")
+    anchors = [lower + (upper - lower) * index / 4.0 for index in range(5)]
+    for candidate in candidates:
+        candidate["matched_mean_psnr"] = sum(
+            interpolate_metric(candidate["qualities"], "psnr", anchor)
+            for anchor in anchors
+        ) / len(anchors)
+        candidate["matched_bpp_range"] = [lower, upper]
+
+
 def select_lic(args):
     candidates = []
     for name, checkpoint, summary_path, evaluation_dir in (
@@ -109,15 +139,16 @@ def select_lic(args):
             "min_bpp_span": args.min_bpp_span,
             "q0_max_bpp": args.q0_max_bpp,
             "q5_bpp_range": [args.q5_min_bpp, args.q5_max_bpp],
-            "selection": "highest mean PSNR, then lower mean LPIPS, DISTS, BPP",
+            "selection": "highest PSNR interpolated over the common real-BPP interval, then lower mean LPIPS, DISTS, BPP",
         },
         "candidates": candidates,
     }
     if accepted:
+        attach_matched_rd_scores(accepted)
         selected = min(
             accepted,
             key=lambda candidate: (
-                -candidate["mean_psnr"],
+                -candidate["matched_mean_psnr"],
                 candidate["mean_lpips"],
                 candidate["mean_dists"],
                 candidate["mean_bpp"],
