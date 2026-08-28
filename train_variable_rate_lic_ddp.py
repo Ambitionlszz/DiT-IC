@@ -57,11 +57,15 @@ def load_config(path, calibration_confirmed=False):
     phase_b = lic_config.get("phase_b") or {}
     for phase_name, phase_config in (("phase_a", phase_a), ("phase_b", phase_b)):
         steps = int(phase_config.get("steps", 0))
+        if phase_name == "phase_a" and steps < 0:
+            raise ValueError("lic_train.phase_a.steps must be non-negative")
+        if phase_name == "phase_b" and steps < 1:
+            raise ValueError("lic_train.phase_b.steps must be positive")
+        if steps == 0:
+            continue
         lambda_values = [
             float(value) for value in phase_config.get("lambda_values", [])
         ]
-        if steps < 1:
-            raise ValueError(f"lic_train.{phase_name}.steps must be positive")
         if len(lambda_values) != 6:
             raise ValueError(
                 f"lic_train.{phase_name}.lambda_values must contain 6 values"
@@ -73,7 +77,10 @@ def load_config(path, calibration_confirmed=False):
                 f"lic_train.{phase_name}.lambda_values must be positive and "
                 "strictly decreasing from low-quality q0 to high-quality q5"
             )
-    if float(phase_a.get("latent_mse_weight", 0.0)) <= 0:
+    if (
+        int(phase_a.get("steps", 0)) > 0
+        and float(phase_a.get("latent_mse_weight", 0.0)) <= 0
+    ):
         raise ValueError("lic_train.phase_a.latent_mse_weight must be positive")
     for weight_name in ("pixel_mse_weight", "lpips_weight", "dists_weight"):
         if float(phase_b.get(weight_name, 0.0)) <= 0:
@@ -115,15 +122,19 @@ def phase_step(global_step, phase_a_steps):
 def objective_contract(config):
     phase_a = config["lic_train"]["phase_a"]
     phase_b = config["lic_train"]["phase_b"]
+    if int(phase_a["steps"]) == 0:
+        phase_a_contract = {"disabled": True}
+    else:
+        phase_a_contract = {
+            "lambda_values": [float(value) for value in phase_a["lambda_values"]],
+            "latent_mse_weight": float(phase_a["latent_mse_weight"]),
+        }
     return {
         "version": OBJECTIVE_VERSION,
         "loss_form": "distortion_plus_rate_lambda",
         "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
         "codec_initialization": "scratch",
-        "phase_a": {
-            "lambda_values": [float(value) for value in phase_a["lambda_values"]],
-            "latent_mse_weight": float(phase_a["latent_mse_weight"]),
-        },
+        "phase_a": phase_a_contract,
         "phase_b": {
             "lambda_values": [float(value) for value in phase_b["lambda_values"]],
             "pixel_mse_weight": float(phase_b["pixel_mse_weight"]),
@@ -445,7 +456,8 @@ def train(rank, local_rank, world_size, config):
         )
         return optimizer, entropy_optimizer, scheduler
 
-    optimizer, entropy_optimizer, scheduler = build_training_state(PHASE_A)
+    initial_phase = training_phase(0, phase_a_steps)
+    optimizer, entropy_optimizer, scheduler = build_training_state(initial_phase)
 
     model = DDP(stage_model, device_ids=[local_rank])
     model.train()
@@ -540,7 +552,7 @@ def train(rank, local_rank, world_size, config):
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
         if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(
-                "scratch two-phase LIC training requires a schema-version 8 "
+                "scratch variable-rate LIC training requires a schema-version 8 "
                 "checkpoint"
             )
         if resume.get("objective_contract") != objective_contract(config):
@@ -805,7 +817,7 @@ def train(rank, local_rank, world_size, config):
                         torch.save(make_checkpoint(), checkpoint_dir / best_name)
                 dist.barrier()
 
-            if train_steps == phase_a_steps:
+            if phase_a_steps > 0 and train_steps == phase_a_steps:
                 optimizer, entropy_optimizer, scheduler = build_training_state(
                     PHASE_B
                 )
@@ -836,7 +848,7 @@ def train(rank, local_rank, world_size, config):
     if rank == 0:
         torch.save(make_checkpoint(), checkpoint_dir / "last_ckpt.pt")
         writer.close()
-        logger.info("two-phase variable-rate LIC training complete")
+        logger.info("variable-rate LIC training complete")
 
 
 def main():

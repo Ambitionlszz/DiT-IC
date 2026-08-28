@@ -20,6 +20,16 @@ case "${stage}" in
     config=configs/variable_rate_lic_main.yaml
     default_per_gpu_batch_size=8
     ;;
+  lic-e2e-pixel-smoke)
+    trainer=train_variable_rate_lic_ddp.py
+    config=configs/variable_rate_lic_e2e_pixel_smoke.yaml
+    default_per_gpu_batch_size=8
+    ;;
+  lic-e2e-pixel)
+    trainer=train_variable_rate_lic_ddp.py
+    config=configs/variable_rate_lic_e2e_pixel.yaml
+    default_per_gpu_batch_size=8
+    ;;
   plain-smoke)
     trainer=train_nogan_ddp.py
     config=configs/multirate_plain_dit_smoke.yaml
@@ -30,8 +40,13 @@ case "${stage}" in
     config=configs/multirate_plain_dit.yaml
     default_per_gpu_batch_size=8
     ;;
+  plain-e2e-pixel)
+    trainer=train_nogan_ddp.py
+    config=configs/multirate_plain_dit_e2e_pixel.yaml
+    default_per_gpu_batch_size=8
+    ;;
   *)
-    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, plain-smoke, plain" >&2
+    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-e2e-pixel-smoke, lic-e2e-pixel, plain-smoke, plain, plain-e2e-pixel" >&2
     exit 2
     ;;
 esac

@@ -240,10 +240,24 @@ class Codec(nn.Module):
                     )
                 global_step = int(checkpoint.get("global_step", -1))
                 phase_a_steps = int(checkpoint.get("phase_a_steps", -1))
-                if phase_a_steps < 1 or global_step <= phase_a_steps:
+                phase_b_steps = int(checkpoint.get("phase_b_steps", -1))
+                training_phase = checkpoint.get("training_phase")
+                objective = checkpoint.get("objective_contract") or {}
+                pixel_only_contract_valid = (
+                    phase_a_steps != 0
+                    or objective.get("phase_a") == {"disabled": True}
+                )
+                if (
+                    phase_a_steps < 0
+                    or phase_b_steps < 1
+                    or global_step <= phase_a_steps
+                    or global_step > phase_a_steps + phase_b_steps
+                    or training_phase != "pixel_perceptual_rd"
+                    or not pixel_only_contract_valid
+                ):
                     raise ValueError(
                         "multi-rate Plain requires a LIC checkpoint trained "
-                        "past the Phase A boundary"
+                        "with the pixel-perceptual objective"
                     )
             elif (
                 int(checkpoint.get("schema_version", 0)) != 3

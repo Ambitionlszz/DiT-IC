@@ -8,8 +8,12 @@ if (( $# != 1 )); then
 fi
 
 lic_config=${LIC_CONFIG:-configs/variable_rate_lic_main.yaml}
-plain_config=configs/multirate_plain_dit.yaml
-lic_checkpoint_dir=checkpoints/variable_rate_lic_v5_main/checkpoints
+lic_stage=${LIC_STAGE:-lic-main}
+plain_config=${PLAIN_CONFIG:-configs/multirate_plain_dit.yaml}
+plain_stage=${PLAIN_STAGE:-plain}
+lic_run_label=${LIC_RUN_LABEL:-V5 LIC}
+plain_run_label=${PLAIN_RUN_LABEL:-Plain DiT}
+lic_checkpoint_dir=${LIC_CHECKPOINT_DIR:-checkpoints/variable_rate_lic_v5_main/checkpoints}
 lic_checkpoint=${lic_checkpoint_dir}/last_ckpt.pt
 plain_checkpoint_dir=${PLAIN_CHECKPOINT_DIR:-checkpoints/multirate_plain_dit_p0/checkpoints}
 per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}
@@ -83,7 +87,7 @@ for path in candidates:
     try:
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     except Exception as exc:
-        raise SystemExit(f"cannot read V5 checkpoint {path}: {exc}")
+        raise SystemExit(f"cannot read LIC checkpoint {path}: {exc}")
     if checkpoint.get("stage") != "variable_quality_codec":
         continue
     if int(checkpoint.get("schema_version", -1)) != 8:
@@ -106,7 +110,7 @@ for path in candidates:
             "pixel_perceptual_rd"
         ):
             raise SystemExit(
-                f"completed V5 checkpoint is not marked as Phase B: {path}"
+                f"completed LIC checkpoint is not marked as Phase B: {path}"
             )
         valid.append((global_step, path))
 
@@ -213,7 +217,7 @@ run_gate_a() {
   local gate_a_report="${gate_output_root}/gate_a.json"
 
   if [[ ! -f "${last_checkpoint}" ]]; then
-    echo "Completed V5 LIC checkpoint is missing ${last_checkpoint}" >&2
+    echo "Completed ${lic_run_label} checkpoint is missing ${last_checkpoint}" >&2
     exit 1
   fi
   run_lic_direct_eval "${last_checkpoint}" "${last_eval_dir}"
@@ -229,7 +233,7 @@ run_gate_a() {
   fi
 
   echo "Gate A requires strictly increasing real BPP, span >= ${gate_min_bpp_span}, and monotonic quality metrics."
-  echo "Fixed q0/q5 endpoint bounds are disabled for V5; matched-baseline comparison remains required for final claims."
+  echo "Fixed q0/q5 endpoint bounds are disabled; matched-baseline comparison remains required for final claims."
   PYTHONPATH=. python scripts/variable_rate_gate.py select-lic \
     --last-checkpoint "${last_checkpoint}" \
     --last-summary "${last_eval_dir}/summary.json" \
@@ -285,43 +289,43 @@ case "${lic_state}" in
     checkpoint_state=missing
     ;;
   *)
-    echo "Refusing to start DiT: V5 checkpoint validation failed." >&2
+    echo "Refusing to start DiT: ${lic_run_label} checkpoint validation failed." >&2
     exit 1
     ;;
 esac
 
 case "${checkpoint_state}" in
   complete)
-    echo "V5 LIC is complete; skipping LIC training."
+    echo "${lic_run_label} is complete; skipping LIC training."
     ;;
   missing)
-    echo "No V5 LIC checkpoint found; starting V5 LIC from scratch."
+    echo "No ${lic_run_label} checkpoint found; starting from scratch."
     PER_GPU_BATCH_SIZE="${per_gpu_batch_size}" \
     ACCUMULATION_STEPS="${accumulation_steps}" \
-      bash scripts/run_variable_rate_train.sh lic-main "${gpu_list}" \
+      bash scripts/run_variable_rate_train.sh "${lic_stage}" "${gpu_list}" \
         --calibration_confirmed
     ;;
   resume:*)
-    echo "V5 LIC is incomplete; resuming from ${checkpoint_state#resume:}."
+    echo "${lic_run_label} is incomplete; resuming from ${checkpoint_state#resume:}."
     PER_GPU_BATCH_SIZE="${per_gpu_batch_size}" \
     ACCUMULATION_STEPS="${accumulation_steps}" \
-      bash scripts/run_variable_rate_train.sh lic-main "${gpu_list}" \
+      bash scripts/run_variable_rate_train.sh "${lic_stage}" "${gpu_list}" \
         --calibration_confirmed \
         --resume_checkpoint "${lic_checkpoint}"
     ;;
   *)
-    echo "Unexpected V5 checkpoint state: ${checkpoint_state}" >&2
+    echo "Unexpected ${lic_run_label} checkpoint state: ${checkpoint_state}" >&2
     exit 1
     ;;
 esac
 
 if [[ ! -f "${lic_checkpoint}" ]]; then
-  echo "V5 LIC exited without ${lic_checkpoint}; refusing to start DiT." >&2
+  echo "${lic_run_label} exited without ${lic_checkpoint}; refusing to start DiT." >&2
   exit 1
 fi
 lic_state_after="$(inspect_lic_checkpoints)"
 if [[ "${lic_state_after}" != complete:* ]]; then
-  echo "V5 LIC checkpoint is not complete after training; refusing to start DiT." >&2
+  echo "${lic_run_label} checkpoint is not complete after training; refusing to start DiT." >&2
   exit 1
 fi
 lic_checkpoint=${lic_state_after#complete:}
@@ -330,36 +334,36 @@ run_gate_a
 plain_state="$(inspect_plain_checkpoints)"
 case "${plain_state}" in
   complete:*)
-    echo "Plain DiT is complete; the three-stage chain is already finished."
+    echo "${plain_run_label} is complete; the training chain is already finished."
     plain_checkpoint=${plain_state#complete:}
     ;;
   resume:*)
     plain_resume_checkpoint=${plain_state#resume:}
-    echo "V5 LIC complete; resuming Plain DiT from ${plain_resume_checkpoint}."
+    echo "${lic_run_label} complete; resuming ${plain_run_label} from ${plain_resume_checkpoint}."
     PER_GPU_BATCH_SIZE="${per_gpu_batch_size}" \
     ACCUMULATION_STEPS="${accumulation_steps}" \
-      bash scripts/run_variable_rate_train.sh plain "${gpu_list}" \
+      bash scripts/run_variable_rate_train.sh "${plain_stage}" "${gpu_list}" \
         --codec_path "${lic_checkpoint}" \
         --resume_checkpoint "${plain_resume_checkpoint}"
     ;;
   missing)
-    echo "V5 LIC complete; starting Plain DiT from step 0 with ${lic_checkpoint}."
+    echo "${lic_run_label} complete; starting ${plain_run_label} from step 0 with ${lic_checkpoint}."
     PER_GPU_BATCH_SIZE="${per_gpu_batch_size}" \
     ACCUMULATION_STEPS="${accumulation_steps}" \
-      bash scripts/run_variable_rate_train.sh plain "${gpu_list}" \
+      bash scripts/run_variable_rate_train.sh "${plain_stage}" "${gpu_list}" \
         --codec_path "${lic_checkpoint}"
     ;;
   *)
-    echo "Unexpected Plain DiT checkpoint state: ${plain_state}" >&2
+    echo "Unexpected ${plain_run_label} checkpoint state: ${plain_state}" >&2
     exit 1
     ;;
 esac
 
 plain_state_after="$(inspect_plain_checkpoints)"
 if [[ "${plain_state_after}" != complete:* ]]; then
-  echo "Plain DiT exited without a complete checkpoint; rerun the same command to resume." >&2
+  echo "${plain_run_label} exited without a complete checkpoint; rerun the same command to resume." >&2
   exit 1
 fi
 plain_checkpoint=${plain_state_after#complete:}
 run_gate_b "${plain_checkpoint}"
-echo "V5 LIC, Phase B, Plain DiT, and both real-rANS gates are complete."
+echo "${lic_run_label}, ${plain_run_label}, and both real-rANS gates are complete."

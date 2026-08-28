@@ -179,7 +179,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
         self.assertNotIn("default_per_gpu_batch_size=16", launcher)
-        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 5)
+        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 8)
         self.assertIn(
             "per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}",
             launcher,
@@ -187,6 +187,9 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("--per_gpu_batch_size", launcher)
         self.assertIn("--accumulation_steps", launcher)
         self.assertIn("plain-smoke)", launcher)
+        self.assertIn("lic-e2e-pixel-smoke)", launcher)
+        self.assertIn("lic-e2e-pixel)", launcher)
+        self.assertIn("plain-e2e-pixel)", launcher)
 
         training_source = (ROOT / "train_nogan_ddp.py").read_text(
             encoding="utf-8"
@@ -271,6 +274,162 @@ class VariableRateStructureTest(unittest.TestCase):
             "calibration_confirmed=args.calibration_confirmed", source
         )
 
+    def test_e2e_pixel_configs_are_isolated_and_have_no_latent_phase(self):
+        lic = (
+            ROOT / "configs" / "variable_rate_lic_e2e_pixel.yaml"
+        ).read_text(encoding="utf-8")
+        smoke = (
+            ROOT / "configs" / "variable_rate_lic_e2e_pixel_smoke.yaml"
+        ).read_text(encoding="utf-8")
+        for config in (lic, smoke):
+            phase_a = config.split("phase_a:", 1)[1].split("phase_b:", 1)[0]
+            self.assertIn("steps: 0", phase_a)
+            self.assertNotIn("latent_mse_weight", config)
+            self.assertIn("pixel_mse_weight: 1.0", config)
+            self.assertIn("lpips_weight: 1.0", config)
+            self.assertIn("dists_weight: 0.2", config)
+            self.assertEqual(
+                config.count(
+                    "lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]"
+                ),
+                1,
+            )
+        self.assertIn("steps: 150000", lic)
+        self.assertIn("max_steps: 150000", lic)
+        self.assertIn("exp_name: variable_rate_lic_e2e_pixel_main", lic)
+        self.assertIn("steps: 20", smoke)
+        self.assertIn("max_steps: 20", smoke)
+
+        plain = (
+            ROOT / "configs" / "multirate_plain_dit_e2e_pixel.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("freeze_codec: true", plain)
+        self.assertIn("strict_stage_loading: true", plain)
+        self.assertIn("decoder_lora_only: true", plain)
+        self.assertIn("lora_rank_vae: 32", plain)
+        self.assertIn("lora_rank_DiT: 128", plain)
+        self.assertIn("train_text_projection: true", plain)
+        self.assertIn("exp_name: multirate_plain_dit_e2e_pixel_p0", plain)
+
+    def test_e2e_pixel_starts_in_phase_b_without_phase_a_transition(self):
+        source_path = ROOT / "train_variable_rate_lic_ddp.py"
+        source = source_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        training_phase = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "training_phase"
+        )
+        module = ast.Module(body=[training_phase], type_ignores=[])
+        scope = {"PHASE_A": "latent_rd", "PHASE_B": "pixel_perceptual_rd"}
+        exec(compile(module, str(source_path), "exec"), scope)
+        self.assertEqual(scope["training_phase"](0, 0), "pixel_perceptual_rd")
+
+        self.assertIn(
+            "initial_phase = training_phase(0, phase_a_steps)", source
+        )
+        self.assertIn(
+            "if phase_a_steps > 0 and train_steps == phase_a_steps:", source
+        )
+        self.assertIn('phase_a_contract = {"disabled": True}', source)
+        self.assertIn(
+            'phase_name == "phase_a" and steps < 0', source
+        )
+        self.assertIn(
+            'phase_name == "phase_b" and steps < 1', source
+        )
+
+    def test_e2e_pixel_config_validation_rejects_invalid_phase_steps(self):
+        source_path = ROOT / "train_variable_rate_lic_ddp.py"
+        source = source_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        load_config = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "load_config"
+        )
+        module = ast.Module(body=[load_config], type_ignores=[])
+
+        class YamlStub:
+            config = None
+
+            @classmethod
+            def safe_load(cls, _file):
+                return json.loads(json.dumps(cls.config))
+
+        scope = {"yaml": YamlStub}
+        exec(compile(module, str(source_path), "exec"), scope)
+        valid = {
+            "quality_control": {
+                "num_levels": 6,
+                "calibration_confirmed": True,
+            },
+            "lic_train": {
+                "phase_a": {"steps": 0},
+                "phase_b": {
+                    "steps": 20,
+                    "lambda_values": [16, 8, 4, 2, 1, 0.5],
+                    "pixel_mse_weight": 1,
+                    "lpips_weight": 1,
+                    "dists_weight": 0.2,
+                },
+            },
+            "train": {"max_steps": 20},
+            "model": {"codec_initialization": "scratch"},
+        }
+
+        YamlStub.config = valid
+        parsed = scope["load_config"](source_path)
+        self.assertEqual(parsed["lic_train"]["phase_a"]["steps"], 0)
+
+        invalid_phase_a = json.loads(json.dumps(valid))
+        invalid_phase_a["lic_train"]["phase_a"]["steps"] = -1
+        invalid_phase_a["train"]["max_steps"] = 19
+        YamlStub.config = invalid_phase_a
+        with self.assertRaisesRegex(ValueError, "phase_a.steps"):
+            scope["load_config"](source_path)
+
+        invalid_phase_b = json.loads(json.dumps(valid))
+        invalid_phase_b["lic_train"]["phase_b"]["steps"] = 0
+        invalid_phase_b["train"]["max_steps"] = 0
+        YamlStub.config = invalid_phase_b
+        with self.assertRaisesRegex(ValueError, "phase_b.steps"):
+            scope["load_config"](source_path)
+
+        incomplete_pixel_loss = json.loads(json.dumps(valid))
+        del incomplete_pixel_loss["lic_train"]["phase_b"]["dists_weight"]
+        YamlStub.config = incomplete_pixel_loss
+        with self.assertRaisesRegex(ValueError, "dists_weight"):
+            scope["load_config"](source_path)
+
+    def test_e2e_pixel_pipeline_has_dedicated_resume_and_gate_outputs(self):
+        wrapper = (
+            ROOT / "scripts" / "run_e2e_pixel_then_dit.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("LIC_STAGE=${LIC_STAGE:-lic-e2e-pixel}", wrapper)
+        self.assertIn("PLAIN_STAGE=${PLAIN_STAGE:-plain-e2e-pixel}", wrapper)
+        self.assertIn(
+            "checkpoints/variable_rate_lic_e2e_pixel_main/checkpoints",
+            wrapper,
+        )
+        self.assertIn(
+            "checkpoints/multirate_plain_dit_e2e_pixel_p0/checkpoints",
+            wrapper,
+        )
+        self.assertIn("results/e2e_pixel_then_dit_gate_", wrapper)
+        self.assertIn('exec bash scripts/run_v5_then_dit.sh "$@"', wrapper)
+
+        pipeline = (
+            ROOT / "scripts" / "run_v5_then_dit.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"${lic_stage}" "${gpu_list}"', pipeline)
+        self.assertIn('"${plain_stage}" "${gpu_list}"', pipeline)
+        self.assertIn("LIC_CHECKPOINT_DIR", pipeline)
+        self.assertIn("PLAIN_CHECKPOINT_DIR", pipeline)
+        self.assertIn("--resume_checkpoint", pipeline)
+        self.assertIn("run_gate_a", pipeline)
+        self.assertIn("run_gate_b", pipeline)
+
     def test_v5_then_dit_launcher_validates_and_chains_checkpoint(self):
         source = (ROOT / "scripts" / "run_v5_then_dit.sh").read_text(
             encoding="utf-8"
@@ -285,9 +444,13 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("source_checkpoint_sha256", source)
         self.assertIn('expected_steps = int(config["train"]["max_steps"])', source)
         self.assertIn('checkpoint.get("stage") != "multirate_reconstruction"', source)
-        self.assertIn('bash scripts/run_variable_rate_train.sh plain', source)
+        self.assertIn(
+            'bash scripts/run_variable_rate_train.sh "${plain_stage}"', source
+        )
         self.assertIn('--codec_path "${lic_checkpoint}"', source)
-        self.assertIn('Plain DiT exited without a complete checkpoint', source)
+        self.assertIn(
+            '${plain_run_label} exited without a complete checkpoint', source
+        )
 
     def test_v5_launcher_scans_each_candidate_before_using_global_step(self):
         source = (ROOT / "scripts" / "run_v5_then_dit.sh").read_text(
@@ -443,6 +606,15 @@ class VariableRateStructureTest(unittest.TestCase):
             '!= "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"', source
         )
         self.assertIn("global_step <= phase_a_steps", source)
+        self.assertIn('training_phase != "pixel_perceptual_rd"', source)
+        self.assertIn("phase_a_steps < 0", source)
+        self.assertIn("phase_b_steps < 1", source)
+        self.assertIn(
+            'objective.get("phase_a") == {"disabled": True}', source
+        )
+        self.assertIn(
+            "global_step > phase_a_steps + phase_b_steps", source
+        )
         self.assertIn(
             "multi-rate Plain requires a LIC checkpoint trained ", source
         )
