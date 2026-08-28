@@ -97,7 +97,9 @@ def validate_lic_evaluation_binding(
     }
 
 
-def check_rate_ladder(metrics, min_bpp_span, q0_max_bpp, q5_min_bpp, q5_max_bpp):
+def check_rate_ladder(
+    metrics, min_bpp_span, q0_max_bpp=None, q5_min_bpp=None, q5_max_bpp=None
+):
     bpp = [metrics[quality]["bpp"] for quality in QUALITY_NAMES]
     failures = []
     if any(left >= right for left, right in zip(bpp, bpp[1:])):
@@ -106,13 +108,27 @@ def check_rate_ladder(metrics, min_bpp_span, q0_max_bpp, q5_min_bpp, q5_max_bpp)
         failures.append(
             f"real BPP span {bpp[-1] - bpp[0]:.6f} is below {min_bpp_span:.6f}"
         )
-    if bpp[0] > q0_max_bpp:
+    if q0_max_bpp is not None and bpp[0] > q0_max_bpp:
         failures.append(f"q0 real BPP {bpp[0]:.6f} exceeds {q0_max_bpp:.6f}")
-    if bpp[-1] < q5_min_bpp or bpp[-1] > q5_max_bpp:
+    if q5_min_bpp is not None and bpp[-1] < q5_min_bpp:
         failures.append(
-            f"q5 real BPP {bpp[-1]:.6f} is outside "
-            f"[{q5_min_bpp:.6f}, {q5_max_bpp:.6f}]"
+            f"q5 real BPP {bpp[-1]:.6f} is below {q5_min_bpp:.6f}"
         )
+    if q5_max_bpp is not None and bpp[-1] > q5_max_bpp:
+        failures.append(f"q5 real BPP {bpp[-1]:.6f} exceeds {q5_max_bpp:.6f}")
+    return failures
+
+
+def check_quality_ladder(metrics):
+    failures = []
+    for key in ("psnr", "ms_ssim"):
+        values = [metrics[quality][key] for quality in QUALITY_NAMES]
+        if any(left > right for left, right in zip(values, values[1:])):
+            failures.append(f"{key} must be non-decreasing from q0 through q5")
+    for key in ("lpips", "dists"):
+        values = [metrics[quality][key] for quality in QUALITY_NAMES]
+        if any(left < right for left, right in zip(values, values[1:])):
+            failures.append(f"{key} must be non-increasing from q0 through q5")
     return failures
 
 
@@ -171,6 +187,7 @@ def select_lic(args):
             args.q5_min_bpp,
             args.q5_max_bpp,
         )
+        failures.extend(check_quality_ladder(metrics))
         candidates.append(
             {
                 "name": name,
@@ -202,6 +219,7 @@ def select_lic(args):
         "criteria": {
             "strictly_increasing_bpp": True,
             "min_bpp_span": args.min_bpp_span,
+            "monotonic_quality_metrics": ["psnr", "ms_ssim", "lpips", "dists"],
             "q0_max_bpp": args.q0_max_bpp,
             "q5_bpp_range": [args.q5_min_bpp, args.q5_max_bpp],
             "selection": "highest PSNR interpolated over the common real-BPP interval, then lower mean LPIPS, DISTS, BPP",
@@ -299,9 +317,9 @@ def main():
     select.add_argument("--best-eval-dir")
     select.add_argument("--output", required=True)
     select.add_argument("--min-bpp-span", type=float, default=0.02)
-    select.add_argument("--q0-max-bpp", type=float, default=0.03)
-    select.add_argument("--q5-min-bpp", type=float, default=0.045)
-    select.add_argument("--q5-max-bpp", type=float, default=0.08)
+    select.add_argument("--q0-max-bpp", type=float)
+    select.add_argument("--q5-min-bpp", type=float)
+    select.add_argument("--q5-max-bpp", type=float)
     select.set_defaults(function=select_lic)
 
     verify = commands.add_parser("verify-p0")

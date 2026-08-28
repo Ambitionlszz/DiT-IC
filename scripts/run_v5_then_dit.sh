@@ -17,6 +17,7 @@ accumulation_steps=${ACCUMULATION_STEPS:-1}
 gate_gpu=${GATE_GPU:-${gpu_list%%,*}}
 gate_output_root=${GATE_OUTPUT_ROOT:-"results/v5_then_dit_gate_$(date +%Y%m%d_%H%M%S)"}
 gate_image_dir=${GATE_IMAGE_DIR:-}
+gate_min_bpp_span=${GATE_MIN_BPP_SPAN:-0.02}
 
 if [[ ! -f "${lic_config}" ]]; then
   echo "Missing LIC config: ${lic_config}" >&2
@@ -227,11 +228,14 @@ run_gate_a() {
     )
   fi
 
+  echo "Gate A requires strictly increasing real BPP, span >= ${gate_min_bpp_span}, and monotonic quality metrics."
+  echo "Fixed q0/q5 endpoint bounds are disabled for V5; matched-baseline comparison remains required for final claims."
   PYTHONPATH=. python scripts/variable_rate_gate.py select-lic \
     --last-checkpoint "${last_checkpoint}" \
     --last-summary "${last_eval_dir}/summary.json" \
     --last-eval-dir "${last_eval_dir}" \
     "${best_args[@]}" \
+    --min-bpp-span "${gate_min_bpp_span}" \
     --output "${gate_a_report}" >/dev/null
 
   lic_checkpoint="$(python - "${gate_a_report}" <<'PY'
@@ -298,7 +302,7 @@ case "${checkpoint_state}" in
         --calibration_confirmed
     ;;
   resume:*)
-    echo "V5 LIC is incomplete (${checkpoint_state#resume:} steps); resuming LIC."
+    echo "V5 LIC is incomplete; resuming from ${checkpoint_state#resume:}."
     PER_GPU_BATCH_SIZE="${per_gpu_batch_size}" \
     ACCUMULATION_STEPS="${accumulation_steps}" \
       bash scripts/run_variable_rate_train.sh lic-main "${gpu_list}" \

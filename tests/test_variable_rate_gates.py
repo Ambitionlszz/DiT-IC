@@ -81,9 +81,9 @@ class VariableRateGateTests(unittest.TestCase):
                     best_eval_dir=root / "best",
                     output=report,
                     min_bpp_span=0.02,
-                    q0_max_bpp=0.03,
-                    q5_min_bpp=0.045,
-                    q5_max_bpp=0.08,
+                    q0_max_bpp=None,
+                    q5_min_bpp=None,
+                    q5_max_bpp=None,
                 )
             )
             gate_report = json.loads(report.read_text(encoding="utf-8"))
@@ -182,6 +182,27 @@ class VariableRateGateTests(unittest.TestCase):
         }
         failures = GATE.check_rate_ladder(metrics, 0.02, 0.03, 0.045, 0.08)
         self.assertTrue(any("strictly increasing" in failure for failure in failures))
+
+    def test_gate_a_has_no_fixed_endpoint_bounds_by_default(self):
+        metrics = {
+            f"q{index}": {"bpp": value}
+            for index, value in enumerate([0.035, 0.044, 0.053, 0.062, 0.071, 0.080])
+        }
+        self.assertEqual(GATE.check_rate_ladder(metrics, 0.02), [])
+
+    def test_gate_a_rejects_a_quality_reversal(self):
+        metrics = {
+            f"q{index}": {
+                "psnr": 22.0 + index,
+                "ms_ssim": 0.70 + index * 0.01,
+                "lpips": 0.20 - index * 0.01,
+                "dists": 0.10 - index * 0.005,
+            }
+            for index in range(6)
+        }
+        metrics["q3"]["lpips"] = metrics["q2"]["lpips"] + 0.01
+        failures = GATE.check_quality_ladder(metrics)
+        self.assertTrue(any("lpips" in failure for failure in failures))
 
     def test_gate_b_requires_byte_identical_frozen_codec_bins(self):
         with tempfile.TemporaryDirectory() as directory:
