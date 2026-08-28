@@ -19,7 +19,7 @@ For an explicit override, prefix the command with values such as
 The experiment DAG is:
 
 ```text
-scratch two-phase LIC -> accepted V4 LIC -> multi-rate Plain P0
+scratch two-phase LIC -> accepted V5 LIC -> multi-rate Plain P0
                                            -> Self-Flow feasibility experiments
 ```
 
@@ -74,7 +74,7 @@ bash scripts/run_variable_rate_train.sh lic-smoke 0,1
 ## 2. Six-rate lambda table
 
 Both phases use the requested lambda set `[2, 4, 8, 16, 32, 64]`, bound in
-descending order `[64.0, 32.0, 16.0, 8.0, 4.0, 2.0]` from q0 through q5.
+descending order `[16.0, 8.0, 4.0, 2.0, 1.0, 0.5]` from q0 through q5.
 This preserves the semantic order q0=lowest BPP and q5=highest BPP while using
 the standard baseline/FlowCodec form `D + lambda_rate * R`. Larger lambda
 therefore means lower rate, and smaller lambda means higher quality.
@@ -85,7 +85,7 @@ objective and are not accepted calibration evidence for schema 8. Serialized
 rANS BPP remains the final measurement because likelihood BPP excludes
 container overhead.
 
-## 3. V4 main
+## 3. V5 main
 
 ```bash
 bash scripts/run_variable_rate_train.sh lic-main 0 --calibration_confirmed
@@ -102,28 +102,28 @@ deterministic tie-breakers. Likelihood BPP is diagnostic only.
 
 ## 4. P0 Multi-rate Plain DiT
 
-To run the complete V4-to-DiT handoff without monitoring the phase boundary,
-use the chained launcher. It validates the V4 checkpoint before starting Plain
-DiT, resumes an incomplete but valid V4 run, and refuses to launch DiT for an
+To run the complete V5-to-DiT handoff without monitoring the phase boundary,
+use the chained launcher. It validates the V5 checkpoint before starting Plain
+DiT, resumes an incomplete but valid V5 run, and refuses to launch DiT for an
 invalid or incomplete checkpoint:
 
 ```bash
 # One GPU; each selected GPU uses batch size 8.
-PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0
+PER_GPU_BATCH_SIZE=8 bash scripts/run_v5_then_dit.sh 0
 
 # Two GPUs; each GPU still uses batch size 8.
-PER_GPU_BATCH_SIZE=8 bash scripts/run_v4_then_dit.sh 0,1
+PER_GPU_BATCH_SIZE=8 bash scripts/run_v5_then_dit.sh 0,1
 ```
 
-The launcher evaluates the accepted V4 checkpoint rather than assuming a
-particular filename. It scans V4 numbered checkpoints when `last_ckpt.pt` does
+The launcher evaluates the accepted V5 checkpoint rather than assuming a
+particular filename. It scans V5 numbered checkpoints when `last_ckpt.pt` does
 not yet exist, so a run interrupted before the final save resumes from the
-latest valid V4 state. It also finds the latest Plain DiT numbered checkpoint whose recorded
-`source_checkpoint_sha256` matches this V4 file, so rerunning the same command
+latest valid V5 state. It also finds the latest Plain DiT numbered checkpoint whose recorded
+`source_checkpoint_sha256` matches this V5 file, so rerunning the same command
 resumes Plain DiT after an interruption instead of restarting it.
 
-Pass the accepted V4 checkpoint with `--codec_path`. The config completely
-freezes the V4 LIC, its entropy model, and the VAE encoder. It trains only
+Pass the accepted V5 checkpoint with `--codec_path`. The config completely
+freezes the V5 LIC, its entropy model, and the VAE encoder. It trains only
 decoder-side VAE LoRA (rank/alpha 32), newly initialized DiT LoRA, and the
 fixed-condition text projection; all pretrained base weights remain frozen.
 One q is sampled on rank 0 per optimizer step and shared by all selected GPU
@@ -136,23 +136,23 @@ First run the 20-step handoff smoke:
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain-smoke 0,1 \
-  --codec_path /path/to/V4_variable_rate_checkpoint.pt
+  --codec_path /path/to/V5_variable_rate_checkpoint.pt
 ```
 
 Only after this succeeds, launch the full P0 run below.
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0 \
-  --codec_path /path/to/V4_variable_rate_checkpoint.pt
+  --codec_path /path/to/V5_variable_rate_checkpoint.pt
 # Or: bash scripts/run_variable_rate_train.sh plain 0,1 \
-#   --codec_path /path/to/V4_variable_rate_checkpoint.pt
+#   --codec_path /path/to/V5_variable_rate_checkpoint.pt
 ```
 
 Resume only from a P0 checkpoint:
 
 ```bash
 bash scripts/run_variable_rate_train.sh plain 0 \
-  --codec_path /path/to/V4_variable_rate_checkpoint.pt \
+  --codec_path /path/to/V5_variable_rate_checkpoint.pt \
   --resume_checkpoint /path/to/P0/checkpoint.pt
 ```
 
@@ -163,7 +163,7 @@ evaluations and Gate B automatically checks every q's packets against the
 accepted LIC evaluation. Every corresponding file must be byte-identical, and
 the P0 rate ladder must remain strictly increasing before attributing a quality
 difference to Plain DiT training. Both gate reports and their evaluation trees
-are written under `results/v4_then_dit_gate_<timestamp>/`. Override the image
+are written under `results/v5_then_dit_gate_<timestamp>/`. Override the image
 set or report directory only when needed with `GATE_IMAGE_DIR=...` or
 `GATE_OUTPUT_ROOT=...`.
 

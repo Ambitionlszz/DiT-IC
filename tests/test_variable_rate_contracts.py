@@ -217,7 +217,7 @@ class VariableRateStructureTest(unittest.TestCase):
             self.assertIn("per_gpu_batch_size: 8", config)
             self.assertEqual(
                 config.count(
-                    "lambda_values: [64.0, 32.0, 16.0, 8.0, 4.0, 2.0]"
+                    "lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]"
                 ),
                 2,
             )
@@ -227,8 +227,8 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertEqual(pilot.count("steps: 2500"), 2)
         self.assertIn("steps: 50000", main)
         self.assertIn("steps: 100000", main)
-        self.assertIn("exp_name: variable_rate_lic_v4_pilot", pilot)
-        self.assertIn("exp_name: variable_rate_lic_v4_main", main)
+        self.assertIn("exp_name: variable_rate_lic_v5_pilot", pilot)
+        self.assertIn("exp_name: variable_rate_lic_v5_main", main)
 
         smoke = (ROOT / "configs" / "variable_rate_lic_smoke.yaml").read_text(
             encoding="utf-8"
@@ -238,7 +238,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("per_gpu_batch_size: 8", smoke)
         self.assertIn("codec_initialization: scratch", smoke)
         self.assertNotIn("source_checkpoint", smoke)
-        self.assertIn("exp_name: variable_rate_lic_v4_smoke", smoke)
+        self.assertIn("exp_name: variable_rate_lic_v5_smoke", smoke)
 
         plain_smoke = (
             ROOT / "configs" / "multirate_plain_dit_smoke.yaml"
@@ -271,8 +271,8 @@ class VariableRateStructureTest(unittest.TestCase):
             "calibration_confirmed=args.calibration_confirmed", source
         )
 
-    def test_v4_then_dit_launcher_validates_and_chains_checkpoint(self):
-        source = (ROOT / "scripts" / "run_v4_then_dit.sh").read_text(
+    def test_v5_then_dit_launcher_validates_and_chains_checkpoint(self):
+        source = (ROOT / "scripts" / "run_v5_then_dit.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn('checkpoint.get("schema_version", -1)) != 8', source)
@@ -289,8 +289,8 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('--codec_path "${lic_checkpoint}"', source)
         self.assertIn('Plain DiT exited without a complete checkpoint', source)
 
-    def test_v4_launcher_scans_each_candidate_before_using_global_step(self):
-        source = (ROOT / "scripts" / "run_v4_then_dit.sh").read_text(
+    def test_v5_launcher_scans_each_candidate_before_using_global_step(self):
+        source = (ROOT / "scripts" / "run_v5_then_dit.sh").read_text(
             encoding="utf-8"
         )
         blocks = re.findall(r"<<'PY'\n(.*?)\nPY", source, re.DOTALL)

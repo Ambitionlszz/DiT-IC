@@ -38,18 +38,18 @@ lic_train:
   # Phase B uses MSE + LPIPS + 0.2 * DISTS, then adds lambda * rate.
   phase_a:
     steps: 50000
-    lambda_values: [64.0, 32.0, 16.0, 8.0, 4.0, 2.0]
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
     latent_mse_weight: 1.0
   phase_b:
     steps: 100000
-    lambda_values: [64.0, 32.0, 16.0, 8.0, 4.0, 2.0]
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
     pixel_mse_weight: 1.0
     lpips_weight: 1.0
     dists_weight: 0.2
 
 train:
   output_dir: checkpoints
-  exp_name: variable_rate_lic_v4_main
+  exp_name: variable_rate_lic_v5_main
   per_gpu_batch_size: 8
   accumulation_steps: 1
   max_steps: 150000
