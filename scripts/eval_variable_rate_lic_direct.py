@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -23,6 +24,30 @@ from train_variable_rate_lic_ddp import (
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+SUMMARY_SCHEMA_VERSION = 1
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def image_manifest_sha256(image_paths):
+    manifest = [
+        {
+            "name": path.name,
+            "bytes": path.stat().st_size,
+            "sha256": file_sha256(path),
+        }
+        for path in image_paths
+    ]
+    payload = json.dumps(
+        manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def load_stage(config, checkpoint_path, weights, device):
@@ -177,8 +202,13 @@ def main():
         for index in args.quality_indices
     ]
     summary = {
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "checkpoint": str(Path(args.checkpoint).resolve()),
+        "checkpoint_sha256": file_sha256(args.checkpoint),
         "weights": args.weights,
+        "image_dir": str(Path(args.image_dir).resolve()),
+        "image_manifest_sha256": image_manifest_sha256(image_paths),
+        "num_images": len(image_paths),
         "qualities": {
             f"q{report['quality_index']}": report["averages"]
             for report in reports

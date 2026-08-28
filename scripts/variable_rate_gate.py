@@ -1,4 +1,4 @@
-"""Real-rANS acceptance checks for the V4 LIC -> Plain DiT chain."""
+"""Real-rANS acceptance checks for the variable-rate LIC -> Plain DiT chain."""
 
 import argparse
 import hashlib
@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 QUALITY_NAMES = tuple(f"q{index}" for index in range(6))
+LIC_SUMMARY_SCHEMA_VERSION = 1
 
 
 def load_json(path):
@@ -28,6 +29,15 @@ def finite(value, label):
     return value
 
 
+def validated_sha256(value, label):
+    if not isinstance(value, str) or len(value) != 64:
+        raise ValueError(f"{label} must be a SHA256 hex digest")
+    value = value.lower()
+    if any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"{label} must be a SHA256 hex digest")
+    return value
+
+
 def direct_lic_metrics(summary_path):
     summary = load_json(summary_path)
     qualities = summary.get("qualities", {})
@@ -41,6 +51,50 @@ def direct_lic_metrics(summary_path):
             for key in ("bpp", "psnr", "lpips", "dists", "ms_ssim")
         }
     return summary, metrics
+
+
+def validate_lic_evaluation_binding(
+    checkpoint, summary_path, evaluation_dir, summary
+):
+    checkpoint = Path(checkpoint)
+    if not checkpoint.is_file():
+        raise ValueError(f"missing LIC checkpoint: {checkpoint}")
+    checkpoint = checkpoint.resolve()
+    summary_path = Path(summary_path).resolve()
+    expected_summary = (Path(evaluation_dir) / "summary.json").resolve()
+    if summary_path != expected_summary:
+        raise ValueError(
+            f"LIC summary {summary_path} is not the summary for {evaluation_dir}"
+        )
+    if int(summary.get("summary_schema_version", 0)) != LIC_SUMMARY_SCHEMA_VERSION:
+        raise ValueError(
+            f"LIC summary must use schema {LIC_SUMMARY_SCHEMA_VERSION}"
+        )
+    if summary.get("weights") != "ema":
+        raise ValueError("Gate A requires EMA LIC evaluation weights")
+    summary_checkpoint = Path(summary.get("checkpoint", "")).resolve()
+    if summary_checkpoint != checkpoint:
+        raise ValueError(
+            f"LIC summary checkpoint {summary_checkpoint} does not match {checkpoint}"
+        )
+    expected_checkpoint_sha256 = validated_sha256(
+        summary.get("checkpoint_sha256"), "checkpoint_sha256"
+    )
+    actual_checkpoint_sha256 = sha256(checkpoint)
+    if actual_checkpoint_sha256 != expected_checkpoint_sha256:
+        raise ValueError(f"LIC checkpoint SHA256 does not match summary: {checkpoint}")
+    image_manifest_sha256 = validated_sha256(
+        summary.get("image_manifest_sha256"), "image_manifest_sha256"
+    )
+    num_images = int(summary.get("num_images", 0))
+    if num_images < 1:
+        raise ValueError("LIC summary num_images must be positive")
+    return {
+        "checkpoint_sha256": actual_checkpoint_sha256,
+        "image_manifest_sha256": image_manifest_sha256,
+        "num_images": num_images,
+        "weights": "ema",
+    }
 
 
 def check_rate_ladder(metrics, min_bpp_span, q0_max_bpp, q5_min_bpp, q5_max_bpp):
@@ -107,6 +161,9 @@ def select_lic(args):
         if not all((checkpoint, summary_path, evaluation_dir)):
             raise ValueError(f"{name} candidate needs checkpoint, summary, and eval dir")
         summary, metrics = direct_lic_metrics(summary_path)
+        binding = validate_lic_evaluation_binding(
+            checkpoint, summary_path, evaluation_dir, summary
+        )
         failures = check_rate_ladder(
             metrics,
             args.min_bpp_span,
@@ -121,6 +178,7 @@ def select_lic(args):
                 "summary": str(Path(summary_path).resolve()),
                 "evaluation_dir": str(Path(evaluation_dir).resolve()),
                 "summary_checkpoint": summary.get("checkpoint"),
+                **binding,
                 "accepted": not failures,
                 "failures": failures,
                 "qualities": metrics,
@@ -130,6 +188,13 @@ def select_lic(args):
                 "mean_dists": mean_metric(metrics, "dists"),
             }
         )
+
+    evaluation_sets = {
+        (candidate["image_manifest_sha256"], candidate["num_images"])
+        for candidate in candidates
+    }
+    if len(evaluation_sets) != 1:
+        raise ValueError("LIC candidates were not evaluated on the same image set")
 
     accepted = [candidate for candidate in candidates if candidate["accepted"]]
     report = {
