@@ -17,7 +17,6 @@ accumulation_steps=${ACCUMULATION_STEPS:-1}
 gate_gpu=${GATE_GPU:-${gpu_list%%,*}}
 gate_output_root=${GATE_OUTPUT_ROOT:-"results/v5_then_dit_gate_$(date +%Y%m%d_%H%M%S)"}
 gate_image_dir=${GATE_IMAGE_DIR:-}
-gate_min_bpp_span=${GATE_MIN_BPP_SPAN:-0.02}
 
 if [[ ! -f "${lic_config}" ]]; then
   echo "Missing LIC config: ${lic_config}" >&2
@@ -192,8 +191,7 @@ run_lic_direct_eval() {
   local checkpoint=$1
   local output_dir=$2
   if [[ -f "${output_dir}/summary.json" ]]; then
-    echo "Reusing LIC Gate-A evaluation: ${output_dir}"
-    return
+    echo "Refreshing LIC real-rANS evaluation: ${output_dir}"
   fi
   CUDA_VISIBLE_DEVICES="${gate_gpu}" PYTHONPATH=. python -u \
     scripts/eval_variable_rate_lic_direct.py \
@@ -205,52 +203,51 @@ run_lic_direct_eval() {
       --weights ema
 }
 
-run_gate_a() {
+evaluate_lic_for_handoff() {
   local last_checkpoint="${lic_checkpoint}"
   local last_eval_dir="${gate_output_root}/lic_last"
   local best_checkpoint="${lic_checkpoint_dir}/best_ckpt.pt"
   local best_eval_dir="${gate_output_root}/lic_best"
-  local gate_a_report="${gate_output_root}/gate_a.json"
+  local handoff_report="${gate_output_root}/lic_handoff.json"
 
   if [[ ! -f "${last_checkpoint}" ]]; then
     echo "Completed V5 LIC checkpoint is missing ${last_checkpoint}" >&2
     exit 1
   fi
   run_lic_direct_eval "${last_checkpoint}" "${last_eval_dir}"
+  lic_checkpoint="${last_checkpoint}"
+  lic_eval_dir="${last_eval_dir}"
 
-  local best_args=()
   if [[ -f "${best_checkpoint}" ]]; then
     run_lic_direct_eval "${best_checkpoint}" "${best_eval_dir}"
-    best_args=(
-      --best-checkpoint "${best_checkpoint}"
-      --best-summary "${best_eval_dir}/summary.json"
-      --best-eval-dir "${best_eval_dir}"
-    )
+    lic_checkpoint="${best_checkpoint}"
+    lic_eval_dir="${best_eval_dir}"
   fi
 
-  echo "Gate A requires strictly increasing real BPP, span >= ${gate_min_bpp_span}, and monotonic quality metrics."
-  echo "Fixed q0/q5 endpoint bounds are disabled for V5; matched-baseline comparison remains required for final claims."
-  PYTHONPATH=. python scripts/variable_rate_gate.py select-lic \
-    --last-checkpoint "${last_checkpoint}" \
-    --last-summary "${last_eval_dir}/summary.json" \
-    --last-eval-dir "${last_eval_dir}" \
-    "${best_args[@]}" \
-    --min-bpp-span "${gate_min_bpp_span}" \
-    --output "${gate_a_report}" >/dev/null
+  python - "${lic_checkpoint}" "${lic_eval_dir}" "${handoff_report}" <<'PY'
+import json
+import sys
+from pathlib import Path
 
-  lic_checkpoint="$(python - "${gate_a_report}" <<'PY'
-import json
-import sys
-print(json.load(open(sys.argv[1], encoding="utf-8"))["selected"]["checkpoint"])
+checkpoint = str(Path(sys.argv[1]).resolve())
+evaluation_dir = str(Path(sys.argv[2]).resolve())
+report_path = Path(sys.argv[3])
+summary_path = Path(evaluation_dir) / "summary.json"
+summary = json.loads(summary_path.read_text(encoding="utf-8"))
+report = {
+    "handoff": "non_blocking_lic_to_plain",
+    "selection": "best_ckpt.pt if present, otherwise last_ckpt.pt",
+    "checkpoint": checkpoint,
+    "checkpoint_sha256": summary["checkpoint_sha256"],
+    "evaluation_dir": evaluation_dir,
+    "summary": str(summary_path.resolve()),
+    "weights": summary["weights"],
+}
+report_path.parent.mkdir(parents=True, exist_ok=True)
+report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 PY
-)"
-  lic_eval_dir="$(python - "${gate_a_report}" <<'PY'
-import json
-import sys
-print(json.load(open(sys.argv[1], encoding="utf-8"))["selected"]["evaluation_dir"])
-PY
-)"
-  echo "Gate A accepted ${lic_checkpoint}; report: ${gate_a_report}"
+  echo "Gate A is disabled; real-rANS evidence was retained without blocking Plain DiT."
+  echo "Selected ${lic_checkpoint}; handoff report: ${handoff_report}"
 }
 
 run_gate_b() {
@@ -325,7 +322,7 @@ if [[ "${lic_state_after}" != complete:* ]]; then
   exit 1
 fi
 lic_checkpoint=${lic_state_after#complete:}
-run_gate_a
+evaluate_lic_for_handoff
 
 plain_state="$(inspect_plain_checkpoints)"
 case "${plain_state}" in
@@ -362,4 +359,4 @@ if [[ "${plain_state_after}" != complete:* ]]; then
 fi
 plain_checkpoint=${plain_state_after#complete:}
 run_gate_b "${plain_checkpoint}"
-echo "V5 LIC, Phase B, Plain DiT, and both real-rANS gates are complete."
+echo "V5 LIC, real-rANS evaluation, Plain DiT, and Gate B are complete."

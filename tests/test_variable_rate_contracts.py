@@ -288,6 +288,12 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn('bash scripts/run_variable_rate_train.sh plain', source)
         self.assertIn('--codec_path "${lic_checkpoint}"', source)
         self.assertIn('Plain DiT exited without a complete checkpoint', source)
+        self.assertIn("evaluate_lic_for_handoff", source)
+        self.assertIn("lic_handoff.json", source)
+        self.assertIn('lic_checkpoint="${best_checkpoint}"', source)
+        self.assertNotIn("GATE_MIN_BPP_SPAN", source)
+        self.assertNotIn("select-lic", source)
+        self.assertNotIn("both real-rANS gates", source)
 
     def test_v5_launcher_scans_each_candidate_before_using_global_step(self):
         source = (ROOT / "scripts" / "run_v5_then_dit.sh").read_text(
