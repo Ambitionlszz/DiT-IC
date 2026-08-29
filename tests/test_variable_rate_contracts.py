@@ -427,8 +427,15 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("LIC_CHECKPOINT_DIR", pipeline)
         self.assertIn("PLAIN_CHECKPOINT_DIR", pipeline)
         self.assertIn("--resume_checkpoint", pipeline)
-        self.assertIn("run_gate_a", pipeline)
+        self.assertIn("evaluate_lic_for_handoff", pipeline)
         self.assertIn("run_gate_b", pipeline)
+        self.assertIn("lic_handoff.json", pipeline)
+        self.assertIn(
+            'lic_checkpoint="${best_checkpoint}"', pipeline
+        )
+        self.assertNotIn("GATE_MIN_BPP_SPAN", pipeline)
+        self.assertNotIn("select-lic", pipeline)
+        self.assertNotIn("both real-rANS gates", pipeline)
 
     def test_v5_then_dit_launcher_validates_and_chains_checkpoint(self):
         source = (ROOT / "scripts" / "run_v5_then_dit.sh").read_text(
