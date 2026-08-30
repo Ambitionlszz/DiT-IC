@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 1 )); then
-  echo "usage: run_two_p0_then_bundle.sh GPU" >&2
+if (( $# < 1 || $# > 2 )); then
+  echo "usage: run_two_p0_then_bundle.sh V5_GPU [E2E_GPU]" >&2
   exit 2
 fi
 
-gpu=$1
+v5_gpu=$1
+e2e_gpu=${2:-$1}
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 default_v5_repo=$(cd "${script_dir}/.." && pwd)
 
@@ -104,6 +105,7 @@ run_pipeline() {
   local repo=$2
   local pipeline=$3
   local results=$4
+  local run_gpu=$5
   local gate_report=${results}/gate_b.json
 
   if [[ -f "${gate_report}" ]]; then
@@ -116,10 +118,10 @@ run_pipeline() {
     cd "${repo}"
     PER_GPU_BATCH_SIZE="${per_gpu_batch_size}" \
     ACCUMULATION_STEPS="${accumulation_steps}" \
-    GATE_GPU="${gpu}" \
+    GATE_GPU="${run_gpu}" \
     GATE_IMAGE_DIR="${image_dir}" \
     GATE_OUTPUT_ROOT="${results}" \
-      bash "${pipeline}" "${gpu}"
+      bash "${pipeline}" "${run_gpu}"
   )
 }
 
@@ -148,12 +150,31 @@ print(f"{label}: Gate B accepted with byte-identical q0-q5 bitstreams.")
 PY
 }
 
-run_pipeline \
-  "V5 P0" "${v5_repo}" "scripts/run_v5_then_dit.sh" "${v5_results}"
-validate_gate_b "V5 P0" "${v5_results}/gate_b.json"
+if [[ "${v5_gpu}" == "${e2e_gpu}" ]]; then
+  run_pipeline \
+    "V5 P0" "${v5_repo}" "scripts/run_v5_then_dit.sh" "${v5_results}" "${v5_gpu}"
+  run_pipeline \
+    "E2E P0" "${e2e_repo}" "scripts/run_e2e_pixel_then_dit.sh" "${e2e_results}" "${e2e_gpu}"
+else
+  echo "Running V5 P0 on GPU ${v5_gpu} and E2E P0 on GPU ${e2e_gpu} in parallel."
+  run_pipeline \
+    "V5 P0" "${v5_repo}" "scripts/run_v5_then_dit.sh" "${v5_results}" "${v5_gpu}" &
+  v5_pipeline_pid=$!
+  run_pipeline \
+    "E2E P0" "${e2e_repo}" "scripts/run_e2e_pixel_then_dit.sh" "${e2e_results}" "${e2e_gpu}" &
+  e2e_pipeline_pid=$!
 
-run_pipeline \
-  "E2E P0" "${e2e_repo}" "scripts/run_e2e_pixel_then_dit.sh" "${e2e_results}"
+  v5_status=0
+  e2e_status=0
+  wait "${v5_pipeline_pid}" || v5_status=$?
+  wait "${e2e_pipeline_pid}" || e2e_status=$?
+  if (( v5_status != 0 || e2e_status != 0 )); then
+    echo "Parallel pipeline failed: V5 status=${v5_status}, E2E status=${e2e_status}." >&2
+    exit 1
+  fi
+fi
+
+validate_gate_b "V5 P0" "${v5_results}/gate_b.json"
 validate_gate_b "E2E P0" "${e2e_results}/gate_b.json"
 
 bundle_name="ditic_two_p0_report_$(date +%Y%m%d_%H%M%S)"

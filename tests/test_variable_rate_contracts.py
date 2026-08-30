@@ -331,7 +331,13 @@ class VariableRateStructureTest(unittest.TestCase):
             source.index('"V5 P0" "${v5_repo}"'),
             source.index('"E2E P0" "${e2e_repo}"'),
         )
-        self.assertIn('bash "${pipeline}" "${gpu}"', source)
+        self.assertIn('e2e_gpu=${2:-$1}', source)
+        self.assertIn('bash "${pipeline}" "${run_gpu}"', source)
+        self.assertIn('"E2E P0" "${e2e_repo}"', source)
+        self.assertIn('&\n  v5_pipeline_pid=$!', source)
+        self.assertIn('&\n  e2e_pipeline_pid=$!', source)
+        self.assertIn('wait "${v5_pipeline_pid}"', source)
+        self.assertIn('wait "${e2e_pipeline_pid}"', source)
         self.assertIn('report.get("accepted") is not True', source)
         self.assertIn('get("byte_identical") is True', source)
         self.assertIn('sha256sum "${repo}/checkpoints/${p0_exp}', source)
