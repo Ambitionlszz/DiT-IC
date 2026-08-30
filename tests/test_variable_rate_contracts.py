@@ -321,6 +321,23 @@ class VariableRateStructureTest(unittest.TestCase):
             )
         )
 
+    def test_two_p0_launcher_diagnoses_runs_sequentially_and_bundles_evidence(self):
+        source = (
+            ROOT / "scripts" / "run_two_p0_then_bundle.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn('if [[ "${DIAGNOSE_ONLY:-0}" == "1" ]]', source)
+        self.assertIn("[t]rain_nogan_ddp.py", source)
+        self.assertLess(
+            source.index('"V5 P0" "${v5_repo}"'),
+            source.index('"E2E P0" "${e2e_repo}"'),
+        )
+        self.assertIn('bash "${pipeline}" "${gpu}"', source)
+        self.assertIn('report.get("accepted") is not True', source)
+        self.assertIn('get("byte_identical") is True', source)
+        self.assertIn('sha256sum "${repo}/checkpoints/${p0_exp}', source)
+        self.assertIn('tar -C "${bundle_parent}" -czf', source)
+        self.assertNotIn('/rec"', source)
+
     def test_lic_phase_a_skips_decode_and_phase_b_drops_latent_loss(self):
         source_path = ROOT / "train_variable_rate_lic_ddp.py"
         source = source_path.read_text(encoding="utf-8")
