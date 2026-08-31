@@ -219,7 +219,7 @@ class VariableRateGateTests(unittest.TestCase):
                 (lic_eval / quality / "bin").mkdir(parents=True)
                 (p0_root / quality / "bin").mkdir(parents=True)
                 (lic_eval / quality / "bin" / "image.bin").write_bytes(b"packet")
-                (p0_root / quality / "bin" / "image.bin").write_bytes(b"packet")
+                (p0_root / quality / "bin" / "image").write_bytes(b"packet")
                 metrics_dir = p0_root / quality / "metrics" / "run"
                 metrics_dir.mkdir(parents=True)
                 (metrics_dir / "summary_metrics.json").write_text(
@@ -245,6 +245,21 @@ class VariableRateGateTests(unittest.TestCase):
                 )
             )
             self.assertTrue(json.loads(report.read_text(encoding="utf-8"))["accepted"])
+
+    def test_gate_b_still_rejects_different_bytes_after_suffix_normalization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lic_bin = root / "lic"
+            p0_bin = root / "p0"
+            lic_bin.mkdir()
+            p0_bin.mkdir()
+            (lic_bin / "image.bin").write_bytes(b"source packet")
+            (p0_bin / "image").write_bytes(b"changed packet")
+
+            self.assertNotEqual(
+                GATE.collect_files(lic_bin),
+                GATE.collect_files(p0_bin),
+            )
 
 
 if __name__ == "__main__":

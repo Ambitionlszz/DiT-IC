@@ -259,11 +259,19 @@ def collect_files(root):
     root = Path(root)
     if not root.is_dir():
         raise ValueError(f"missing bitstream directory: {root}")
-    return {
-        path.relative_to(root).as_posix(): (path.stat().st_size, sha256(path))
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
+    files = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        name = path.relative_to(root).as_posix()
+        if name.endswith(".bin"):
+            name = name[: -len(".bin")]
+        if name in files:
+            raise ValueError(
+                f"duplicate bitstream identity after normalizing .bin suffix: {name}"
+            )
+        files[name] = (path.stat().st_size, sha256(path))
+    return files
 
 
 def plain_metrics(root, quality):
