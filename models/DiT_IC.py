@@ -438,6 +438,64 @@ class Codec(nn.Module):
                     "to be trainable"
                 )
 
+    def assert_end_to_end_variable_rate_contract(self):
+        if self.freeze_codec:
+            raise RuntimeError(
+                "end-to-end variable-rate training requires freeze_codec=False"
+            )
+        trainable_codec = [
+            name for name, parameter in self.codec.named_parameters()
+            if parameter.requires_grad
+        ]
+        if not trainable_codec:
+            raise RuntimeError(
+                "end-to-end variable-rate training requires a trainable codec"
+            )
+        frozen_codec = [
+            name for name, parameter in self.codec.named_parameters()
+            if not parameter.requires_grad
+        ]
+        if frozen_codec:
+            raise RuntimeError(
+                "end-to-end variable-rate training requires every codec "
+                "parameter to be trainable: " + ", ".join(frozen_codec[:5])
+            )
+
+        self._set_vae_encoder_eval()
+        trainable_vae = [
+            name for name, parameter in self.vae.named_parameters()
+            if parameter.requires_grad
+        ]
+        unexpected_vae = [
+            name for name in trainable_vae
+            if "decoder." not in name or "lora_" not in name
+        ]
+        if unexpected_vae or not trainable_vae:
+            raise RuntimeError(
+                "end-to-end variable-rate training permits only trainable "
+                "decoder LoRA in the VAE"
+            )
+
+        trainable_dit = [
+            name for name, parameter in self.DiT.named_parameters()
+            if parameter.requires_grad
+        ]
+        if not trainable_dit or any(
+            "lora" not in name.lower() for name in trainable_dit
+        ):
+            raise RuntimeError(
+                "end-to-end variable-rate training requires only DiT LoRA "
+                "parameters to be trainable"
+            )
+        if any(
+            not parameter.requires_grad
+            for parameter in self.text_proj.parameters()
+        ):
+            raise RuntimeError(
+                "end-to-end variable-rate training requires a trainable "
+                "text projection"
+            )
+
     def build_DiT(self, dit_path, device="cuda", use_merge=False):
         base_scheduler = make_1step_sched(dit_path, device)
         self.sched = OneStepFlowScheduler(base_scheduler)

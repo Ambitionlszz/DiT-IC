@@ -230,6 +230,38 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "train_text_projection=True"):
             normalize_pure_sana_config(config)
 
+    def test_end_to_end_variable_rate_requires_unfrozen_codec_and_phase(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": False,
+                    "use_text_condition": True,
+                    "codec_param": {"variable_rate": True},
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {
+                "enabled": True,
+                "num_levels": 6,
+                "rate_weights": [16, 8, 4, 2, 1, 0.5],
+            },
+            "train": {"rate_weight": 0.0, "e2e_phase": "nogan"},
+        }
+        normalized = normalize_pure_sana_config(config)
+        self.assertEqual(
+            normalized["quality_control"]["rate_weights"],
+            [16, 8, 4, 2, 1, 0.5],
+        )
+
+        config["model"]["params"]["freeze_codec"] = True
+        with self.assertRaisesRegex(ValueError, "freeze_codec=False"):
+            normalize_pure_sana_config(config)
+
+        config["model"]["params"]["freeze_codec"] = False
+        config["train"]["e2e_phase"] = "invalid"
+        with self.assertRaisesRegex(ValueError, "e2e_phase"):
+            normalize_pure_sana_config(config)
+
 
 if __name__ == "__main__":
     unittest.main()

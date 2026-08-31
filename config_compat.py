@@ -111,6 +111,31 @@ def normalize_pure_sana_config(config):
         codec_param["variable_rate"] = True
         codec_param["num_quality_levels"] = num_levels
 
+        rate_weights = quality_control.get("rate_weights")
+        if rate_weights is not None:
+            if params.get("freeze_codec", False):
+                raise ValueError(
+                    "end-to-end variable-rate training requires freeze_codec=False"
+                )
+            values = [float(value) for value in rate_weights]
+            if len(values) != num_levels:
+                raise ValueError(
+                    "quality_control.rate_weights must contain one value per quality"
+                )
+            if any(value <= 0 for value in values) or any(
+                left <= right for left, right in zip(values, values[1:])
+            ):
+                raise ValueError(
+                    "quality_control.rate_weights must be positive and strictly "
+                    "decreasing from low-quality q0 to high-quality q5"
+                )
+            phase = train.get("e2e_phase")
+            if phase not in ("nogan", "gan"):
+                raise ValueError(
+                    "end-to-end variable-rate training requires "
+                    "train.e2e_phase=nogan or gan"
+                )
+
         if params.get("freeze_codec", False):
             vae_params = params.get("vae_params") or {}
             train_vae_lora = vae_params.get(

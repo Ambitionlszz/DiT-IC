@@ -41,6 +41,27 @@ VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
 ENTROPY_OPTIMIZER_VERSION = 4
 
 
+def end_to_end_variable_rate_contract(config):
+    quality = config.get("quality_control") or {}
+    rate_weights = quality.get("rate_weights")
+    if rate_weights is None:
+        return None
+    return {
+        "version": "e2e_variable_rate_nogan_gan_v1",
+        "phase": str(config["train"]["e2e_phase"]),
+        "rate_weights": [float(value) for value in rate_weights],
+        "freeze_codec": bool(config["model"]["params"].get("freeze_codec")),
+        "loss_form": "pixel_perceptual_plus_quality_rate",
+        "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
+    }
+
+
+def quality_rate_weight(rate_weights, quality_index):
+    if rate_weights is None:
+        return None
+    return float(rate_weights[int(quality_index)])
+
+
 def file_sha256(path):
     digest = hashlib.sha256()
     with open(path, "rb") as file:
@@ -119,6 +140,10 @@ def do_train(rank, local_rank, world_size, train_config):
     quality_config = train_config.get("quality_control", {})
     multirate_plain = bool(quality_config.get("enabled", False))
     num_quality_levels = int(quality_config.get("num_levels", 0))
+    e2e_contract = end_to_end_variable_rate_contract(train_config)
+    e2e_rate_weights = (
+        e2e_contract["rate_weights"] if e2e_contract is not None else None
+    )
     if multirate_plain and num_quality_levels != 6:
         raise ValueError("multi-rate Plain training requires exactly 6 quality levels")
     quality_generator = None
@@ -161,7 +186,7 @@ def do_train(rank, local_rank, world_size, train_config):
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
     source_checkpoint_sha256 = (
         file_sha256(params["codec_path"])
-        if rank == 0 and multirate_plain
+        if rank == 0 and params.get("codec_path")
         else None
     )
     loss_module = model.loss
@@ -343,6 +368,8 @@ def do_train(rank, local_rank, world_size, train_config):
     model.train()
     model.module.assert_frozen_codec_contract()
     model.module.assert_reconstruction_training_contract()
+    if e2e_contract is not None:
+        model.module.assert_end_to_end_variable_rate_contract()
     loss_module.train()
 
     train_config['train']['resume'] if 'resume' in train_config['train'] else False
@@ -367,6 +394,20 @@ def do_train(rank, local_rank, world_size, train_config):
                 checkpoint_files.sort(key=os.path.getmtime)
                 latest_checkpoint = checkpoint_files[-1]
             checkpoint = torch.load(latest_checkpoint, map_location=lambda storage, loc: storage)
+            if e2e_contract is not None:
+                if checkpoint.get("e2e_variable_rate_contract") != e2e_contract:
+                    raise ValueError(
+                        "resume checkpoint end-to-end variable-rate contract "
+                        "does not match config"
+                    )
+                if (
+                    rank == 0
+                    and checkpoint.get("source_checkpoint_sha256")
+                    != source_checkpoint_sha256
+                ):
+                    raise ValueError(
+                        "resume checkpoint source checkpoint does not match config"
+                    )
             
             model.module.load_ckpt_dict(latest_checkpoint, use_ema=False)
             model.train()
@@ -515,6 +556,8 @@ def do_train(rank, local_rank, world_size, train_config):
             checkpoint["codec_sha256"] = codec_sha256
             checkpoint["ema_codec_sha256"] = ema_codec_sha256
             checkpoint["source_checkpoint_sha256"] = source_checkpoint_sha256
+            if e2e_contract is not None:
+                checkpoint["e2e_variable_rate_contract"] = e2e_contract
             checkpoint["git_commit"] = current_git_commit()
             checkpoint["bitstream_format_version"] = 1
             checkpoint["variable_rate_mechanism"] = VARIABLE_RATE_MECHANISM
@@ -550,7 +593,8 @@ def do_train(rank, local_rank, world_size, train_config):
         sampler.set_epoch(epoch)
 
 
-        loss_module.rate_weight = train_config['train']['rate_weight']
+        if e2e_rate_weights is None:
+            loss_module.rate_weight = train_config['train']['rate_weight']
         for x in loader:
             x = x.to(device)
             will_step = accum_count + 1 == accumulation_steps
@@ -560,6 +604,10 @@ def do_train(rank, local_rank, world_size, train_config):
                     num_quality_levels,
                     device,
                     generator=quality_generator,
+                )
+            if e2e_rate_weights is not None:
+                loss_module.rate_weight = quality_rate_weight(
+                    e2e_rate_weights, quality_index
                 )
 
             # ---- forward pass ----
@@ -766,6 +814,7 @@ def do_train(rank, local_rank, world_size, train_config):
                                 logger,
                                 writer,
                                 num_quality_levels,
+                                rate_weights=e2e_rate_weights,
                             )
                     else:
                         test_loss = evaluate(
@@ -789,6 +838,8 @@ def do_train(rank, local_rank, world_size, train_config):
                     dist.barrier()
                     model.train()
                     model.module.assert_reconstruction_training_contract()
+                    if e2e_contract is not None:
+                        model.module.assert_end_to_end_variable_rate_contract()
                     loss_module.train()
 
                 # ---- save checkpoint ----
@@ -821,12 +872,15 @@ def evaluate_multirate_ema(
     logger,
     writer,
     num_quality_levels,
+    rate_weights=None,
 ):
     """Evaluate the same EMA weights that downstream P0 loading will use."""
     model.assert_reconstruction_training_contract()
     live_state = model.get_state_dicts_for_save()
+    live_vae = deepcopy(live_state["state_dict_vae"])
     live_dit = deepcopy(live_state["state_dict_DiT"])
     live_text_proj = deepcopy(live_state["state_dict_text_proj"])
+    model.vae.load_state_dict(ema["state_dict_vae"], strict=False)
     model.DiT.load_state_dict(ema["state_dict_DiT"], strict=False)
     model.text_proj.load_state_dict(ema["state_dict_text_proj"], strict=True)
     try:
@@ -839,8 +893,10 @@ def evaluate_multirate_ema(
             logger,
             writer,
             num_quality_levels=num_quality_levels,
+            rate_weights=rate_weights,
         )
     finally:
+        model.vae.load_state_dict(live_vae, strict=False)
         model.DiT.load_state_dict(live_dit, strict=False)
         model.text_proj.load_state_dict(live_text_proj, strict=True)
 
@@ -855,6 +911,7 @@ def evaluate(
     logger=None,
     writer=None,
     num_quality_levels=None,
+    rate_weights=None,
 ):
     model.eval()
     loss_module.eval()
@@ -871,7 +928,12 @@ def evaluate(
         range(num_quality_levels) if num_quality_levels is not None else [None]
     )
     per_quality = {}
+    original_rate_weight = loss_module.rate_weight
     for quality_index in qualities:
+        if rate_weights is not None:
+            loss_module.rate_weight = quality_rate_weight(
+                rate_weights, quality_index
+            )
         quality_loss = AverageMeter()
         quality_psnr = AverageMeter()
         quality_bpp = AverageMeter()
@@ -911,6 +973,7 @@ def evaluate(
                 "psnr": float(quality_psnr.avg),
                 "likelihood_bpp": float(quality_bpp.avg),
             }
+    loss_module.rate_weight = original_rate_weight
 
     if logger is not None:
         logger.info(

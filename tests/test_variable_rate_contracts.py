@@ -179,7 +179,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
         self.assertNotIn("default_per_gpu_batch_size=16", launcher)
-        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 7)
+        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 9)
         self.assertIn(
             "per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}",
             launcher,
@@ -189,6 +189,8 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("plain-smoke)", launcher)
         self.assertIn("lic-adv-phase2)", launcher)
         self.assertIn("plain-adv)", launcher)
+        self.assertIn("e2e-variable-nogan)", launcher)
+        self.assertIn("e2e-variable-gan)", launcher)
 
         training_source = (ROOT / "train_nogan_ddp.py").read_text(
             encoding="utf-8"
@@ -467,6 +469,46 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("run_variable_rate_eval.sh", source)
         self.assertIn("--resume_checkpoint", source)
         self.assertNotIn("variable_rate_gate.py", source)
+
+    def test_end_to_end_variable_rate_nogan_then_gan_contract(self):
+        nogan_config = (
+            ROOT / "configs" / "multirate_e2e_variable_nogan.yaml"
+        ).read_text(encoding="utf-8")
+        gan_config = (
+            ROOT / "configs" / "multirate_e2e_variable_gan.yaml"
+        ).read_text(encoding="utf-8")
+        training_source = (ROOT / "train_nogan_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        model_source = (ROOT / "models" / "DiT_IC.py").read_text(
+            encoding="utf-8"
+        )
+        pipeline_source = (
+            ROOT / "scripts" / "run_e2e_variable_nogan_then_gan.sh"
+        ).read_text(encoding="utf-8")
+
+        for config in (nogan_config, gan_config):
+            self.assertIn("freeze_codec: false", config)
+            self.assertIn("rate_weights: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]", config)
+            self.assertIn("train_text_projection: true", config)
+            self.assertIn("decoder_lora_only: true", config)
+        self.assertIn("e2e_phase: nogan", nogan_config)
+        self.assertIn("max_steps: 200000", nogan_config)
+        self.assertIn("disc_weight: 0.0", nogan_config)
+        self.assertIn("e2e_phase: gan", gan_config)
+        self.assertIn("max_steps: 50000", gan_config)
+        self.assertIn("disc_start: 0", gan_config)
+        self.assertIn("disc_weight: 0.5", gan_config)
+        self.assertIn("end_to_end_variable_rate_contract", training_source)
+        self.assertIn("quality_rate_weight", training_source)
+        self.assertIn('"e2e_variable_rate_contract"', training_source)
+        self.assertIn('model.vae.load_state_dict(ema["state_dict_vae"], strict=False)', training_source)
+        self.assertIn("assert_end_to_end_variable_rate_contract", model_source)
+        self.assertIn("e2e-variable-nogan", pipeline_source)
+        self.assertIn("e2e-variable-gan", pipeline_source)
+        self.assertIn("last_ckpt.pt", pipeline_source)
+        self.assertIn("source_checkpoint_sha256", pipeline_source)
+        self.assertIn("run_variable_rate_eval.sh", pipeline_source)
 
     def test_joint_multirate_loss_matches_baseline_lambda_convention(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(

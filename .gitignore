@@ -30,6 +30,8 @@ configs/*
 !configs/multirate_plain_dit.yaml
 !configs/multirate_plain_dit_adv.yaml
 !configs/variable_rate_lic_adv_phase_b.yaml
+!configs/multirate_e2e_variable_nogan.yaml
+!configs/multirate_e2e_variable_gan.yaml
 SANA/transformer/*.safetensors
 SANA/transformer/*.bin
 SANA/vae/*.safetensors
