@@ -14,9 +14,9 @@ from torchvision.transforms import functional as TF
 
 from codec_packet import read_codec_packet, write_codec_packet
 from train_variable_rate_lic_ddp import (
-    CHECKPOINT_SCHEMA_VERSION,
     STAGE_NAME,
     VariableRateLICStage,
+    checkpoint_schema_version,
     initialization_contract,
     load_config,
     objective_contract,
@@ -54,9 +54,10 @@ def load_stage(config, checkpoint_path, weights, device):
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if checkpoint.get("stage") != STAGE_NAME:
         raise ValueError(f"checkpoint stage is not {STAGE_NAME!r}")
-    if int(checkpoint.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
+    expected_schema = checkpoint_schema_version(config)
+    if int(checkpoint.get("schema_version", 0)) != expected_schema:
         raise ValueError(
-            f"direct LIC evaluation requires schema {CHECKPOINT_SCHEMA_VERSION}"
+            f"direct LIC evaluation requires schema {expected_schema}"
         )
     if checkpoint.get("objective_contract") != objective_contract(config):
         raise ValueError("checkpoint objective/lambda contract does not match config")

@@ -229,12 +229,12 @@ class Codec(nn.Module):
                 )
             if checkpoint_stage == "variable_quality_codec":
                 if (
-                    int(checkpoint.get("schema_version", 0)) != 8
+                    int(checkpoint.get("schema_version", 0)) not in (8, 9)
                     or checkpoint.get("variable_rate_mechanism")
                     != "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
                 ):
                     raise ValueError(
-                        "multi-rate Plain requires a schema-version 8 LIC "
+                        "multi-rate Plain requires a schema-version 8 or 9 LIC "
                         "checkpoint with endpoint-interpolated q_e/q_d and "
                         "complete w_e/w_d control"
                     )

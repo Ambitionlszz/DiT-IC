@@ -17,6 +17,13 @@ import torch.nn.functional as F
 from diffusers import AutoencoderDC
 import lpips
 import pyiqa
+from taming.modules.losses.vqperceptual import (
+    NLayerDiscriminator,
+    adopt_weight,
+    hinge_d_loss,
+    vanilla_d_loss,
+    weights_init,
+)
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -37,7 +44,9 @@ from train_nogan_ddp import (
 
 
 CHECKPOINT_SCHEMA_VERSION = 8
+ADVERSARIAL_CHECKPOINT_SCHEMA_VERSION = 9
 OBJECTIVE_VERSION = "distortion_plus_lambda_rate_v2"
+ADVERSARIAL_OBJECTIVE_VERSION = "distortion_plus_lambda_rate_adv_v1"
 VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
 STAGE_NAME = "variable_quality_codec"
 PHASE_A = "latent_rd"
@@ -80,6 +89,26 @@ def load_config(path, calibration_confirmed=False):
             raise ValueError(
                 f"lic_train.phase_b.{weight_name} must be positive"
             )
+    adversarial = phase_b.get("adversarial") or {}
+    if adversarial.get("enabled", False):
+        if int(adversarial.get("disc_start", -1)) < 0:
+            raise ValueError("lic_train.phase_b.adversarial.disc_start must be non-negative")
+        if float(adversarial.get("disc_weight", 0.0)) <= 0:
+            raise ValueError("lic_train.phase_b.adversarial.disc_weight must be positive")
+        if float(adversarial.get("disc_factor", 0.0)) <= 0:
+            raise ValueError("lic_train.phase_b.adversarial.disc_factor must be positive")
+        if int(adversarial.get("disc_num_layers", 0)) < 1:
+            raise ValueError(
+                "lic_train.phase_b.adversarial.disc_num_layers must be positive"
+            )
+        if int(adversarial.get("disc_in_channels", 0)) != 3:
+            raise ValueError(
+                "lic_train.phase_b.adversarial.disc_in_channels must be 3"
+            )
+        if adversarial.get("disc_loss") not in ("hinge", "vanilla"):
+            raise ValueError(
+                "lic_train.phase_b.adversarial.disc_loss must be hinge or vanilla"
+            )
     total_steps = int(phase_a["steps"]) + int(phase_b["steps"])
     if int(config["train"]["max_steps"]) != total_steps:
         raise ValueError(
@@ -112,11 +141,28 @@ def phase_step(global_step, phase_a_steps):
     return global_step - phase_a_steps
 
 
-def objective_contract(config):
+def adversarial_enabled(config):
+    adversarial = config["lic_train"]["phase_b"].get("adversarial") or {}
+    return bool(adversarial.get("enabled", False))
+
+
+def checkpoint_schema_version(config):
+    return (
+        ADVERSARIAL_CHECKPOINT_SCHEMA_VERSION
+        if adversarial_enabled(config)
+        else CHECKPOINT_SCHEMA_VERSION
+    )
+
+
+def objective_contract(config, include_adversarial=True):
     phase_a = config["lic_train"]["phase_a"]
     phase_b = config["lic_train"]["phase_b"]
-    return {
-        "version": OBJECTIVE_VERSION,
+    contract = {
+        "version": (
+            ADVERSARIAL_OBJECTIVE_VERSION
+            if include_adversarial and adversarial_enabled(config)
+            else OBJECTIVE_VERSION
+        ),
         "loss_form": "distortion_plus_rate_lambda",
         "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
         "codec_initialization": "scratch",
@@ -133,6 +179,19 @@ def objective_contract(config):
             "dists_input_range": "minus_one_to_one",
         },
     }
+    if include_adversarial and adversarial_enabled(config):
+        adversarial = phase_b["adversarial"]
+        contract["phase_b"]["adversarial"] = {
+            "implementation": "official_dit_ic_adaptive_patchgan",
+            "disc_start": int(adversarial["disc_start"]),
+            "disc_weight": float(adversarial["disc_weight"]),
+            "disc_factor": float(adversarial["disc_factor"]),
+            "disc_num_layers": int(adversarial["disc_num_layers"]),
+            "disc_in_channels": int(adversarial["disc_in_channels"]),
+            "disc_loss": str(adversarial["disc_loss"]),
+            "start_step_reference": "phase_b_relative",
+        }
+    return contract
 
 
 def initialization_contract(config):
@@ -151,6 +210,14 @@ def state_dict_sha256(state_dict):
         digest.update(str(tensor.dtype).encode("ascii"))
         digest.update(str(tuple(tensor.shape)).encode("ascii"))
         digest.update(tensor.reshape(-1).view(torch.uint8).numpy().tobytes())
+    return digest.hexdigest()
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
     return digest.hexdigest()
 
 
@@ -242,6 +309,86 @@ class PhaseBPerceptualLosses(nn.Module):
         lpips_loss = self.lpips(reference, reconstruction).mean()
         dists_loss = self.dists(reference, reconstruction).mean()
         return lpips_loss, dists_loss
+
+
+class PhaseBAdversarialLoss(nn.Module):
+    """Official DiT-IC adaptive PatchGAN loss for Stage-1 Phase B."""
+
+    def __init__(self, config):
+        super().__init__()
+        adversarial = config["lic_train"]["phase_b"]["adversarial"]
+        self.discriminator = NLayerDiscriminator(
+            input_nc=int(adversarial["disc_in_channels"]),
+            n_layers=int(adversarial["disc_num_layers"]),
+            use_actnorm=False,
+        ).apply(weights_init)
+        self.discriminator_iter_start = int(adversarial["disc_start"])
+        self.discriminator_weight = float(adversarial["disc_weight"])
+        self.disc_factor = float(adversarial["disc_factor"])
+        self.disc_loss = (
+            hinge_d_loss
+            if adversarial["disc_loss"] == "hinge"
+            else vanilla_d_loss
+        )
+
+    def calculate_adaptive_weight(self, reconstruction_loss, generator_loss, last_layer):
+        reconstruction_grads = torch.autograd.grad(
+            reconstruction_loss,
+            last_layer,
+            retain_graph=True,
+        )[0]
+        generator_grads = torch.autograd.grad(
+            generator_loss,
+            last_layer,
+            retain_graph=True,
+        )[0]
+        weight = torch.norm(reconstruction_grads) / (
+            torch.norm(generator_grads) + 1e-4
+        )
+        return torch.clamp(weight, 0.0, 1e4).detach() * self.discriminator_weight
+
+    def generator_loss(self, reconstruction_loss, reconstruction, last_layer, phase_step):
+        logits_fake = self.discriminator(reconstruction.contiguous())
+        generator_loss = -torch.mean(logits_fake)
+        adaptive_weight = self.calculate_adaptive_weight(
+            reconstruction_loss,
+            generator_loss,
+            last_layer,
+        )
+        disc_factor = adopt_weight(
+            self.disc_factor,
+            phase_step,
+            threshold=self.discriminator_iter_start,
+        )
+        adversarial_loss = adaptive_weight * disc_factor * generator_loss
+        return adversarial_loss, {
+            "generator_loss": generator_loss.detach(),
+            "adaptive_weight": adaptive_weight.detach(),
+            "disc_factor": torch.as_tensor(
+                disc_factor,
+                device=reconstruction.device,
+                dtype=reconstruction.dtype,
+            ),
+        }
+
+    def discriminator_loss(self, reference, reconstruction, phase_step, discriminator=None):
+        discriminator = self.discriminator if discriminator is None else discriminator
+        discriminator_input = torch.cat(
+            (reference.contiguous().detach(), reconstruction.contiguous().detach()),
+            dim=0,
+        )
+        logits_real, logits_fake = discriminator(discriminator_input).chunk(2)
+        disc_factor = adopt_weight(
+            self.disc_factor,
+            phase_step,
+            threshold=self.discriminator_iter_start,
+        )
+        loss = disc_factor * self.disc_loss(logits_real, logits_fake)
+        return loss, {
+            "disc_loss": loss.detach(),
+            "logits_real": logits_real.detach().mean(),
+            "logits_fake": logits_fake.detach().mean(),
+        }
 
 
 def create_logger(output_dir, rank):
@@ -418,6 +565,11 @@ def train(rank, local_rank, world_size, config):
     phase_a_steps = int(config["lic_train"]["phase_a"]["steps"])
     phase_b_steps = int(config["lic_train"]["phase_b"]["steps"])
     max_steps = phase_a_steps + phase_b_steps
+    adversarial_loss = (
+        PhaseBAdversarialLoss(config).to(device)
+        if adversarial_enabled(config)
+        else None
+    )
 
     def build_training_state(phase):
         optimizer = torch.optim.AdamW(
@@ -446,8 +598,41 @@ def train(rank, local_rank, world_size, config):
         return optimizer, entropy_optimizer, scheduler
 
     optimizer, entropy_optimizer, scheduler = build_training_state(PHASE_A)
+    discriminator_optimizer = None
+    discriminator_scheduler = None
+    if adversarial_loss is not None:
+        beta_vae = config["optimizer"].get(
+            "beta_vae", [0.9, float(config["optimizer"]["beta2"])]
+        )
+        discriminator_optimizer = torch.optim.AdamW(
+            adversarial_loss.discriminator.parameters(),
+            lr=float(config["optimizer"]["lr"]),
+            weight_decay=0,
+            betas=tuple(float(value) for value in beta_vae),
+        )
+        phase_b_milestones = [
+            int(step) - phase_a_steps
+            for step in config["optimizer"]["step_lr"]
+            if phase_a_steps < int(step) <= max_steps
+        ]
+        discriminator_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            discriminator_optimizer,
+            milestones=phase_b_milestones,
+            gamma=0.5,
+        )
 
     model = DDP(stage_model, device_ids=[local_rank])
+    discriminator = None
+    if adversarial_loss is not None:
+        discriminator = (
+            DDP(
+                adversarial_loss.discriminator,
+                device_ids=[local_rank],
+                broadcast_buffers=False,
+            )
+            if world_size > 1
+            else adversarial_loss.discriminator
+        )
     model.train()
 
     perceptual_losses = None
@@ -530,6 +715,7 @@ def train(rank, local_rank, world_size, config):
     ema_codec = deepcopy(stage_model.codec.state_dict())
     train_steps = 0
     best_scores = {PHASE_A: float("inf"), PHASE_B: float("inf")}
+    phase_a_handoff_sha256 = None
 
     if train_config.get("resume", False):
         resume_path = train_config.get("resume_checkpoint")
@@ -538,25 +724,38 @@ def train(rank, local_rank, world_size, config):
         resume = torch.load(resume_path, map_location="cpu", weights_only=True)
         if resume.get("stage") != STAGE_NAME:
             raise ValueError(f"cannot resume Stage 1 from {resume.get('stage')!r}")
-        if int(resume.get("schema_version", 0)) != CHECKPOINT_SCHEMA_VERSION:
-            raise ValueError(
-                "scratch two-phase LIC training requires a schema-version 8 "
-                "checkpoint"
-            )
-        if resume.get("objective_contract") != objective_contract(config):
-            raise ValueError(
-                "resume checkpoint objective/lambda contract does not match config"
-            )
-        if resume.get("initialization_contract") != initialization_contract(config):
-            raise ValueError(
-                "resume checkpoint initialization contract does not match config"
-            )
         if (
             int(resume.get("phase_a_steps", -1)) != phase_a_steps
             or int(resume.get("phase_b_steps", -1)) != phase_b_steps
         ):
             raise ValueError(
                 "resume checkpoint phase boundaries do not match the config"
+            )
+        saved_schema = int(resume.get("schema_version", 0))
+        target_schema = checkpoint_schema_version(config)
+        is_phase_a_handoff = (
+            target_schema == ADVERSARIAL_CHECKPOINT_SCHEMA_VERSION
+            and saved_schema == CHECKPOINT_SCHEMA_VERSION
+            and int(resume.get("global_step", -1)) == phase_a_steps
+            and resume.get("training_phase") == PHASE_B
+            and resume.get("objective_contract")
+            == objective_contract(config, include_adversarial=False)
+        )
+        if saved_schema != target_schema and not is_phase_a_handoff:
+            raise ValueError(
+                f"Stage 1 requires schema {target_schema}; schema 8 is accepted "
+                "only as an exact Phase-A-to-adversarial-Phase-B handoff"
+            )
+        if (
+            not is_phase_a_handoff
+            and resume.get("objective_contract") != objective_contract(config)
+        ):
+            raise ValueError(
+                "resume checkpoint objective/lambda contract does not match config"
+            )
+        if resume.get("initialization_contract") != initialization_contract(config):
+            raise ValueError(
+                "resume checkpoint initialization contract does not match config"
             )
         model.module.codec.load_state_dict(
             resume["model"]["state_dict_codec"], strict=True
@@ -580,11 +779,39 @@ def train(rank, local_rank, world_size, config):
             PHASE_A: float(resume["best_scores"][PHASE_A]),
             PHASE_B: float(resume["best_scores"][PHASE_B]),
         }
+        if adversarial_loss is not None:
+            if is_phase_a_handoff:
+                phase_a_handoff_sha256 = file_sha256(resume_path)
+                if rank == 0:
+                    logger.info(
+                        "loaded schema-8 Phase A checkpoint; initialized the "
+                        "Phase B discriminator and optimizer from scratch"
+                    )
+            else:
+                adversarial_state = resume.get("adversarial")
+                if adversarial_state is None:
+                    raise KeyError(
+                        "adversarial Stage 1 checkpoint lacks discriminator state"
+                    )
+                adversarial_loss.discriminator.load_state_dict(
+                    adversarial_state["discriminator"], strict=True
+                )
+                discriminator_optimizer.load_state_dict(
+                    adversarial_state["optimizer"]
+                )
+                discriminator_scheduler.load_state_dict(
+                    adversarial_state["scheduler"]
+                )
+                phase_a_handoff_sha256 = resume.get("phase_a_handoff_sha256")
+                if not phase_a_handoff_sha256:
+                    raise KeyError(
+                        "adversarial Stage 1 checkpoint lacks phase_a_handoff_sha256"
+                    )
 
     def make_checkpoint():
         codec_state = model.module.codec.state_dict()
-        return {
-            "schema_version": CHECKPOINT_SCHEMA_VERSION,
+        checkpoint = {
+            "schema_version": checkpoint_schema_version(config),
             "stage": STAGE_NAME,
             "model": {"state_dict_codec": codec_state},
             "ema": {"state_dict_codec": ema_codec},
@@ -613,15 +840,26 @@ def train(rank, local_rank, world_size, config):
                 if parameter.requires_grad
             ],
         }
+        if adversarial_loss is not None:
+            checkpoint["adversarial"] = {
+                "discriminator": adversarial_loss.discriminator.state_dict(),
+                "optimizer": discriminator_optimizer.state_dict(),
+                "scheduler": discriminator_scheduler.state_dict(),
+            }
+            checkpoint["phase_a_handoff_sha256"] = phase_a_handoff_sha256
+        return checkpoint
 
     accumulation_steps = int(train_config.get("accumulation_steps", 1))
     if accumulation_steps < 1:
         raise ValueError("train.accumulation_steps must be at least 1")
     optimizer.zero_grad(set_to_none=True)
     entropy_optimizer.zero_grad(set_to_none=True)
+    if discriminator_optimizer is not None:
+        discriminator_optimizer.zero_grad(set_to_none=True)
     accum_count = 0
     quality_index = None
     running = torch.zeros(8, device=device, dtype=torch.float64)
+    running_adversarial = torch.zeros(6, device=device, dtype=torch.float64)
     log_micro_steps = 0
     started = time()
     if rank == 0:
@@ -684,7 +922,38 @@ def train(rank, local_rank, world_size, config):
                 quality_index, phase_config["lambda_values"]
             )
             loss = rate_distortion_loss(distortion, rate, current_lambda)
+            generator_loss = torch.zeros((), device=device)
+            adaptive_weight = torch.zeros((), device=device)
+            disc_factor = torch.zeros((), device=device)
+            discriminator_loss = torch.zeros((), device=device)
+            logits_real = torch.zeros((), device=device)
+            logits_fake = torch.zeros((), device=device)
+            if current_phase == PHASE_B and adversarial_loss is not None:
+                adversarial_loss.discriminator.requires_grad_(False)
+                adv_loss, generator_stats = adversarial_loss.generator_loss(
+                    distortion,
+                    outputs["reconstruction"],
+                    model.module.codec.g_s.synthesis_transform[-1].weight,
+                    phase_step(train_steps, phase_a_steps),
+                )
+                adversarial_loss.discriminator.requires_grad_(True)
+                loss = loss + adv_loss
+                generator_loss = generator_stats["generator_loss"]
+                adaptive_weight = generator_stats["adaptive_weight"]
+                disc_factor = generator_stats["disc_factor"]
             (loss / accumulation_steps).backward()
+            if current_phase == PHASE_B and adversarial_loss is not None:
+                discriminator_loss, discriminator_stats = (
+                    adversarial_loss.discriminator_loss(
+                        image,
+                        outputs["reconstruction"],
+                        phase_step(train_steps, phase_a_steps),
+                        discriminator=discriminator,
+                    )
+                )
+                (discriminator_loss / accumulation_steps).backward()
+                logits_real = discriminator_stats["logits_real"]
+                logits_fake = discriminator_stats["logits_fake"]
             accum_count += 1
             running += torch.stack(
                 [
@@ -696,6 +965,16 @@ def train(rank, local_rank, world_size, config):
                     lpips_loss.detach().double(),
                     dists_loss.detach().double(),
                     current_lambda.detach().double(),
+                ]
+            )
+            running_adversarial += torch.stack(
+                [
+                    generator_loss.detach().double(),
+                    adaptive_weight.detach().double(),
+                    disc_factor.detach().double(),
+                    discriminator_loss.detach().double(),
+                    logits_real.detach().double(),
+                    logits_fake.detach().double(),
                 ]
             )
             log_micro_steps += 1
@@ -714,7 +993,16 @@ def train(rank, local_rank, world_size, config):
             entropy_optimizer.zero_grad(set_to_none=True)
             entropy_loss.backward()
             entropy_optimizer.step()
+            if current_phase == PHASE_B and discriminator_optimizer is not None:
+                torch.nn.utils.clip_grad_norm_(
+                    adversarial_loss.discriminator.parameters(),
+                    float(config["optimizer"]["max_grad_norm"]),
+                )
+                discriminator_optimizer.step()
+                discriminator_scheduler.step()
             optimizer.zero_grad(set_to_none=True)
+            if discriminator_optimizer is not None:
+                discriminator_optimizer.zero_grad(set_to_none=True)
             update_codec_ema(ema_codec, model.module.codec)
 
             phase_quality_counts[phase_index, int(quality_index.item())] += 1
@@ -724,7 +1012,11 @@ def train(rank, local_rank, world_size, config):
 
             if train_steps % int(train_config["log_every"]) == 0:
                 dist.all_reduce(running, op=dist.ReduceOp.SUM)
+                dist.all_reduce(running_adversarial, op=dist.ReduceOp.SUM)
                 averages = running / (log_micro_steps * world_size)
+                adversarial_averages = running_adversarial / (
+                    log_micro_steps * world_size
+                )
                 if rank == 0:
                     elapsed = max(time() - started, 1e-6)
                     completed_phase_steps = (
@@ -743,6 +1035,13 @@ def train(rank, local_rank, world_size, config):
                         int(train_config["log_every"]) / elapsed,
                         phase_quality_counts[phase_index].tolist(),
                     )
+                    if current_phase == PHASE_B and adversarial_loss is not None:
+                        logger.info(
+                            "phase_b_adv generator=%.6f adaptive_weight=%.6f "
+                            "factor=%.6f discriminator=%.6f logits_real=%.6f "
+                            "logits_fake=%.6f",
+                            *adversarial_averages.tolist(),
+                        )
                     writer.add_scalar("Train/loss", averages[0], train_steps)
                     writer.add_scalar("Train/rate", averages[1], train_steps)
                     writer.add_scalar("Train/latent_mse", averages[2], train_steps)
@@ -750,7 +1049,24 @@ def train(rank, local_rank, world_size, config):
                     writer.add_scalar("Train/pixel_l1", averages[4], train_steps)
                     writer.add_scalar("Train/lpips", averages[5], train_steps)
                     writer.add_scalar("Train/dists", averages[6], train_steps)
+                    if current_phase == PHASE_B and adversarial_loss is not None:
+                        writer.add_scalar(
+                            "Train/generator_adv",
+                            adversarial_averages[0],
+                            train_steps,
+                        )
+                        writer.add_scalar(
+                            "Train/adaptive_adv_weight",
+                            adversarial_averages[1],
+                            train_steps,
+                        )
+                        writer.add_scalar(
+                            "Train/discriminator",
+                            adversarial_averages[3],
+                            train_steps,
+                        )
                 running.zero_()
+                running_adversarial.zero_()
                 log_micro_steps = 0
                 started = time()
 
@@ -812,6 +1128,10 @@ def train(rank, local_rank, world_size, config):
                 optimizer.zero_grad(set_to_none=True)
                 entropy_optimizer.zero_grad(set_to_none=True)
                 ema_codec = deepcopy(model.module.codec.state_dict())
+                if adversarial_loss is not None and phase_a_handoff_sha256 is None:
+                    phase_a_handoff_sha256 = (
+                        "same_run:" + state_dict_sha256(model.module.codec.state_dict())
+                    )
                 if rank == 0:
                     torch.save(
                         make_checkpoint(), checkpoint_dir / "phase_a_complete.pt"
@@ -821,6 +1141,7 @@ def train(rank, local_rank, world_size, config):
                         "automatically starting phase B"
                     )
                 running.zero_()
+                running_adversarial.zero_()
                 log_micro_steps = 0
                 started = time()
                 dist.barrier()

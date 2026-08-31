@@ -179,7 +179,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
         self.assertNotIn("default_per_gpu_batch_size=16", launcher)
-        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 5)
+        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 7)
         self.assertIn(
             "per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}",
             launcher,
@@ -187,6 +187,8 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("--per_gpu_batch_size", launcher)
         self.assertIn("--accumulation_steps", launcher)
         self.assertIn("plain-smoke)", launcher)
+        self.assertIn("lic-adv-phase2)", launcher)
+        self.assertIn("plain-adv)", launcher)
 
         training_source = (ROOT / "train_nogan_ddp.py").read_text(
             encoding="utf-8"
@@ -418,6 +420,54 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("validation_quality_scales=%s", source)
         self.assertIn("validation_bpp_span=%.8f", source)
 
+    def test_adversarial_phase_b_matches_official_dit_ic_contract(self):
+        source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        stage1_config = (
+            ROOT / "configs" / "variable_rate_lic_adv_phase_b.yaml"
+        ).read_text(encoding="utf-8")
+        stage2_config = (
+            ROOT / "configs" / "multirate_plain_dit_adv.yaml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("class PhaseBAdversarialLoss", source)
+        self.assertIn("NLayerDiscriminator", source)
+        self.assertIn("hinge_d_loss", source)
+        self.assertIn("generator_loss = -torch.mean(logits_fake)", source)
+        self.assertIn("torch.norm(reconstruction_grads)", source)
+        self.assertIn("torch.norm(generator_grads) + 1e-4", source)
+        self.assertIn("ADVERSARIAL_CHECKPOINT_SCHEMA_VERSION = 9", source)
+        self.assertIn("is_phase_a_handoff", source)
+        self.assertIn('int(resume.get("global_step", -1)) == phase_a_steps', source)
+        self.assertIn('"phase_a_handoff_sha256"', source)
+
+        for config in (stage1_config, stage2_config):
+            self.assertIn("disc_start: 0", config)
+            self.assertIn("disc_weight: 0.5", config)
+            self.assertIn("disc_factor: 1.0", config)
+            self.assertIn("disc_num_layers: 3", config)
+            self.assertIn("disc_in_channels: 3", config)
+            self.assertIn("disc_loss: hinge", config)
+        self.assertIn("enabled: true", stage1_config)
+        self.assertIn("freeze_codec: true", stage2_config)
+        self.assertIn("max_steps: 100000", stage2_config)
+
+    def test_adversarial_pipeline_chains_phase_b_stage2_and_evaluation(self):
+        source = (
+            ROOT / "scripts" / "run_adv_phase2_then_stage2.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("validate_phase_a_checkpoint", source)
+        self.assertIn("phase_a_complete.pt", source)
+        self.assertIn("lic-adv-phase2", source)
+        self.assertIn("plain-adv", source)
+        self.assertIn("phase_a_handoff_sha256", source)
+        self.assertIn("source_checkpoint_sha256", source)
+        self.assertIn("run_stage1_eval", source)
+        self.assertIn("run_variable_rate_eval.sh", source)
+        self.assertIn("--resume_checkpoint", source)
+        self.assertNotIn("variable_rate_gate.py", source)
+
     def test_joint_multirate_loss_matches_baseline_lambda_convention(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
@@ -467,7 +517,9 @@ class VariableRateStructureTest(unittest.TestCase):
     def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
         self.assertIn('checkpoint_stage == "variable_quality_codec"', source)
-        self.assertIn('int(checkpoint.get("schema_version", 0)) != 8', source)
+        self.assertIn(
+            'int(checkpoint.get("schema_version", 0)) not in (8, 9)', source
+        )
         self.assertIn(
             '!= "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"', source
         )

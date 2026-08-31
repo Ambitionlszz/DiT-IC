@@ -73,6 +73,18 @@ perceptual quality, bitrate, and the standard entropy-bottleneck quantiles.
 historical filename. It supports `disc_start`, gradient accumulation, and
 `accumulate_disc`.
 
+To start from a completed variable-rate Stage-1 Phase-A checkpoint and run the
+adversarial Phase B, adversarial Stage 2, and both real-rANS evaluations without
+manual handoffs:
+
+```bash
+bash scripts/run_adv_phase2_then_stage2.sh 0,1 \
+  checkpoints/variable_rate_lic_v5_main/checkpoints/phase_a_complete.pt
+```
+
+The optional third argument overrides the evaluation image directory. Re-running
+the same command resumes compatible incomplete Phase-B or Stage-2 checkpoints.
+
 Legacy names are mapped automatically: `train.lrd` to `train.rate_weight`,
 `loss_params.kl_weight` to `loss_params.rate_weight`, `optimizer.aux_lr` to
 `optimizer.entropy_lr`, and checkpoint `opt_aux` to `opt_entropy`. Set
