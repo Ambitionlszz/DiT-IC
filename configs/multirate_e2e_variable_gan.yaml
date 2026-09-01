@@ -70,6 +70,7 @@ quality_control:
 train:
   output_dir: checkpoints
   exp_name: multirate_e2e_variable_gan_50k
+  training_mode: scratch_e2e
   e2e_phase: gan
   per_gpu_batch_size: 8
   accumulation_steps: 1

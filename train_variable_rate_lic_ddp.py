@@ -109,10 +109,16 @@ def load_config(path, calibration_confirmed=False):
             raise ValueError(
                 "lic_train.phase_b.adversarial.disc_loss must be hinge or vanilla"
             )
-    total_steps = int(phase_a["steps"]) + int(phase_b["steps"])
+    stop_after_phase_a = bool(config["train"].get("stop_after_phase_a", False))
+    total_steps = (
+        int(phase_a["steps"])
+        if stop_after_phase_a
+        else int(phase_a["steps"]) + int(phase_b["steps"])
+    )
     if int(config["train"]["max_steps"]) != total_steps:
         raise ValueError(
-            "train.max_steps must equal phase_a.steps + phase_b.steps"
+            "train.max_steps must equal phase_a.steps when "
+            "stop_after_phase_a=true, otherwise phase_a.steps + phase_b.steps"
         )
     if (
         int(config["train"]["max_steps"]) > 5000
@@ -564,7 +570,10 @@ def train(rank, local_rank, world_size, config):
 
     phase_a_steps = int(config["lic_train"]["phase_a"]["steps"])
     phase_b_steps = int(config["lic_train"]["phase_b"]["steps"])
-    max_steps = phase_a_steps + phase_b_steps
+    stop_after_phase_a = bool(train_config.get("stop_after_phase_a", False))
+    max_steps = (
+        phase_a_steps if stop_after_phase_a else phase_a_steps + phase_b_steps
+    )
     adversarial_loss = (
         PhaseBAdversarialLoss(config).to(device)
         if adversarial_enabled(config)
@@ -823,6 +832,7 @@ def train(rank, local_rank, world_size, config):
             "phase_step": phase_step(train_steps, phase_a_steps),
             "phase_a_steps": phase_a_steps,
             "phase_b_steps": phase_b_steps,
+            "stop_after_phase_a": stop_after_phase_a,
             "best_scores": dict(best_scores),
             "phase_quality_counts": phase_quality_counts.clone(),
             "quality_counts": phase_quality_counts.sum(dim=0),
@@ -1122,28 +1132,41 @@ def train(rank, local_rank, world_size, config):
                 dist.barrier()
 
             if train_steps == phase_a_steps:
-                optimizer, entropy_optimizer, scheduler = build_training_state(
-                    PHASE_B
-                )
-                optimizer.zero_grad(set_to_none=True)
-                entropy_optimizer.zero_grad(set_to_none=True)
                 ema_codec = deepcopy(model.module.codec.state_dict())
-                if adversarial_loss is not None and phase_a_handoff_sha256 is None:
-                    phase_a_handoff_sha256 = (
-                        "same_run:" + state_dict_sha256(model.module.codec.state_dict())
+                if not stop_after_phase_a:
+                    optimizer, entropy_optimizer, scheduler = build_training_state(
+                        PHASE_B
                     )
-                if rank == 0:
+                    optimizer.zero_grad(set_to_none=True)
+                    entropy_optimizer.zero_grad(set_to_none=True)
+                    if (
+                        adversarial_loss is not None
+                        and phase_a_handoff_sha256 is None
+                    ):
+                        phase_a_handoff_sha256 = (
+                            "same_run:"
+                            + state_dict_sha256(model.module.codec.state_dict())
+                        )
+                    if rank == 0:
+                        torch.save(
+                            make_checkpoint(),
+                            checkpoint_dir / "phase_a_complete.pt",
+                        )
+                        logger.info(
+                            "phase A complete; reset optimizer, scheduler, and EMA; "
+                            "automatically starting phase B"
+                        )
+                    running.zero_()
+                    running_adversarial.zero_()
+                    log_micro_steps = 0
+                    started = time()
+                elif rank == 0:
                     torch.save(
                         make_checkpoint(), checkpoint_dir / "phase_a_complete.pt"
                     )
                     logger.info(
-                        "phase A complete; reset optimizer, scheduler, and EMA; "
-                        "automatically starting phase B"
+                        "phase A latent warmup complete; stopping before phase B"
                     )
-                running.zero_()
-                running_adversarial.zero_()
-                log_micro_steps = 0
-                started = time()
                 dist.barrier()
 
             if train_steps % int(train_config["ckpt_every"]) == 0:
@@ -1157,7 +1180,11 @@ def train(rank, local_rank, world_size, config):
     if rank == 0:
         torch.save(make_checkpoint(), checkpoint_dir / "last_ckpt.pt")
         writer.close()
-        logger.info("two-phase variable-rate LIC training complete")
+        logger.info(
+            "variable-rate LIC latent warmup complete"
+            if stop_after_phase_a
+            else "two-phase variable-rate LIC training complete"
+        )
 
 
 def main():

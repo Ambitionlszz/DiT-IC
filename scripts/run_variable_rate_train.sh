@@ -50,11 +50,28 @@ case "${stage}" in
     config=configs/multirate_e2e_variable_gan.yaml
     default_per_gpu_batch_size=8
     ;;
+  e2e-latent-warmup)
+    trainer=train_variable_rate_lic_ddp.py
+    config=configs/multirate_e2e_latent_warmup.yaml
+    default_per_gpu_batch_size=8
+    ;;
+  e2e-warmup-nogan)
+    trainer=train_nogan_ddp.py
+    config=configs/multirate_e2e_warmup_nogan.yaml
+    default_per_gpu_batch_size=8
+    ;;
+  e2e-warmup-gan)
+    trainer=train_nogan_ddp.py
+    config=configs/multirate_e2e_warmup_gan.yaml
+    default_per_gpu_batch_size=8
+    ;;
   *)
-    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-adv-phase2, plain-smoke, plain, plain-adv, e2e-variable-nogan, e2e-variable-gan" >&2
+    echo "Unknown variable-rate training stage: ${stage}" >&2
     exit 2
     ;;
 esac
+
+config=${TRAIN_CONFIG:-${config}}
 
 IFS=',' read -r -a gpu_ids <<< "${gpu_list}"
 num_gpus=${#gpu_ids[@]}

@@ -113,10 +113,6 @@ def normalize_pure_sana_config(config):
 
         rate_weights = quality_control.get("rate_weights")
         if rate_weights is not None:
-            if params.get("freeze_codec", False):
-                raise ValueError(
-                    "end-to-end variable-rate training requires freeze_codec=False"
-                )
             values = [float(value) for value in rate_weights]
             if len(values) != num_levels:
                 raise ValueError(
@@ -134,6 +130,38 @@ def normalize_pure_sana_config(config):
                 raise ValueError(
                     "end-to-end variable-rate training requires "
                     "train.e2e_phase=nogan or gan"
+                )
+            training_mode = train.get("training_mode", "scratch_e2e")
+            freeze_codec = bool(params.get("freeze_codec", False))
+            freeze_quality_endpoints = bool(
+                train.get("freeze_quality_endpoints", False)
+            )
+            if training_mode == "scratch_e2e":
+                if freeze_codec:
+                    raise ValueError(
+                        "scratch_e2e variable-rate training requires "
+                        "freeze_codec=False"
+                    )
+                if freeze_quality_endpoints:
+                    raise ValueError(
+                        "scratch_e2e must not freeze the quality endpoints"
+                    )
+            elif training_mode == "phase1_warmup_e2e":
+                if not freeze_quality_endpoints:
+                    raise ValueError(
+                        "phase1_warmup_e2e requires "
+                        "train.freeze_quality_endpoints=True"
+                    )
+                expected_freeze_codec = phase == "gan"
+                if freeze_codec != expected_freeze_codec:
+                    raise ValueError(
+                        "phase1_warmup_e2e requires freeze_codec=False for "
+                        "NoGAN and freeze_codec=True for GAN"
+                    )
+            else:
+                raise ValueError(
+                    "train.training_mode must be scratch_e2e or "
+                    "phase1_warmup_e2e"
                 )
 
         if params.get("freeze_codec", False):

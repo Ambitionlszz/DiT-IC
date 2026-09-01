@@ -179,7 +179,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
         self.assertNotIn("default_per_gpu_batch_size=16", launcher)
-        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 9)
+        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 12)
         self.assertIn(
             "per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}",
             launcher,
@@ -509,6 +509,47 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("last_ckpt.pt", pipeline_source)
         self.assertIn("source_checkpoint_sha256", pipeline_source)
         self.assertIn("run_variable_rate_eval.sh", pipeline_source)
+
+    def test_phase1_warmup_e2e_schedule_and_pipeline_contract(self):
+        warmup = (
+            ROOT / "configs" / "multirate_e2e_latent_warmup.yaml"
+        ).read_text(encoding="utf-8")
+        nogan = (
+            ROOT / "configs" / "multirate_e2e_warmup_nogan.yaml"
+        ).read_text(encoding="utf-8")
+        gan = (
+            ROOT / "configs" / "multirate_e2e_warmup_gan.yaml"
+        ).read_text(encoding="utf-8")
+        lic_training = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        e2e_training = (ROOT / "train_nogan_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        model_source = (ROOT / "models" / "DiT_IC.py").read_text(
+            encoding="utf-8"
+        )
+        pipeline = (
+            ROOT / "scripts" / "run_e2e_warmup_nogan_then_gan.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("stop_after_phase_a: true", warmup)
+        self.assertIn("steps: 50000", warmup)
+        self.assertIn("max_steps: 50000", warmup)
+        self.assertIn("training_mode: phase1_warmup_e2e", warmup)
+        self.assertIn("max_steps: 150000", nogan)
+        self.assertIn("freeze_codec: false", nogan)
+        self.assertIn("freeze_quality_endpoints: true", nogan)
+        self.assertIn("max_steps: 50000", gan)
+        self.assertIn("freeze_codec: true", gan)
+        self.assertIn("freeze_quality_endpoints: true", gan)
+        self.assertIn("stop_after_phase_a", lic_training)
+        self.assertIn("set_quality_endpoints_trainable", e2e_training)
+        self.assertIn("require_frozen_quality_endpoints", model_source)
+        self.assertIn("eval_variable_rate_lic_direct.py", pipeline)
+        self.assertIn("variable_rate_gate.py select-lic", pipeline)
+        self.assertIn("e2e-warmup-nogan", pipeline)
+        self.assertIn("e2e-warmup-gan", pipeline)
 
     def test_joint_multirate_loss_matches_baseline_lambda_convention(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(

@@ -438,16 +438,40 @@ class Codec(nn.Module):
                     "to be trainable"
                 )
 
-    def assert_end_to_end_variable_rate_contract(self):
-        if self.freeze_codec:
+    def set_quality_endpoints_trainable(self, trainable):
+        controller = getattr(self.codec, "quality_controller", None)
+        if controller is None:
             raise RuntimeError(
-                "end-to-end variable-rate training requires freeze_codec=False"
+                "quality endpoint freezing requires a variable-rate codec"
+            )
+        controller.encoder_scale_endpoints.requires_grad_(trainable)
+        controller.decoder_scale_endpoints.requires_grad_(trainable)
+
+    def assert_end_to_end_variable_rate_contract(
+        self,
+        allow_frozen_codec=False,
+        require_frozen_quality_endpoints=False,
+    ):
+        endpoint_names = {
+            "quality_controller.encoder_scale_endpoints",
+            "quality_controller.decoder_scale_endpoints",
+        }
+        if self.freeze_codec:
+            if not allow_frozen_codec:
+                raise RuntimeError(
+                    "end-to-end variable-rate training requires "
+                    "freeze_codec=False"
+                )
+            self.assert_frozen_codec_contract()
+        elif allow_frozen_codec:
+            raise RuntimeError(
+                "this end-to-end phase requires freeze_codec=True"
             )
         trainable_codec = [
             name for name, parameter in self.codec.named_parameters()
             if parameter.requires_grad
         ]
-        if not trainable_codec:
+        if not self.freeze_codec and not trainable_codec:
             raise RuntimeError(
                 "end-to-end variable-rate training requires a trainable codec"
             )
@@ -455,11 +479,25 @@ class Codec(nn.Module):
             name for name, parameter in self.codec.named_parameters()
             if not parameter.requires_grad
         ]
-        if frozen_codec:
+        expected_frozen = endpoint_names if require_frozen_quality_endpoints else set()
+        if not self.freeze_codec and set(frozen_codec) != expected_frozen:
             raise RuntimeError(
-                "end-to-end variable-rate training requires every codec "
-                "parameter to be trainable: " + ", ".join(frozen_codec[:5])
+                "unexpected frozen codec parameters for end-to-end training: "
+                + ", ".join(frozen_codec[:5])
             )
+        if require_frozen_quality_endpoints:
+            codec_parameters = dict(self.codec.named_parameters())
+            missing = sorted(endpoint_names.difference(codec_parameters))
+            trainable_endpoints = sorted(
+                name
+                for name in endpoint_names.intersection(codec_parameters)
+                if codec_parameters[name].requires_grad
+            )
+            if missing or trainable_endpoints:
+                raise RuntimeError(
+                    "quality endpoints must exist and remain frozen; "
+                    f"missing={missing}, trainable={trainable_endpoints}"
+                )
 
         self._set_vae_encoder_eval()
         trainable_vae = [

@@ -262,6 +262,67 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "e2e_phase"):
             normalize_pure_sana_config(config)
 
+    def test_phase1_warmup_e2e_freeze_contract_depends_on_phase(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": False,
+                    "use_text_condition": True,
+                    "train_text_projection": True,
+                    "vae_params": {
+                        "vae_lora": True,
+                        "train_vae_lora": True,
+                        "decoder_lora_only": True,
+                    },
+                    "codec_param": {"variable_rate": True},
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {
+                "enabled": True,
+                "num_levels": 6,
+                "rate_weights": [16, 8, 4, 2, 1, 0.5],
+            },
+            "train": {
+                "rate_weight": 0.0,
+                "training_mode": "phase1_warmup_e2e",
+                "e2e_phase": "nogan",
+                "freeze_quality_endpoints": True,
+            },
+        }
+        normalized = normalize_pure_sana_config(config)
+        self.assertFalse(normalized["model"]["params"]["freeze_codec"])
+
+        config["train"]["e2e_phase"] = "gan"
+        config["model"]["params"]["freeze_codec"] = True
+        normalized = normalize_pure_sana_config(config)
+        self.assertTrue(normalized["model"]["params"]["freeze_codec"])
+
+    def test_phase1_warmup_e2e_requires_frozen_quality_endpoints(self):
+        config = {
+            "model": {
+                "params": {
+                    "freeze_codec": False,
+                    "use_text_condition": True,
+                    "codec_param": {"variable_rate": True},
+                    "loss_params": {"rate_weight": 0.0},
+                }
+            },
+            "quality_control": {
+                "enabled": True,
+                "num_levels": 6,
+                "rate_weights": [16, 8, 4, 2, 1, 0.5],
+            },
+            "train": {
+                "rate_weight": 0.0,
+                "training_mode": "phase1_warmup_e2e",
+                "e2e_phase": "nogan",
+                "freeze_quality_endpoints": False,
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "freeze_quality_endpoints"):
+            normalize_pure_sana_config(config)
+
 
 if __name__ == "__main__":
     unittest.main()

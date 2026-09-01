@@ -46,7 +46,7 @@ def end_to_end_variable_rate_contract(config):
     rate_weights = quality.get("rate_weights")
     if rate_weights is None:
         return None
-    return {
+    contract = {
         "version": "e2e_variable_rate_nogan_gan_v1",
         "phase": str(config["train"]["e2e_phase"]),
         "rate_weights": [float(value) for value in rate_weights],
@@ -54,6 +54,18 @@ def end_to_end_variable_rate_contract(config):
         "loss_form": "pixel_perceptual_plus_quality_rate",
         "variable_rate_mechanism": VARIABLE_RATE_MECHANISM,
     }
+    training_mode = config["train"].get("training_mode", "scratch_e2e")
+    if training_mode != "scratch_e2e":
+        contract.update(
+            {
+                "version": "phase1_warmup_e2e_nogan_gan_v1",
+                "training_mode": training_mode,
+                "freeze_quality_endpoints": bool(
+                    config["train"].get("freeze_quality_endpoints", False)
+                ),
+            }
+        )
+    return contract
 
 
 def quality_rate_weight(rate_weights, quality_index):
@@ -141,6 +153,12 @@ def do_train(rank, local_rank, world_size, train_config):
     multirate_plain = bool(quality_config.get("enabled", False))
     num_quality_levels = int(quality_config.get("num_levels", 0))
     e2e_contract = end_to_end_variable_rate_contract(train_config)
+    training_mode = train_config["train"].get(
+        "training_mode", "scratch_e2e"
+    )
+    freeze_quality_endpoints = bool(
+        train_config["train"].get("freeze_quality_endpoints", False)
+    )
     e2e_rate_weights = (
         e2e_contract["rate_weights"] if e2e_contract is not None else None
     )
@@ -184,6 +202,8 @@ def do_train(rank, local_rank, world_size, train_config):
     params = dict(train_config.get("model", {}).get("params", {}))
     params["training"] = True
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
+    if freeze_quality_endpoints:
+        model.set_quality_endpoints_trainable(False)
     source_checkpoint_sha256 = (
         file_sha256(params["codec_path"])
         if rank == 0 and params.get("codec_path")
@@ -206,6 +226,13 @@ def do_train(rank, local_rank, world_size, train_config):
         )
         logger.info(
             f"Trainable Codec Parameters: {trainable_codec_params / 1e6:.2f}M"
+        )
+        logger.info(
+            "E2E training mode: %s; freeze_quality_endpoints=%s; "
+            "freeze_codec=%s",
+            training_mode,
+            freeze_quality_endpoints,
+            model.freeze_codec,
         )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     entropy_parameters = model.get_entropy_parameters()
@@ -369,7 +396,13 @@ def do_train(rank, local_rank, world_size, train_config):
     model.module.assert_frozen_codec_contract()
     model.module.assert_reconstruction_training_contract()
     if e2e_contract is not None:
-        model.module.assert_end_to_end_variable_rate_contract()
+        model.module.assert_end_to_end_variable_rate_contract(
+            allow_frozen_codec=(
+                training_mode == "phase1_warmup_e2e"
+                and train_config["train"]["e2e_phase"] == "gan"
+            ),
+            require_frozen_quality_endpoints=freeze_quality_endpoints,
+        )
     loss_module.train()
 
     train_config['train']['resume'] if 'resume' in train_config['train'] else False
@@ -839,7 +872,15 @@ def do_train(rank, local_rank, world_size, train_config):
                     model.train()
                     model.module.assert_reconstruction_training_contract()
                     if e2e_contract is not None:
-                        model.module.assert_end_to_end_variable_rate_contract()
+                        model.module.assert_end_to_end_variable_rate_contract(
+                            allow_frozen_codec=(
+                                training_mode == "phase1_warmup_e2e"
+                                and train_config["train"]["e2e_phase"] == "gan"
+                            ),
+                            require_frozen_quality_endpoints=(
+                                freeze_quality_endpoints
+                            ),
+                        )
                     loss_module.train()
 
                 # ---- save checkpoint ----
