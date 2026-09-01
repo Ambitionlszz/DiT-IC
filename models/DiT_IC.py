@@ -449,7 +449,6 @@ class Codec(nn.Module):
 
     def assert_end_to_end_variable_rate_contract(
         self,
-        allow_frozen_codec=False,
         require_frozen_quality_endpoints=False,
     ):
         endpoint_names = {
@@ -457,21 +456,14 @@ class Codec(nn.Module):
             "quality_controller.decoder_scale_endpoints",
         }
         if self.freeze_codec:
-            if not allow_frozen_codec:
-                raise RuntimeError(
-                    "end-to-end variable-rate training requires "
-                    "freeze_codec=False"
-                )
-            self.assert_frozen_codec_contract()
-        elif allow_frozen_codec:
             raise RuntimeError(
-                "this end-to-end phase requires freeze_codec=True"
+                "end-to-end variable-rate training requires freeze_codec=False"
             )
         trainable_codec = [
             name for name, parameter in self.codec.named_parameters()
             if parameter.requires_grad
         ]
-        if not self.freeze_codec and not trainable_codec:
+        if not trainable_codec:
             raise RuntimeError(
                 "end-to-end variable-rate training requires a trainable codec"
             )
@@ -480,7 +472,7 @@ class Codec(nn.Module):
             if not parameter.requires_grad
         ]
         expected_frozen = endpoint_names if require_frozen_quality_endpoints else set()
-        if not self.freeze_codec and set(frozen_codec) != expected_frozen:
+        if set(frozen_codec) != expected_frozen:
             raise RuntimeError(
                 "unexpected frozen codec parameters for end-to-end training: "
                 + ", ".join(frozen_codec[:5])

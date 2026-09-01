@@ -21,8 +21,8 @@ model:
     use_ema: true
     use_merge: false
     training: true
-    # GAN must not move the established real-rANS rate ladder.
-    freeze_codec: true
+    # Match NoGAN trainability; GAN adds only the adversarial objective.
+    freeze_codec: false
     strict_stage_loading: true
     train_text_projection: true
     DiT_params:

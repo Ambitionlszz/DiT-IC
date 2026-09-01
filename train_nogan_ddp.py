@@ -397,10 +397,6 @@ def do_train(rank, local_rank, world_size, train_config):
     model.module.assert_reconstruction_training_contract()
     if e2e_contract is not None:
         model.module.assert_end_to_end_variable_rate_contract(
-            allow_frozen_codec=(
-                training_mode == "phase1_warmup_e2e"
-                and train_config["train"]["e2e_phase"] == "gan"
-            ),
             require_frozen_quality_endpoints=freeze_quality_endpoints,
         )
     loss_module.train()
@@ -873,10 +869,6 @@ def do_train(rank, local_rank, world_size, train_config):
                     model.module.assert_reconstruction_training_contract()
                     if e2e_contract is not None:
                         model.module.assert_end_to_end_variable_rate_contract(
-                            allow_frozen_codec=(
-                                training_mode == "phase1_warmup_e2e"
-                                and train_config["train"]["e2e_phase"] == "gan"
-                            ),
                             require_frozen_quality_endpoints=(
                                 freeze_quality_endpoints
                             ),

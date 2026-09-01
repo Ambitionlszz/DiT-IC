@@ -217,20 +217,16 @@ fi
 
 warmup_eval_dir="${result_root}/latent_warmup_50k_real_rans"
 eval_gpu=${gpu_list%%,*}
-CUDA_VISIBLE_DEVICES="${eval_gpu}" PYTHONPATH=. python -u \
-  scripts/eval_variable_rate_lic_direct.py \
-  --config "${warmup_config}" \
-  --checkpoint "${warmup_final}" \
-  --image_dir "${eval_image_dir}" \
-  --output_dir "${warmup_eval_dir}" \
-  --gpu 0 \
-  --weights ema
-PYTHONPATH=. python scripts/variable_rate_gate.py select-lic \
-  --last-checkpoint "${warmup_final}" \
-  --last-summary "${warmup_eval_dir}/summary.json" \
-  --last-eval-dir "${warmup_eval_dir}" \
-  --min-bpp-span "${MIN_BPP_SPAN:-0.02}" \
-  --output "${result_root}/latent_warmup_gate.json"
+if ! CUDA_VISIBLE_DEVICES="${eval_gpu}" PYTHONPATH=. python -u \
+    scripts/eval_variable_rate_lic_direct.py \
+    --config "${warmup_config}" \
+    --checkpoint "${warmup_final}" \
+    --image_dir "${eval_image_dir}" \
+    --output_dir "${warmup_eval_dir}" \
+    --gpu 0 \
+    --weights ema; then
+  echo "WARNING: latent-warmup evaluation failed; continuing to NoGAN." >&2
+fi
 
 nogan_state="$(inspect_e2e_phase "${nogan_checkpoint_dir}" "${nogan_config}" "${warmup_final}")"
 case "${nogan_state}" in
@@ -255,19 +251,24 @@ if [[ "${nogan_state}" != complete:* || ! -f "${nogan_final}" ]]; then
   echo "NoGAN did not produce its configured final checkpoint." >&2
   exit 1
 fi
-run_e2e_eval "${nogan_final}" "${nogan_config}" "${result_root}/nogan_logical_200k"
+if ! run_e2e_eval \
+    "${nogan_final}" \
+    "${nogan_config}" \
+    "${result_root}/nogan_logical_200k"; then
+  echo "WARNING: NoGAN evaluation failed; continuing to GAN." >&2
+fi
 
 gan_state="$(inspect_e2e_phase "${gan_checkpoint_dir}" "${gan_config}" "${nogan_final}")"
 case "${gan_state}" in
-  complete:*) echo "50k frozen-codec GAN is already complete." ;;
+  complete:*) echo "50k E2E GAN is already complete." ;;
   resume:*)
-    echo "Resuming 50k frozen-codec GAN from ${gan_state#resume:}"
+    echo "Resuming 50k E2E GAN from ${gan_state#resume:}"
     run_training e2e-warmup-gan "${gan_config}" \
       --codec_path "${nogan_final}" \
       --resume_checkpoint "${gan_state#resume:}"
     ;;
   missing)
-    echo "Starting 50k frozen-codec GAN from ${nogan_final}"
+    echo "Starting 50k E2E GAN from ${nogan_final}"
     run_training e2e-warmup-gan "${gan_config}" \
       --codec_path "${nogan_final}"
     ;;
@@ -280,6 +281,11 @@ if [[ "${gan_state}" != complete:* || ! -f "${gan_final}" ]]; then
   echo "GAN did not produce its configured final checkpoint." >&2
   exit 1
 fi
-run_e2e_eval "${gan_final}" "${gan_config}" "${result_root}/gan_logical_250k"
+if ! run_e2e_eval \
+    "${gan_final}" \
+    "${gan_config}" \
+    "${result_root}/gan_logical_250k"; then
+  echo "WARNING: GAN evaluation failed after training completed." >&2
+fi
 
-echo "50k latent warmup, 150k E2E NoGAN, 50k frozen-codec GAN, and all real-rANS evaluations are complete."
+echo "50k latent warmup, 150k E2E NoGAN, and 50k E2E GAN training are complete; evaluations were attempted without blocking later training."

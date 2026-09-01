@@ -294,9 +294,12 @@ class LegacyConfigCompatibilityTest(unittest.TestCase):
         self.assertFalse(normalized["model"]["params"]["freeze_codec"])
 
         config["train"]["e2e_phase"] = "gan"
-        config["model"]["params"]["freeze_codec"] = True
         normalized = normalize_pure_sana_config(config)
-        self.assertTrue(normalized["model"]["params"]["freeze_codec"])
+        self.assertFalse(normalized["model"]["params"]["freeze_codec"])
+
+        config["model"]["params"]["freeze_codec"] = True
+        with self.assertRaisesRegex(ValueError, "freeze_codec=False"):
+            normalize_pure_sana_config(config)
 
     def test_phase1_warmup_e2e_requires_frozen_quality_endpoints(self):
         config = {

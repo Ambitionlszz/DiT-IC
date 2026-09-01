@@ -152,11 +152,10 @@ def normalize_pure_sana_config(config):
                         "phase1_warmup_e2e requires "
                         "train.freeze_quality_endpoints=True"
                     )
-                expected_freeze_codec = phase == "gan"
-                if freeze_codec != expected_freeze_codec:
+                if freeze_codec:
                     raise ValueError(
-                        "phase1_warmup_e2e requires freeze_codec=False for "
-                        "NoGAN and freeze_codec=True for GAN"
+                        "phase1_warmup_e2e requires freeze_codec=False in "
+                        "both NoGAN and GAN phases"
                     )
             else:
                 raise ValueError(
