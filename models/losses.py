@@ -229,25 +229,20 @@ class LPIPSWithDiscriminator(nn.Module):
 
         if optimizer_idx == 1:
             if cond is None:
-                discriminator_input = torch.cat(
-                    (
-                        inputs.contiguous().detach(),
-                        reconstructions.contiguous().detach(),
-                    ),
-                    dim=0,
-                )
+                real_input = inputs.contiguous().detach()
+                fake_input = reconstructions.contiguous().detach()
             else:
-                discriminator_input = torch.cat(
-                    (
-                        torch.cat((inputs.contiguous().detach(), cond), dim=1),
-                        torch.cat(
-                            (reconstructions.contiguous().detach(), cond),
-                            dim=1,
-                        ),
-                    ),
-                    dim=0,
+                real_input = torch.cat(
+                    (inputs.contiguous().detach(), cond), dim=1
                 )
-            logits_real, logits_fake = discriminator(discriminator_input).chunk(2)
+                fake_input = torch.cat(
+                    (reconstructions.contiguous().detach(), cond), dim=1
+                )
+
+            # PatchGAN uses BatchNorm by default. Keep real and fake in
+            # separate forwards so batch statistics cannot reveal the label.
+            logits_real = discriminator(real_input)
+            logits_fake = discriminator(fake_input)
 
             disc_factor = adopt_weight(
                 self.disc_factor,
@@ -259,6 +254,9 @@ class LPIPSWithDiscriminator(nn.Module):
                 f"{split}/disc_loss": loss.clone().mean(),
                 f"{split}/logits_real": logits_real.mean(),
                 f"{split}/logits_fake": logits_fake.mean(),
+                f"{split}/logits_gap": (
+                    logits_real.mean() - logits_fake.mean()
+                ),
             }
 
         raise ValueError(f"Unsupported optimizer_idx: {optimizer_idx}")

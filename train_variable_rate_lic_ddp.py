@@ -379,11 +379,11 @@ class PhaseBAdversarialLoss(nn.Module):
 
     def discriminator_loss(self, reference, reconstruction, phase_step, discriminator=None):
         discriminator = self.discriminator if discriminator is None else discriminator
-        discriminator_input = torch.cat(
-            (reference.contiguous().detach(), reconstruction.contiguous().detach()),
-            dim=0,
-        )
-        logits_real, logits_fake = discriminator(discriminator_input).chunk(2)
+        # NLayerDiscriminator uses BatchNorm unless ActNorm is requested.
+        # Separate forwards prevent real/fake batch statistics from leaking
+        # the class label to the discriminator.
+        logits_real = discriminator(reference.contiguous().detach())
+        logits_fake = discriminator(reconstruction.contiguous().detach())
         disc_factor = adopt_weight(
             self.disc_factor,
             phase_step,
@@ -394,6 +394,9 @@ class PhaseBAdversarialLoss(nn.Module):
             "disc_loss": loss.detach(),
             "logits_real": logits_real.detach().mean(),
             "logits_fake": logits_fake.detach().mean(),
+            "logits_gap": (
+                logits_real.detach().mean() - logits_fake.detach().mean()
+            ),
         }
 
 
