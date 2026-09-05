@@ -435,6 +435,15 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("NLayerDiscriminator", source)
         self.assertIn("hinge_d_loss", source)
         self.assertIn("generator_loss = -torch.mean(logits_fake)", source)
+        self.assertIn(
+            "logits_real = discriminator(reference.contiguous().detach())",
+            source,
+        )
+        self.assertIn(
+            "logits_fake = discriminator(reconstruction.contiguous().detach())",
+            source,
+        )
+        self.assertNotIn("discriminator(discriminator_input).chunk(2)", source)
         self.assertIn("torch.norm(reconstruction_grads)", source)
         self.assertIn("torch.norm(generator_grads) + 1e-4", source)
         self.assertIn("ADVERSARIAL_CHECKPOINT_SCHEMA_VERSION = 9", source)
