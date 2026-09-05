@@ -123,6 +123,13 @@ def do_train(rank, local_rank, world_size, train_config):
         raise ValueError("multi-rate Plain training requires exactly 6 quality levels")
     quality_generator = None
     quality_counts = None
+    quality_rate_weights = quality_config.get("rate_weights")
+    if quality_rate_weights is not None:
+        quality_rate_weights = [float(value) for value in quality_rate_weights]
+        if len(quality_rate_weights) != num_quality_levels:
+            raise ValueError(
+                "quality_control.rate_weights must match num_levels"
+            )
     if multirate_plain:
         quality_generator = torch.Generator(device="cpu")
         quality_generator.manual_seed(
@@ -159,6 +166,9 @@ def do_train(rank, local_rank, world_size, train_config):
     params = dict(train_config.get("model", {}).get("params", {}))
     params["training"] = True
     model = codec_models(train_config['model']['model_type'], device, **params).to(device)
+    ema_exact_parts = (
+        ("state_dict_codec",) if model.freeze_codec else ()
+    )
     source_checkpoint_sha256 = (
         file_sha256(params["codec_path"])
         if rank == 0 and multirate_plain
@@ -182,6 +192,20 @@ def do_train(rank, local_rank, world_size, train_config):
         logger.info(
             f"Trainable Codec Parameters: {trainable_codec_params / 1e6:.2f}M"
         )
+        relay_parameters = (
+            sum(parameter.numel() for parameter in model.decoder_relay.parameters())
+            if model.decoder_relay is not None
+            else 0
+        )
+        logger.info(
+            f"Decoder Relay: {model.decoder_relay_mode}, "
+            f"trainable={relay_parameters / 1e6:.3f}M"
+        )
+        if quality_rate_weights is not None:
+            logger.info(
+                "Per-quality rate weights: "
+                + json.dumps(quality_rate_weights)
+            )
         logger.info(f"Optimizer: AdamW, lr={train_config['optimizer']['lr']}, beta2={train_config['optimizer']['beta2']}")
     entropy_parameters = model.get_entropy_parameters()
     main_parameter_ids = {id(parameter) for parameter in main_parameters}
@@ -338,7 +362,7 @@ def do_train(rank, local_rank, world_size, train_config):
             ema,
             model.module.get_state_dicts_for_save(),
             decay=0.999,
-            exact_parts=("state_dict_codec",) if multirate_plain else (),
+            exact_parts=ema_exact_parts,
         )
     model.train()
     model.module.assert_frozen_codec_contract()
@@ -509,15 +533,24 @@ def do_train(rank, local_rank, world_size, train_config):
                 checkpoint["ema"]["state_dict_codec"]
             )
             if codec_sha256 != ema_codec_sha256:
-                raise RuntimeError(
-                    "frozen codec drifted between live and EMA checkpoint state"
-                )
+                if model.module.freeze_codec:
+                    raise RuntimeError(
+                        "frozen codec drifted between live and EMA checkpoint state"
+                    )
             checkpoint["codec_sha256"] = codec_sha256
             checkpoint["ema_codec_sha256"] = ema_codec_sha256
             checkpoint["source_checkpoint_sha256"] = source_checkpoint_sha256
             checkpoint["git_commit"] = current_git_commit()
             checkpoint["bitstream_format_version"] = 1
             checkpoint["variable_rate_mechanism"] = VARIABLE_RATE_MECHANISM
+            checkpoint["end_to_end"] = not model.module.freeze_codec
+            checkpoint["quality_rate_weights"] = quality_rate_weights
+            checkpoint["decoder_relay_mode"] = model.module.decoder_relay_mode
+            checkpoint["decoder_relay_contract"] = (
+                model.module.decoder_relay.contract()
+                if model.module.decoder_relay is not None
+                else None
+            )
             checkpoint["trainable_parameter_names"] = sorted(
                 name
                 for name, parameter in model.module.named_parameters()
@@ -550,7 +583,6 @@ def do_train(rank, local_rank, world_size, train_config):
         sampler.set_epoch(epoch)
 
 
-        loss_module.rate_weight = train_config['train']['rate_weight']
         for x in loader:
             x = x.to(device)
             will_step = accum_count + 1 == accumulation_steps
@@ -561,6 +593,12 @@ def do_train(rank, local_rank, world_size, train_config):
                     device,
                     generator=quality_generator,
                 )
+            if quality_rate_weights is not None:
+                loss_module.rate_weight = quality_rate_weights[
+                    int(quality_index.item())
+                ]
+            else:
+                loss_module.rate_weight = train_config['train']['rate_weight']
 
             # ---- forward pass ----
             if multirate_plain:
@@ -671,9 +709,7 @@ def do_train(rank, local_rank, world_size, train_config):
                         ema,
                         model.module.get_state_dicts_for_save(),
                         decay=0.999,
-                        exact_parts=("state_dict_codec",)
-                        if multirate_plain
-                        else (),
+                        exact_parts=ema_exact_parts,
                     )
 
                 # Zero all gradients for next accumulation cycle
@@ -766,6 +802,7 @@ def do_train(rank, local_rank, world_size, train_config):
                                 logger,
                                 writer,
                                 num_quality_levels,
+                                quality_rate_weights,
                             )
                     else:
                         test_loss = evaluate(
@@ -821,14 +858,11 @@ def evaluate_multirate_ema(
     logger,
     writer,
     num_quality_levels,
+    quality_rate_weights=None,
 ):
     """Evaluate the same EMA weights that downstream P0 loading will use."""
     model.assert_reconstruction_training_contract()
-    live_state = model.get_state_dicts_for_save()
-    live_dit = deepcopy(live_state["state_dict_DiT"])
-    live_text_proj = deepcopy(live_state["state_dict_text_proj"])
-    model.DiT.load_state_dict(ema["state_dict_DiT"], strict=False)
-    model.text_proj.load_state_dict(ema["state_dict_text_proj"], strict=True)
+    swap_saved_state_dicts(model, ema)
     try:
         return evaluate(
             model,
@@ -839,10 +873,10 @@ def evaluate_multirate_ema(
             logger,
             writer,
             num_quality_levels=num_quality_levels,
+            quality_rate_weights=quality_rate_weights,
         )
     finally:
-        model.DiT.load_state_dict(live_dit, strict=False)
-        model.text_proj.load_state_dict(live_text_proj, strict=True)
+        swap_saved_state_dicts(model, ema)
 
 
 @torch.no_grad()
@@ -855,6 +889,7 @@ def evaluate(
     logger=None,
     writer=None,
     num_quality_levels=None,
+    quality_rate_weights=None,
 ):
     model.eval()
     loss_module.eval()
@@ -871,7 +906,10 @@ def evaluate(
         range(num_quality_levels) if num_quality_levels is not None else [None]
     )
     per_quality = {}
+    original_rate_weight = loss_module.rate_weight
     for quality_index in qualities:
+        if quality_rate_weights is not None:
+            loss_module.rate_weight = quality_rate_weights[quality_index]
         quality_loss = AverageMeter()
         quality_psnr = AverageMeter()
         quality_bpp = AverageMeter()
@@ -910,7 +948,10 @@ def evaluate(
                 "loss": float(quality_loss.avg),
                 "psnr": float(quality_psnr.avg),
                 "likelihood_bpp": float(quality_bpp.avg),
+                "rate_weight": float(loss_module.rate_weight),
             }
+
+    loss_module.rate_weight = original_rate_weight
 
     if logger is not None:
         logger.info(
@@ -1006,6 +1047,23 @@ def update_ema(ema_model, model, decay=0.9999, exact_parts=()):
         for param_key, model_tensor in model_part.items():
             if param_key not in ema_part:
                 ema_part[param_key] = model_tensor.clone()
+
+
+@torch.no_grad()
+def swap_saved_state_dicts(model, saved_state):
+    """Swap live and saved tensors in-place without allocating a second model."""
+    live_state = model.get_state_dicts_for_save()
+    if live_state.keys() != saved_state.keys():
+        raise RuntimeError("live and EMA model parts do not match")
+    for part_key, live_part in live_state.items():
+        saved_part = saved_state[part_key]
+        if live_part.keys() != saved_part.keys():
+            raise RuntimeError(f"live and EMA keys differ for {part_key}")
+        for tensor_key, live_tensor in live_part.items():
+            saved_tensor = saved_part[tensor_key]
+            temporary = live_tensor.detach().clone()
+            live_tensor.copy_(saved_tensor)
+            saved_tensor.copy_(temporary)
 
 
 
@@ -1105,6 +1163,15 @@ if __name__ == "__main__":
     parser.add_argument('--global_batch_size', type=int, default=None)
     parser.add_argument('--per_gpu_batch_size', type=int, default=None)
     parser.add_argument('--accumulation_steps', type=int, default=None)
+    parser.add_argument('--max_steps', type=int, default=None)
+    parser.add_argument('--eval_every', type=int, default=None)
+    parser.add_argument('--ckpt_every', type=int, default=None)
+    parser.add_argument('--exp_name', type=str, default=None)
+    parser.add_argument(
+        '--decoder_relay_mode',
+        choices=('none', 'decoder_self', 'bitstream'),
+        default=None,
+    )
     parser.add_argument('--upsample_mode', type=str, default=None,
                         help="Upsampling method: 'pixelshuffle' (default) or 'convtranspose'.")
     args = parser.parse_args()
@@ -1133,6 +1200,20 @@ if __name__ == "__main__":
         if args.accumulation_steps < 1:
             raise ValueError("--accumulation_steps must be positive")
         train_config['train']['accumulation_steps'] = args.accumulation_steps
+    for name in ('max_steps', 'eval_every', 'ckpt_every'):
+        value = getattr(args, name)
+        if value is not None:
+            if value < 1:
+                raise ValueError(f"--{name} must be positive")
+            train_config['train'][name] = value
+    if args.exp_name is not None:
+        train_config['train']['exp_name'] = args.exp_name
+    if args.decoder_relay_mode is not None:
+        relay_params = train_config['model']['params'].setdefault(
+            'decoder_relay_params',
+            {},
+        )
+        relay_params['mode'] = args.decoder_relay_mode
     set_seed(train_config["train"]["global_seed"])
 
     rank, world_size, local_rank = setup_ddp()

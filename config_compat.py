@@ -111,6 +111,21 @@ def normalize_pure_sana_config(config):
         codec_param["variable_rate"] = True
         codec_param["num_quality_levels"] = num_levels
 
+        quality_rate_weights = quality_control.get("rate_weights")
+        if quality_rate_weights is not None:
+            if len(quality_rate_weights) != num_levels:
+                raise ValueError(
+                    "quality_control.rate_weights must provide one value per "
+                    "quality level"
+                )
+            quality_control["rate_weights"] = [
+                float(value) for value in quality_rate_weights
+            ]
+            if any(value <= 0 for value in quality_control["rate_weights"]):
+                raise ValueError(
+                    "quality_control.rate_weights values must be positive"
+                )
+
         if params.get("freeze_codec", False):
             vae_params = params.get("vae_params") or {}
             train_vae_lora = vae_params.get(
@@ -129,6 +144,18 @@ def normalize_pure_sana_config(config):
                 raise ValueError(
                     "multi-rate Plain checkpoint ranking requires train.rate_weight=0"
                 )
+
+    relay_params = dict(params.get("decoder_relay_params") or {})
+    relay_mode = relay_params.get("mode", "none")
+    if relay_mode not in ("none", "decoder_self", "bitstream"):
+        raise ValueError(
+            "decoder_relay_params.mode must be one of: none, decoder_self, "
+            "bitstream"
+        )
+    if relay_mode != "none" and params.get("freeze_codec", False):
+        raise ValueError(
+            "decoder relay experiments require freeze_codec=False for E2E training"
+        )
 
     params["decode_mode"] = validate_decode_mode(
         params.get("decode_mode", "sana")

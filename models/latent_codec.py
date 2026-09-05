@@ -277,12 +277,23 @@ class SynthesisTransform(nn.Module):
             nn.Conv2d(320, channel_out, kernel_size=3, padding=1)
         )
 
-    def forward(self, x, decoder_scale=None):
+    def _forward_impl(self, x, decoder_scale=None, return_bridge=False):
+        bridge = None
         for index, layer in enumerate(self.synthesis_transform):
             x = layer(x)
             if index == 3 and decoder_scale is not None:
                 x = x * decoder_scale
+            if index == 3:
+                bridge = x
+        if return_bridge:
+            return x, bridge
         return x
+
+    def forward(self, x, decoder_scale=None):
+        return self._forward_impl(x, decoder_scale, return_bridge=False)
+
+    def forward_with_bridge(self, x, decoder_scale=None):
+        return self._forward_impl(x, decoder_scale, return_bridge=True)
 
 class HyperAnalysis(nn.Module):
     def __init__(self, channel=320) -> None:
@@ -642,10 +653,14 @@ class LatentCodec(nn.Module):
         y_likelihoods = y_likelihoods_0 + y_likelihoods_1 + y_likelihoods_2 + y_likelihoods_3 
         # torch.backends.cudnn.deterministic = False
         
-        mean = self.g_s(y_hat, decoder_scale)
+        mean, decoder_bridge = self.g_s.forward_with_bridge(
+            y_hat,
+            decoder_scale,
+        )
 
         return {
             "mean": mean,
+            "decoder_bridge": decoder_bridge,
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
         }
 
@@ -731,7 +746,13 @@ class LatentCodec(nn.Module):
             )
         return output
 
-    def decompress(self, packet_or_strings, shape=None, quality_index=None):
+    def decompress(
+        self,
+        packet_or_strings,
+        shape=None,
+        quality_index=None,
+        return_bridge=False,
+    ):
         if isinstance(packet_or_strings, CodecPacket):
             if shape is not None or quality_index is not None:
                 raise ValueError(
@@ -795,8 +816,13 @@ class LatentCodec(nn.Module):
 
         torch.backends.cudnn.deterministic = False
 
-        mean = self.g_s(y_hat, decoder_scale)
+        mean, decoder_bridge = self.g_s.forward_with_bridge(
+            y_hat,
+            decoder_scale,
+        )
 
+        if return_bridge:
+            return mean, decoder_bridge
         return mean
 
 if __name__ == '__main__':

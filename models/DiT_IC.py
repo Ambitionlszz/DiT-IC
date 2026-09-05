@@ -8,6 +8,7 @@ from diffusers import AutoencoderDC, SanaTransformer2DModel
 from peft import LoraConfig, get_peft_model
 
 from decode_modes import validate_decode_checkpoint, validate_decode_mode
+from .feature_relay import DecoderFeatureRelay, RELAY_MODES
 from .losses import LPIPSWithDiscriminator
 from .scheduler import OneStepFlowScheduler, make_1step_sched
 
@@ -57,7 +58,9 @@ class Codec(nn.Module):
         freeze_codec=False,
         train_text_projection=True,
         strict_stage_loading=False,
+        allow_phase_a_handoff=False,
         decode_mode="sana",
+        decoder_relay_params=None,
         **kwargs,
     ):
         super().__init__()
@@ -70,6 +73,7 @@ class Codec(nn.Module):
         self._init_for_training = training
         self.train_text_projection = bool(train_text_projection)
         self.strict_stage_loading = bool(strict_stage_loading)
+        self.allow_phase_a_handoff = bool(allow_phase_a_handoff)
         vae_lora_enabled = bool(vae_params.get("vae_lora", False))
         train_vae_lora = bool(
             vae_params.get("train_vae_lora", vae_lora_enabled)
@@ -91,6 +95,7 @@ class Codec(nn.Module):
 
         self.build_DiT(dit_path, device, use_merge)
         self.codec = latent_models(model_type, **codec_param)
+        self.decoder_relay = self._build_decoder_relay(decoder_relay_params)
         self.freeze_codec = freeze_codec
         if self.freeze_codec:
             self.codec.requires_grad_(False)
@@ -145,6 +150,45 @@ class Codec(nn.Module):
         self.assert_reconstruction_training_contract()
 
         print("Pure SANA initialization complete")
+
+    def _build_decoder_relay(self, relay_params):
+        relay_params = dict(relay_params or {})
+        mode = relay_params.pop("mode", "none")
+        if mode == "none":
+            self.decoder_relay_mode = "none"
+            return None
+        if mode not in RELAY_MODES:
+            raise ValueError(
+                f"decoder_relay_params.mode must be 'none' or one of "
+                f"{RELAY_MODES}, got {mode!r}"
+            )
+
+        stage_indices = tuple(
+            relay_params.pop("stage_block_indices", (3, 2, 1))
+        )
+        decoder_channels = tuple(self.vae.config.decoder_block_out_channels)
+        if any(
+            index < 0 or index >= len(decoder_channels)
+            for index in stage_indices
+        ):
+            raise ValueError(
+                "decoder relay stage_block_indices are incompatible with the VAE"
+            )
+        stage_channels = [decoder_channels[index] for index in stage_indices]
+
+        # Relay construction must not perturb downstream LoRA initialization.
+        cpu_rng_state = torch.random.get_rng_state()
+        try:
+            relay = DecoderFeatureRelay(
+                mode=mode,
+                stage_channels=stage_channels,
+                stage_block_indices=stage_indices,
+                **relay_params,
+            )
+        finally:
+            torch.random.set_rng_state(cpu_rng_state)
+        self.decoder_relay_mode = mode
+        return relay
 
     def _build_fixed_text_condition(self, text_encoder_path):
         if text_encoder_path is None:
@@ -240,10 +284,16 @@ class Codec(nn.Module):
                     )
                 global_step = int(checkpoint.get("global_step", -1))
                 phase_a_steps = int(checkpoint.get("phase_a_steps", -1))
-                if phase_a_steps < 1 or global_step <= phase_a_steps:
+                before_handoff = phase_a_steps < 1 or global_step < phase_a_steps
+                phase_a_boundary = global_step == phase_a_steps
+                if before_handoff or (
+                    phase_a_boundary and not self.allow_phase_a_handoff
+                ):
                     raise ValueError(
                         "multi-rate Plain requires a LIC checkpoint trained "
-                        "past the Phase A boundary"
+                        "past the Phase A boundary, unless "
+                        "allow_phase_a_handoff=True explicitly selects the "
+                        "completed latent warmup"
                     )
             elif (
                 int(checkpoint.get("schema_version", 0)) != 3
@@ -264,8 +314,8 @@ class Codec(nn.Module):
             self.codec.load_state_dict(state["state_dict_codec"], strict=True)
             self.codec.update()
             print(
-                "[Pure SANA] Loaded frozen V4 LIC; keeping fresh DiT LoRA "
-                "and text projection initialization"
+                "[Pure SANA] Loaded variable-rate LIC handoff; keeping fresh "
+                "DiT/VAE LoRA, text projection, and decoder relay initialization"
             )
             return
 
@@ -280,6 +330,15 @@ class Codec(nn.Module):
             raise KeyError(
                 "Checkpoint is not a fixed-text Pure SANA/all-off checkpoint; "
                 f"missing entries: {missing}"
+            )
+        has_decoder_relay = "state_dict_decoder_relay" in state
+        if self.decoder_relay is not None and not has_decoder_relay:
+            raise KeyError(
+                "checkpoint lacks state_dict_decoder_relay required by the config"
+            )
+        if self.decoder_relay is None and has_decoder_relay:
+            raise ValueError(
+                "checkpoint contains decoder relay weights but the config disables it"
             )
         has_gs_fusion = "state_dict_g_s_fusion" in state
         validate_decode_checkpoint(
@@ -345,6 +404,11 @@ class Codec(nn.Module):
                 + ", ".join(unexpected_adapter_keys)
             )
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
+        if self.decoder_relay is not None:
+            self.decoder_relay.load_state_dict(
+                state["state_dict_decoder_relay"],
+                strict=True,
+            )
 
     def train(self, mode=True):
         super().train(mode)
@@ -530,6 +594,12 @@ class Codec(nn.Module):
             for parameter in self.text_proj.parameters()
             if parameter.requires_grad
         )
+        if self.decoder_relay is not None:
+            parameters.extend(
+                parameter
+                for parameter in self.decoder_relay.parameters()
+                if parameter.requires_grad
+            )
         return parameters
 
     def get_state_dicts_for_save(self):
@@ -547,6 +617,15 @@ class Codec(nn.Module):
             },
             "state_dict_text_proj": text_proj.state_dict(),
         }
+        if self.decoder_relay is not None:
+            decoder_relay = getattr(
+                self.decoder_relay,
+                "module",
+                self.decoder_relay,
+            )
+            state_dicts["state_dict_decoder_relay"] = (
+                decoder_relay.state_dict()
+            )
         return state_dicts
 
     def get_last_layer(self):
@@ -575,7 +654,42 @@ class Codec(nn.Module):
         )
         return condition.to(device)
 
-    def _decode_with_sana(self, latent):
+    def _get_vae_decoder(self):
+        cached = self.__dict__.get("_decoder_relay_target")
+        if cached is not None:
+            return cached
+        decoders = [
+            module
+            for name, module in self.vae.named_modules()
+            if name == "decoder" or name.endswith(".decoder")
+        ]
+        if len(decoders) != 1:
+            raise RuntimeError(
+                "decoder relay requires exactly one VAE decoder module"
+            )
+        self.__dict__["_decoder_relay_target"] = decoders[0]
+        return decoders[0]
+
+    def _vae_decode_with_relay(self, latent, decoder_bridge):
+        if self.decoder_relay is None:
+            return self.vae.decode(latent, return_dict=False)[0]
+
+        decoder = self._get_vae_decoder()
+        handles = []
+        for block_index in self.decoder_relay.stage_block_indices:
+            block = decoder.up_blocks[block_index]
+
+            def relay_hook(module, inputs, output, index=block_index):
+                return self.decoder_relay(index, output, decoder_bridge)
+
+            handles.append(block.register_forward_hook(relay_hook))
+        try:
+            return self.vae.decode(latent, return_dict=False)[0]
+        finally:
+            for handle in handles:
+                handle.remove()
+
+    def _decode_with_sana(self, latent, decoder_bridge=None):
         condition = self._fixed_text_condition(
             latent.shape[0],
             latent.device,
@@ -591,23 +705,31 @@ class Codec(nn.Module):
             return_dict=False,
         )[0]
         denoised = self.sched.step(model_prediction, latent)
-        return self.vae.decode(
+        return self._vae_decode_with_relay(
             denoised / self.vae.config.scaling_factor,
-            return_dict=False,
-        )[0].clamp(-1, 1)
+            decoder_bridge,
+        ).clamp(-1, 1)
 
     def encode_clean_latent(self, image):
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
         return latent
 
-    def decode_with_model(self, latent):
-        return self._decode_with_sana(latent)
+    def decode_with_model(self, latent, decoder_bridge=None):
+        return self._decode_with_sana(latent, decoder_bridge)
 
     def forward(self, image, quality_index=None):
         latent = self.encode_clean_latent(image)
         codec_output = self.codec(latent, quality_index)
         compressed_latent = codec_output["mean"]
-        output_image = self.decode_with_model(compressed_latent)
+        decoder_bridge = (
+            codec_output["decoder_bridge"]
+            if self.decoder_relay_mode == "bitstream"
+            else None
+        )
+        output_image = self.decode_with_model(
+            compressed_latent,
+            decoder_bridge,
+        )
         return output_image, codec_output["likelihoods"]
 
     def compress(self, image, quality_index=None):
@@ -615,9 +737,18 @@ class Codec(nn.Module):
         return self.codec.compress(latent, quality_index)
 
     def decompress(self, packet_or_strings, shape=None, quality_index=None):
-        latent = self.codec.decompress(
-            packet_or_strings,
-            shape=shape,
-            quality_index=quality_index,
-        )
-        return self.decode_with_model(latent)
+        if self.decoder_relay_mode == "bitstream":
+            latent, decoder_bridge = self.codec.decompress(
+                packet_or_strings,
+                shape=shape,
+                quality_index=quality_index,
+                return_bridge=True,
+            )
+        else:
+            latent = self.codec.decompress(
+                packet_or_strings,
+                shape=shape,
+                quality_index=quality_index,
+            )
+            decoder_bridge = None
+        return self.decode_with_model(latent, decoder_bridge)

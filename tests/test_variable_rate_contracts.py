@@ -514,7 +514,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertNotIn("models.DiT_IC", source)
         self.assertNotIn("source_checkpoint", source)
 
-    def test_plain_rejects_a_lic_checkpoint_without_phase_b_training(self):
+    def test_plain_requires_an_explicit_phase_a_handoff_opt_in(self):
         source = (ROOT / "models" / "DiT_IC.py").read_text(encoding="utf-8")
         self.assertIn('checkpoint_stage == "variable_quality_codec"', source)
         self.assertIn(
@@ -523,25 +523,24 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn(
             '!= "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"', source
         )
-        self.assertIn("global_step <= phase_a_steps", source)
+        self.assertIn("global_step < phase_a_steps", source)
+        self.assertIn("allow_phase_a_handoff", source)
         self.assertIn(
             "multi-rate Plain requires a LIC checkpoint trained ", source
         )
-        self.assertIn("keeping fresh DiT LoRA", source)
+        self.assertIn("DiT/VAE LoRA, text projection", source)
         self.assertIn('self.codec.load_state_dict(state["state_dict_codec"]', source)
 
     def test_multirate_plain_selects_best_checkpoint_with_ema_weights(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
         self.assertIn("test_loss = evaluate_multirate_ema(", source)
-        self.assertIn('ema["state_dict_DiT"]', source)
-        self.assertIn('ema["state_dict_text_proj"]', source)
+        self.assertIn("swap_saved_state_dicts(model, ema)", source)
         self.assertIn("finally:", source)
-        self.assertIn("model.DiT.load_state_dict(live_dit", source)
-        self.assertIn("model.text_proj.load_state_dict(live_text_proj", source)
+        self.assertEqual(source.count("swap_saved_state_dicts(model, ema)"), 2)
 
     def test_multirate_plain_keeps_frozen_codec_exact_in_ema(self):
         source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
-        self.assertIn('exact_parts=("state_dict_codec",)', source)
+        self.assertIn('("state_dict_codec",) if model.freeze_codec else ()', source)
         self.assertIn("ema_codec_sha256", source)
         self.assertIn("codec_sha256 != ema_codec_sha256", source)
         self.assertIn(
