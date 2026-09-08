@@ -36,7 +36,8 @@ from self_flow_training import (
     calibrate_representation_weight,
     deterministic_self_flow_seed,
     likelihood_bpp,
-    sample_reflected_adjacent_pairs,
+    sample_iid_uniform_pairs,
+    select_post_burnin_best,
     self_flow_schedule,
     validate_self_flow_config,
 )
@@ -751,7 +752,7 @@ def do_train(rank, local_rank, world_size, train_config):
                 else:
                     pair_generator = torch.Generator(device="cpu")
                     pair_generator.manual_seed(sample_seed)
-                    quality_a, quality_b = sample_reflected_adjacent_pairs(
+                    quality_a, quality_b = sample_iid_uniform_pairs(
                         x.shape[0],
                         num_quality_levels,
                         pair_generator,
@@ -1093,6 +1094,17 @@ def do_train(rank, local_rank, world_size, train_config):
                     if multirate_plain:
                         test_loss = None
                         if rank == 0:
+                            evaluation_conditioning_scale = (
+                                self_flow_schedule(
+                                    train_steps, self_flow_config
+                                )["conditioning_scale"]
+                                if self_flow_enabled
+                                else 1.0
+                            )
+                            logger.info(
+                                "Evaluation q-conditioning scale: "
+                                f"{evaluation_conditioning_scale:.6f}"
+                            )
                             test_loss = evaluate_multirate_ema(
                                 model.module,
                                 ema,
@@ -1104,6 +1116,7 @@ def do_train(rank, local_rank, world_size, train_config):
                                 writer,
                                 num_quality_levels,
                                 quality_rate_weights,
+                                conditioning_scale=evaluation_conditioning_scale,
                             )
                     else:
                         test_loss = evaluate(
@@ -1117,9 +1130,13 @@ def do_train(rank, local_rank, world_size, train_config):
                         )
 
                     if rank == 0:
-                        is_best = test_loss < best_loss
-                        best_loss = min(test_loss, best_loss)
-                        if is_best and train_steps > 0.7 * train_config['train']['max_steps']:
+                        best_loss, is_best = select_post_burnin_best(
+                            test_loss,
+                            best_loss,
+                            train_steps,
+                            train_config["train"]["max_steps"],
+                        )
+                        if is_best:
                             checkpoint = make_checkpoint()
                             checkpoint_path = f"{checkpoint_dir}/best_ckpt.pt"
                             torch.save(checkpoint, checkpoint_path)
@@ -1160,6 +1177,7 @@ def evaluate_multirate_ema(
     writer,
     num_quality_levels,
     quality_rate_weights=None,
+    conditioning_scale=1.0,
 ):
     """Evaluate the same EMA weights that downstream P0 loading will use."""
     model.assert_reconstruction_training_contract()
@@ -1175,6 +1193,7 @@ def evaluate_multirate_ema(
             writer,
             num_quality_levels=num_quality_levels,
             quality_rate_weights=quality_rate_weights,
+            conditioning_scale=conditioning_scale,
         )
     finally:
         swap_saved_state_dicts(model, ema)
@@ -1191,6 +1210,7 @@ def evaluate(
     writer=None,
     num_quality_levels=None,
     quality_rate_weights=None,
+    conditioning_scale=1.0,
 ):
     model.eval()
     loss_module.eval()
@@ -1220,7 +1240,11 @@ def evaluate(
             if quality_index is None:
                 output_image, rate = model(x)
             else:
-                output_image, rate = model(x, quality_index)
+                output_image, rate = model(
+                    x,
+                    quality_index,
+                    conditioning_scale=conditioning_scale,
+                )
             loss, rec_loss, psnr, rate_loss, p_loss = loss_module(
                 x,
                 output_image,

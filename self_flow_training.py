@@ -5,9 +5,9 @@ import torch.distributed as dist
 import torch.nn.functional as F
 
 
-SELF_FLOW_CHECKPOINT_SCHEMA_VERSION = 4
+SELF_FLOW_CHECKPOINT_SCHEMA_VERSION = 5
 SELF_FLOW_STAGE = "dual_rate_self_flow_reconstruction"
-SELF_FLOW_MECHANISM = "adjacent_dual_rate_token_mix_ema_l8_l20_v1"
+SELF_FLOW_MECHANISM = "iid_dual_rate_token_mix_ema_l8_l20_v2"
 
 
 def validate_self_flow_config(train_config):
@@ -20,8 +20,12 @@ def validate_self_flow_config(train_config):
         raise ValueError("Self-Flow requires the six-level variable-rate codec")
     if not params.get("freeze_codec", False):
         raise ValueError("Self-Flow requires a frozen codec")
-    if config.get("sampling") != "reflected_adjacent":
-        raise ValueError("Self-Flow sampling must be reflected_adjacent")
+    if config.get("sampling") != "iid_uniform":
+        raise ValueError("Self-Flow sampling must be iid_uniform")
+    if quality.get("sampling") != "iid_uniform_per_sample":
+        raise ValueError(
+            "Self-Flow quality control must use iid_uniform_per_sample"
+        )
     if config.get("student_input") not in ("mixed", "uniform"):
         raise ValueError("student_input must be mixed or uniform")
     if config.get("teacher_quality") not in ("higher", "student"):
@@ -88,6 +92,24 @@ def sample_reflected_adjacent_pairs(
     return quality_a, quality_b
 
 
+def sample_iid_uniform_pairs(
+    batch_size,
+    num_levels,
+    generator,
+    same_rate=False,
+):
+    """Sample both source qualities independently from the full rate range."""
+    quality_a = torch.randint(
+        0, num_levels, (batch_size,), generator=generator, dtype=torch.long
+    )
+    if same_rate:
+        return quality_a, quality_a.clone()
+    quality_b = torch.randint(
+        0, num_levels, (batch_size,), generator=generator, dtype=torch.long
+    )
+    return quality_a, quality_b
+
+
 def deterministic_self_flow_seed(global_seed, rank, train_step, micro_step):
     value = (
         int(global_seed)
@@ -118,6 +140,20 @@ def self_flow_schedule(train_step, config):
         ),
         "representation_scale": progress,
     }
+
+
+def select_post_burnin_best(
+    test_loss,
+    best_loss,
+    train_step,
+    max_steps,
+    selection_start_fraction=0.7,
+):
+    """Select checkpoints only after burn-in without poisoning best_loss early."""
+    if train_step <= float(selection_start_fraction) * int(max_steps):
+        return best_loss, False
+    is_best = test_loss < best_loss
+    return (test_loss if is_best else best_loss), is_best
 
 
 def all_token_representation_loss(student_feature, teacher_feature):

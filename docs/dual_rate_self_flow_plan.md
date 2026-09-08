@@ -12,7 +12,7 @@ same image/crop/augmentation
         clean latent z
           /       \
  frozen codec   frozen codec
-   q_a view       q_b view        |q_a - q_b| <= 1
+   q_a view       q_b view        q_a, q_b independently sampled
           \       /
        spatial token mask         25% selects view B
               |
@@ -39,23 +39,23 @@ is logged separately. Evaluation and deployment use one legal uniform-q stream.
 
 ```text
 q_a ~ Uniform{0, 1, 2, 3, 4, 5}
-d   ~ Uniform{-1, +1}
-q_b = clip(q_a + d, 0, 5)
+q_b ~ Uniform{0, 1, 2, 3, 4, 5}, independently
 q_H = max(q_a, q_b)
 ```
 
-This produces adjacent pairs on 10/12 outcomes and boundary same-rate pairs on
-2/12 outcomes. Both source marginals remain uniform. A spatial mask chooses A
-or B without sorting the inputs, and all channels of one latent cell come from
-the same source. SANA has `patch_size=1`, so one latent cell is one DiT token.
+This covers all 36 ordered rate pairs uniformly and produces same-rate pairs
+with probability 1/6. Both source marginals remain uniform. A spatial mask
+chooses A or B without sorting the inputs, and all channels of one latent cell
+come from the same source. SANA has `patch_size=1`, so one latent cell is one
+DiT token.
 
 ## Schedule
 
 | Optimizer steps | Student view | q condition | Representation loss | Teacher |
 | --- | --- | --- | --- | --- |
 | 0-1999 | Uniform batch-shared q | Off | Weight 0 | EMA runs |
-| 2000-6999 | Adjacent mix, 0 to 25% | 0 to 1 | 0 to calibrated gamma | Synced at 2000, then EMA |
-| 7000-29999 | Adjacent mix, 25% | 1 | Calibrated gamma | EMA 0.9999 |
+| 2000-6999 | IID dual-rate mix, 0 to 25% | 0 to 1 | 0 to calibrated gamma | Synced at 2000, then EMA |
+| 7000-99999 | IID dual-rate mix, 25% | 1 | Calibrated gamma | EMA 0.9999 |
 
 The run starts from the P0 checkpoint's EMA model weights. Optimizer,
 scheduler, counters, and deployment EMA are reset. Gamma is capped at 0.1 and
@@ -66,7 +66,7 @@ clipping.
 ## Fair Ablations
 
 All configs inherit `dual_rate_self_flow_full.yaml`. They share the source
-checkpoint, datasets, augmentation, seed 903, effective batch 16, 30k optimizer
+checkpoint, datasets, augmentation, seed 903, effective batch 16, 100k optimizer
 steps, reconstruction objective, optimizer hyperparameters, LR milestones,
 evaluation interval, and checkpoint interval.
 

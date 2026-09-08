@@ -13,7 +13,9 @@ from models.sana_self_flow import (
 )
 from self_flow_training import (
     all_token_representation_loss,
+    sample_iid_uniform_pairs,
     sample_reflected_adjacent_pairs,
+    select_post_burnin_best,
     self_flow_schedule,
 )
 from train_nogan_ddp import load_config
@@ -52,6 +54,28 @@ def test_reflected_adjacent_sampler_contract():
         marginal /= marginal.sum()
         assert torch.allclose(
             marginal, torch.full((6,), 1 / 6), atol=0.003, rtol=0
+        )
+
+
+def test_iid_uniform_sampler_covers_all_ordered_pairs():
+    generator = torch.Generator().manual_seed(1123)
+    quality_a, quality_b = sample_iid_uniform_pairs(
+        720_000, 6, generator
+    )
+    pair_distribution = torch.bincount(
+        quality_a * 6 + quality_b, minlength=36
+    ).float()
+    pair_distribution /= pair_distribution.sum()
+    assert torch.allclose(
+        pair_distribution, torch.full((36,), 1 / 36), atol=0.001, rtol=0
+    )
+    same_fraction = (quality_a == quality_b).float().mean().item()
+    assert abs(same_fraction - 1 / 6) < 0.002
+    for values in (quality_a, quality_b):
+        marginal = torch.bincount(values, minlength=6).float()
+        marginal /= marginal.sum()
+        assert torch.allclose(
+            marginal, torch.full((6,), 1 / 6), atol=0.002, rtol=0
         )
 
 
@@ -208,6 +232,45 @@ def test_warmup_and_ramp_schedule_are_pre_registered():
     final = self_flow_schedule(7000, config)
     assert final["mask_ratio"] == 0.25
     assert final["representation_scale"] == 1.0
+
+
+def test_best_checkpoint_selection_ignores_pre_burnin_metrics():
+    best_loss = float("inf")
+    best_loss, is_best = select_post_burnin_best(
+        0.2, best_loss, train_step=20_000, max_steps=100_000
+    )
+    assert best_loss == float("inf")
+    assert not is_best
+
+    best_loss, is_best = select_post_burnin_best(
+        0.3, best_loss, train_step=72_000, max_steps=100_000
+    )
+    assert best_loss == 0.3
+    assert is_best
+
+    best_loss, is_best = select_post_burnin_best(
+        0.4, best_loss, train_step=74_000, max_steps=100_000
+    )
+    assert best_loss == 0.3
+    assert not is_best
+
+
+def test_ramp_validation_uses_current_conditioning_scale():
+    trainer_source = (ROOT / "train_nogan_ddp.py").read_text()
+    assert "evaluation_conditioning_scale = (" in trainer_source
+    assert "conditioning_scale=evaluation_conditioning_scale" in trainer_source
+    model_source = (ROOT / "models" / "DiT_IC.py").read_text()
+    assert "conditioning_scale=conditioning_scale" in model_source
+
+
+def test_full_config_uses_iid_sampling_and_100k_budget():
+    config = load_config(
+        str(ROOT / "configs" / "dual_rate_self_flow_full.yaml")
+    )
+    assert config["model"]["params"]["self_flow_params"]["sampling"] == "iid_uniform"
+    assert config["quality_control"]["sampling"] == "iid_uniform_per_sample"
+    assert config["train"]["max_steps"] == 100_000
+    assert config["optimizer"]["step_lr"] == [60_000, 85_000, 95_000]
 
 
 def test_ablation_configs_share_every_non_mechanism_training_setting():

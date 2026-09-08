@@ -22,8 +22,8 @@ from .scheduler import OneStepFlowScheduler, make_1step_sched
 
 
 SELF_FLOW_STAGE = "dual_rate_self_flow_reconstruction"
-SELF_FLOW_SCHEMA_VERSION = 4
-SELF_FLOW_MECHANISM = "adjacent_dual_rate_token_mix_ema_l8_l20_v1"
+SELF_FLOW_SCHEMA_VERSION = 5
+SELF_FLOW_MECHANISM = "iid_dual_rate_token_mix_ema_l8_l20_v2"
 
 
 def filter_supported_modules(model):
@@ -385,7 +385,7 @@ class Codec(nn.Module):
                 or checkpoint.get("self_flow_mechanism") != SELF_FLOW_MECHANISM
             ):
                 raise ValueError(
-                    "dual-rate Self-Flow requires its schema-version 4 checkpoint"
+                    "dual-rate Self-Flow requires its schema-version 5 checkpoint"
                 )
         state_key = "ema" if use_ema else "model"
         if state_key not in checkpoint:
@@ -1091,13 +1091,26 @@ class Codec(nn.Module):
         return latent
 
     def decode_with_model(
-        self, latent, decoder_bridge=None, quality_index=None
+        self,
+        latent,
+        decoder_bridge=None,
+        quality_index=None,
+        conditioning_scale=1.0,
     ):
         return self._decode_with_sana(
-            latent, decoder_bridge, quality_index=quality_index
+            latent,
+            decoder_bridge,
+            quality_index=quality_index,
+            conditioning_scale=conditioning_scale,
         )
 
-    def forward(self, image, quality_index=None, self_flow_batch=None):
+    def forward(
+        self,
+        image,
+        quality_index=None,
+        self_flow_batch=None,
+        conditioning_scale=1.0,
+    ):
         if self_flow_batch is not None:
             if quality_index is not None:
                 raise ValueError(
@@ -1120,6 +1133,7 @@ class Codec(nn.Module):
                 compressed_latent,
                 decoder_bridge,
                 quality_index=quality_index,
+                conditioning_scale=conditioning_scale,
             )
             auxiliary_output = codec_output["likelihoods"]
         return output_image, auxiliary_output

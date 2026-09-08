@@ -59,7 +59,7 @@ model:
     self_flow_params:
       enabled: true
       num_quality_levels: 6
-      sampling: reflected_adjacent
+      sampling: iid_uniform
       student_input: mixed
       use_second_view: true
       teacher_enabled: true
@@ -82,7 +82,7 @@ model:
 quality_control:
   enabled: true
   num_levels: 6
-  sampling: reflected_adjacent_per_sample
+  sampling: iid_uniform_per_sample
 
 train:
   output_dir: checkpoints
@@ -94,7 +94,7 @@ train:
   log_every: 100
   eval_every: 2000
   ckpt_every: 5000
-  max_steps: 30000
+  max_steps: 100000
   global_seed: 903
   rate_weight: 0.0
 
@@ -107,5 +107,5 @@ optimizer:
   entropy_lr: 0.001
   beta2: 0.999
   beta_vae: [0.9, 0.999]
-  step_lr: [18000, 25500, 28500]
+  step_lr: [60000, 85000, 95000]
   max_grad_norm: 4.0
