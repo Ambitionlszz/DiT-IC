@@ -99,8 +99,8 @@ train:
   rate_weight: 0.0
 
 optimizer:
-  lr: 0.00002
-  dit_lr: 0.00002
+  lr: 0.0001
+  dit_lr: 0.0001
   vae_lr: 0.00001
   condition_lr: 0.0001
   aux_lr: 0.001
@@ -108,4 +108,5 @@ optimizer:
   beta2: 0.999
   beta_vae: [0.9, 0.999]
   step_lr: [60000, 85000, 95000]
+  step_lr_gammas: [0.5, 0.5, 0.5]
   max_grad_norm: 4.0

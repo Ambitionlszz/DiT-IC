@@ -63,6 +63,12 @@ is reduced when its initial layer-8 gradient would exceed 20% of the base-loss
 gradient. Values below 0.01 fail instead of silently relying on gradient
 clipping.
 
+The DiT LoRA/text projection and q-conditioning/projector groups start at
+`1e-4`; VAE decoder LoRA starts at `1e-5`. All groups use the same staged
+multipliers: `1.0` before 60k, `0.5` at 60k, `0.25` at 85k, and `0.125`
+at 95k. The DiT learning rate is therefore `1e-4 -> 5e-5 -> 2.5e-5 ->
+1.25e-5`.
+
 ## Fair Ablations
 
 All configs inherit `dual_rate_self_flow_full.yaml`. They share the source

@@ -270,7 +270,14 @@ def test_full_config_uses_iid_sampling_and_100k_budget():
     assert config["model"]["params"]["self_flow_params"]["sampling"] == "iid_uniform"
     assert config["quality_control"]["sampling"] == "iid_uniform_per_sample"
     assert config["train"]["max_steps"] == 100_000
+    assert config["optimizer"]["lr"] == 1e-4
+    assert config["optimizer"]["dit_lr"] == 1e-4
+    assert config["optimizer"]["condition_lr"] == 1e-4
+    assert config["optimizer"]["vae_lr"] == 1e-5
     assert config["optimizer"]["step_lr"] == [60_000, 85_000, 95_000]
+    assert config["optimizer"]["step_lr_gammas"] == [0.5, 0.5, 0.5]
+    trainer_source = (ROOT / "train_nogan_ddp.py").read_text()
+    assert '"step_lr_gammas", [0.5, 0.2, 0.1]' in trainer_source
 
 
 def test_ablation_configs_share_every_non_mechanism_training_setting():

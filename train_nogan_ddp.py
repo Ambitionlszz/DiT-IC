@@ -345,8 +345,17 @@ def do_train(rank, local_rank, world_size, train_config):
             "(global model clip, post-main auxiliary step)"
         )
     
-    milestones = train_config['optimizer']['step_lr']
-    gammas = [0.5, 0.2, 0.1]
+    milestones = train_config["optimizer"]["step_lr"]
+    gammas = train_config["optimizer"].get(
+        "step_lr_gammas", [0.5, 0.2, 0.1]
+    )
+    if len(milestones) != len(gammas):
+        raise ValueError(
+            "optimizer.step_lr and optimizer.step_lr_gammas must have "
+            "the same length"
+        )
+    if any(float(gamma) <= 0.0 or float(gamma) > 1.0 for gamma in gammas):
+        raise ValueError("optimizer.step_lr_gammas values must be in (0, 1]")
 
     def lr_lambda(epoch):
         factor = 1.0
