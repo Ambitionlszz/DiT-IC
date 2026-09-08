@@ -43,32 +43,32 @@ case "${stage}" in
   self-flow-full)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_full.yaml
-    default_per_gpu_batch_size=4
+    default_per_gpu_batch_size=8
     ;;
   self-flow-posttrain-control)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_posttrain_control.yaml
-    default_per_gpu_batch_size=4
+    default_per_gpu_batch_size=8
     ;;
   self-flow-q-only)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_q_only.yaml
-    default_per_gpu_batch_size=4
+    default_per_gpu_batch_size=8
     ;;
   self-flow-mix-only)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_mix_only.yaml
-    default_per_gpu_batch_size=4
+    default_per_gpu_batch_size=8
     ;;
   self-flow-distill-only)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_distill_only.yaml
-    default_per_gpu_batch_size=4
+    default_per_gpu_batch_size=8
     ;;
   self-flow-same-rate-teacher)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_same_rate_teacher.yaml
-    default_per_gpu_batch_size=4
+    default_per_gpu_batch_size=8
     ;;
   *)
     echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-adv-phase2, plain-smoke, plain, plain-adv, self-flow-full, self-flow-posttrain-control, self-flow-q-only, self-flow-mix-only, self-flow-distill-only, self-flow-same-rate-teacher" >&2
@@ -77,9 +77,6 @@ case "${stage}" in
 esac
 
 default_accumulation_steps=1
-if [[ "${stage}" == self-flow-* ]]; then
-  default_accumulation_steps=2
-fi
 
 IFS=',' read -r -a gpu_ids <<< "${gpu_list}"
 num_gpus=${#gpu_ids[@]}

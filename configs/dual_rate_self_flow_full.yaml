@@ -87,8 +87,8 @@ quality_control:
 train:
   output_dir: checkpoints
   exp_name: dual_rate_self_flow_full
-  per_gpu_batch_size: 4
-  accumulation_steps: 2
+  per_gpu_batch_size: 8
+  accumulation_steps: 1
   accumulate_disc: false
   resume: false
   log_every: 100
