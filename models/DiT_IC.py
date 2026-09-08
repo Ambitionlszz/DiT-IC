@@ -10,7 +10,20 @@ from peft import LoraConfig, get_peft_model
 from decode_modes import validate_decode_checkpoint, validate_decode_mode
 from .feature_relay import DecoderFeatureRelay, RELAY_MODES
 from .losses import LPIPSWithDiscriminator
+from .sana_self_flow import (
+    RepresentationProjector,
+    SelfFlowTeacher,
+    TokenQualityConditioner,
+    quality_conditioned_sana_forward,
+    mix_dual_rate_tokens,
+    unwrap_sana_transformer,
+)
 from .scheduler import OneStepFlowScheduler, make_1step_sched
+
+
+SELF_FLOW_STAGE = "dual_rate_self_flow_reconstruction"
+SELF_FLOW_SCHEMA_VERSION = 4
+SELF_FLOW_MECHANISM = "adjacent_dual_rate_token_mix_ema_l8_l20_v1"
 
 
 def filter_supported_modules(model):
@@ -61,6 +74,7 @@ class Codec(nn.Module):
         allow_phase_a_handoff=False,
         decode_mode="sana",
         decoder_relay_params=None,
+        self_flow_params=None,
         **kwargs,
     ):
         super().__init__()
@@ -74,6 +88,14 @@ class Codec(nn.Module):
         self.train_text_projection = bool(train_text_projection)
         self.strict_stage_loading = bool(strict_stage_loading)
         self.allow_phase_a_handoff = bool(allow_phase_a_handoff)
+        self.self_flow_params = dict(self_flow_params or {})
+        self.self_flow_enabled = bool(
+            self.self_flow_params.get("enabled", False)
+        )
+        self.quality_conditioner = None
+        self.representation_projector = None
+        if self.self_flow_enabled and use_merge:
+            raise ValueError("dual-rate Self-Flow does not support use_merge=True")
         vae_lora_enabled = bool(vae_params.get("vae_lora", False))
         train_vae_lora = bool(
             vae_params.get("train_vae_lora", vae_lora_enabled)
@@ -122,6 +144,7 @@ class Codec(nn.Module):
                     DiT_params["lora_rank_DiT"],
                     DiT_params["lora_alpha_DiT"],
                 )
+            self._build_self_flow_modules()
         else:
             if vae_params.get("vae_lora", False):
                 self.build_vae_lora(
@@ -133,6 +156,7 @@ class Codec(nn.Module):
                     DiT_params["lora_rank_DiT"],
                     DiT_params["lora_alpha_DiT"],
                 )
+            self._build_self_flow_modules()
             if codec_path is not None:
                 self.load_ckpt_dict(
                     codec_path,
@@ -150,6 +174,56 @@ class Codec(nn.Module):
         self.assert_reconstruction_training_contract()
 
         print("Pure SANA initialization complete")
+
+    def _build_self_flow_modules(self):
+        if not self.self_flow_enabled:
+            return
+        sana = unwrap_sana_transformer(self.DiT)
+        if int(sana.config.patch_size) != 1:
+            raise ValueError(
+                "dual-rate Self-Flow requires SANA patch_size=1"
+            )
+        num_layers = len(sana.transformer_blocks)
+        student_layer = int(self.self_flow_params.get("student_layer", 8))
+        teacher_layer = int(self.self_flow_params.get("teacher_layer", 20))
+        if not 1 <= student_layer < teacher_layer <= num_layers:
+            raise ValueError(
+                "Self-Flow layers must satisfy 1 <= student < teacher <= depth"
+            )
+        self.self_flow_student_layer = student_layer - 1
+        self.self_flow_teacher_layer = teacher_layer - 1
+        hidden_dim = int(
+            sana.config.num_attention_heads * sana.config.attention_head_dim
+        )
+        num_levels = int(self.self_flow_params.get("num_quality_levels", 6))
+        self.quality_conditioner = TokenQualityConditioner(
+            num_levels=num_levels,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            embedding_dim=int(
+                self.self_flow_params.get("quality_embedding_dim", 128)
+            ),
+        )
+        if (
+            self._init_for_training
+            and bool(
+                self.self_flow_params.get("representation_enabled", True)
+            )
+        ):
+            self.representation_projector = RepresentationProjector(
+                hidden_dim=hidden_dim,
+                expansion=int(
+                    self.self_flow_params.get("projector_expansion", 2)
+                ),
+            )
+        if not self._init_for_training:
+            self.quality_conditioner.requires_grad_(False)
+        print(
+            "[SelfFlow] resolved Student layer "
+            f"{student_layer} (index {self.self_flow_student_layer}), Teacher "
+            f"layer {teacher_layer} (index {self.self_flow_teacher_layer}), "
+            f"token grid patch_size={sana.config.patch_size}"
+        )
 
     def _build_decoder_relay(self, relay_params):
         relay_params = dict(relay_params or {})
@@ -265,6 +339,7 @@ class Codec(nn.Module):
             allowed_stages = {
                 "variable_quality_codec",
                 "multirate_reconstruction",
+                SELF_FLOW_STAGE,
             }
             if checkpoint_stage not in allowed_stages:
                 raise ValueError(
@@ -295,14 +370,22 @@ class Codec(nn.Module):
                         "allow_phase_a_handoff=True explicitly selects the "
                         "completed latent warmup"
                     )
+            elif checkpoint_stage == "multirate_reconstruction":
+                if (
+                    int(checkpoint.get("schema_version", 0)) != 3
+                    or checkpoint.get("variable_rate_mechanism")
+                    != "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
+                ):
+                    raise ValueError(
+                        "multi-rate Plain requires a schema-version 3 P0 checkpoint "
+                        "derived from the complete q_e/q_d and w_e/w_d LIC"
+                    )
             elif (
-                int(checkpoint.get("schema_version", 0)) != 3
-                or checkpoint.get("variable_rate_mechanism")
-                != "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
+                int(checkpoint.get("schema_version", 0)) != SELF_FLOW_SCHEMA_VERSION
+                or checkpoint.get("self_flow_mechanism") != SELF_FLOW_MECHANISM
             ):
                 raise ValueError(
-                    "multi-rate Plain requires a schema-version 3 P0 checkpoint "
-                    "derived from the complete q_e/q_d and w_e/w_d LIC"
+                    "dual-rate Self-Flow requires its schema-version 4 checkpoint"
                 )
         state_key = "ema" if use_ema else "model"
         if state_key not in checkpoint:
@@ -325,6 +408,14 @@ class Codec(nn.Module):
             "state_dict_DiT",
             "state_dict_text_proj",
         }
+        if checkpoint_stage == SELF_FLOW_STAGE:
+            if not self.self_flow_enabled:
+                raise ValueError(
+                    "Self-Flow checkpoint requires self_flow_params.enabled=true"
+                )
+            required.add("state_dict_quality_conditioner")
+            if self.representation_projector is not None:
+                required.add("state_dict_representation_projector")
         missing = sorted(required.difference(state))
         if missing:
             raise KeyError(
@@ -356,7 +447,8 @@ class Codec(nn.Module):
 
         codec_result = self.codec.load_state_dict(
             state["state_dict_codec"],
-            strict=checkpoint_stage == "multirate_reconstruction",
+            strict=checkpoint_stage == "multirate_reconstruction"
+            or checkpoint_stage == SELF_FLOW_STAGE,
         )
         active_codec_missing = [
             key
@@ -404,6 +496,23 @@ class Codec(nn.Module):
                 + ", ".join(unexpected_adapter_keys)
             )
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
+        if checkpoint_stage == SELF_FLOW_STAGE:
+            self.quality_conditioner.load_state_dict(
+                state["state_dict_quality_conditioner"], strict=True
+            )
+            has_projector_state = (
+                "state_dict_representation_projector" in state
+            )
+            if self._init_for_training and (
+                (self.representation_projector is None) != (not has_projector_state)
+            ):
+                raise ValueError(
+                    "Self-Flow projector state does not match the active ablation"
+                )
+            if self.representation_projector is not None:
+                self.representation_projector.load_state_dict(
+                    state["state_dict_representation_projector"], strict=True
+                )
         if self.decoder_relay is not None:
             self.decoder_relay.load_state_dict(
                 state["state_dict_decoder_relay"],
@@ -501,6 +610,27 @@ class Codec(nn.Module):
                     "multi-rate Plain training requires only DiT LoRA parameters "
                     "to be trainable"
                 )
+            if self.self_flow_enabled:
+                if self.decoder_relay is not None:
+                    raise RuntimeError(
+                        "Self-Flow requires decoder_relay_params.mode=none"
+                    )
+                if self.quality_conditioner is None or not all(
+                    parameter.requires_grad
+                    for parameter in self.quality_conditioner.parameters()
+                ):
+                    raise RuntimeError(
+                        "Self-Flow requires a trainable token quality conditioner"
+                    )
+                representation_enabled = bool(
+                    self.self_flow_params.get("representation_enabled", True)
+                )
+                if representation_enabled != (
+                    self.representation_projector is not None
+                ):
+                    raise RuntimeError(
+                        "representation projector does not match the ablation config"
+                    )
 
     def build_DiT(self, dit_path, device="cuda", use_merge=False):
         base_scheduler = make_1step_sched(dit_path, device)
@@ -600,7 +730,80 @@ class Codec(nn.Module):
                 for parameter in self.decoder_relay.parameters()
                 if parameter.requires_grad
             )
+        if self.quality_conditioner is not None:
+            parameters.extend(
+                parameter
+                for parameter in self.quality_conditioner.parameters()
+                if parameter.requires_grad
+            )
+        if self.representation_projector is not None:
+            parameters.extend(
+                parameter
+                for parameter in self.representation_projector.parameters()
+                if parameter.requires_grad
+            )
         return parameters
+
+    def get_self_flow_optimizer_groups(self, optimizer_config):
+        if not self.self_flow_enabled:
+            raise RuntimeError("Self-Flow optimizer groups requested while disabled")
+        groups = [
+            {
+                "name": "dit_text",
+                "params": [
+                    *[
+                        parameter
+                        for name, parameter in self.DiT.named_parameters()
+                        if "lora" in name and parameter.requires_grad
+                    ],
+                    *[
+                        parameter
+                        for parameter in self.text_proj.parameters()
+                        if parameter.requires_grad
+                    ],
+                ],
+                "lr": float(optimizer_config["dit_lr"]),
+            },
+            {
+                "name": "vae_decoder",
+                "params": [
+                    parameter
+                    for name, parameter in self.vae.named_parameters()
+                    if "lora" in name and parameter.requires_grad
+                ],
+                "lr": float(optimizer_config["vae_lr"]),
+            },
+            {
+                "name": "self_flow",
+                "params": [
+                    *[
+                        parameter
+                        for parameter in self.quality_conditioner.parameters()
+                        if parameter.requires_grad
+                    ],
+                    *([] if self.representation_projector is None else [
+                        parameter
+                        for parameter in self.representation_projector.parameters()
+                        if parameter.requires_grad
+                    ]),
+                ],
+                "lr": float(optimizer_config["condition_lr"]),
+            },
+        ]
+        groups = [group for group in groups if group["params"]]
+        grouped_ids = [
+            id(parameter)
+            for group in groups
+            for parameter in group["params"]
+        ]
+        trainable_ids = [id(parameter) for parameter in self.get_trainable_params()]
+        if len(grouped_ids) != len(set(grouped_ids)):
+            raise RuntimeError("Self-Flow optimizer groups contain duplicates")
+        if set(grouped_ids) != set(trainable_ids):
+            raise RuntimeError(
+                "Self-Flow optimizer groups do not cover all trainable parameters"
+            )
+        return groups
 
     def get_state_dicts_for_save(self):
         codec = getattr(self.codec, "module", self.codec)
@@ -617,6 +820,14 @@ class Codec(nn.Module):
             },
             "state_dict_text_proj": text_proj.state_dict(),
         }
+        if self.quality_conditioner is not None:
+            state_dicts["state_dict_quality_conditioner"] = (
+                self.quality_conditioner.state_dict()
+            )
+        if self.representation_projector is not None:
+            state_dicts["state_dict_representation_projector"] = (
+                self.representation_projector.state_dict()
+            )
         if self.decoder_relay is not None:
             decoder_relay = getattr(
                 self.decoder_relay,
@@ -689,54 +900,236 @@ class Codec(nn.Module):
             for handle in handles:
                 handle.remove()
 
-    def _decode_with_sana(self, latent, decoder_bridge=None):
+    def _normalize_quality_index(self, quality_index, batch_size, device):
+        if quality_index is None:
+            raise ValueError(
+                "quality_index is required when Self-Flow q conditioning is active"
+            )
+        if isinstance(quality_index, int):
+            quality_index = torch.full(
+                (batch_size,), quality_index, dtype=torch.long, device=device
+            )
+        elif isinstance(quality_index, torch.Tensor):
+            quality_index = quality_index.reshape(-1).to(
+                device=device, dtype=torch.long
+            )
+            if quality_index.numel() == 1:
+                quality_index = quality_index.expand(batch_size)
+        else:
+            raise TypeError("quality_index must be an int or integer tensor")
+        if quality_index.shape != (batch_size,):
+            raise ValueError("quality_index must be scalar or have shape [batch]")
+        return quality_index
+
+    def self_flow_timestep(self, batch_size, device):
+        timestep = self.sched.base_scheduler.timesteps.expand(batch_size)
+        return (timestep * self.DiT.config.timestep_scale).to(device)
+
+    def _self_flow_sana_prediction(
+        self,
+        latent,
+        quality_map,
+        conditioning_scale,
+        capture_layer=None,
+    ):
+        if not self.self_flow_enabled:
+            raise RuntimeError("Self-Flow SANA path is not enabled")
+        condition = self._fixed_text_condition(latent.shape[0], latent.device)
+        return quality_conditioned_sana_forward(
+            unwrap_sana_transformer(self.DiT),
+            latent,
+            condition,
+            self.self_flow_timestep(latent.shape[0], latent.device),
+            quality_map,
+            self.quality_conditioner,
+            conditioning_scale=conditioning_scale,
+            capture_layer=capture_layer,
+        )
+
+    def _decode_with_sana(
+        self,
+        latent,
+        decoder_bridge=None,
+        quality_index=None,
+        conditioning_scale=1.0,
+    ):
         condition = self._fixed_text_condition(
             latent.shape[0],
             latent.device,
         )
-        timestep = self.sched.base_scheduler.timesteps.expand(
-            latent.shape[0]
-        )
-        timestep = timestep * self.DiT.config.timestep_scale
-        model_prediction = self.DiT(
-            latent,
-            encoder_hidden_states=condition,
-            timestep=timestep.to(latent.device),
-            return_dict=False,
-        )[0]
+        timestep = self.self_flow_timestep(latent.shape[0], latent.device)
+        if self.self_flow_enabled:
+            quality_index = self._normalize_quality_index(
+                quality_index, latent.shape[0], latent.device
+            )
+            quality_map = quality_index[:, None, None].expand(
+                latent.shape[0], latent.shape[2], latent.shape[3]
+            )
+            model_prediction, _ = self._self_flow_sana_prediction(
+                latent, quality_map, conditioning_scale
+            )
+        else:
+            model_prediction = self.DiT(
+                latent,
+                encoder_hidden_states=condition,
+                timestep=timestep,
+                return_dict=False,
+            )[0]
         denoised = self.sched.step(model_prediction, latent)
         return self._vae_decode_with_relay(
             denoised / self.vae.config.scaling_factor,
             decoder_bridge,
         ).clamp(-1, 1)
 
+    def _decode_self_flow_student(
+        self, latent, quality_map, conditioning_scale
+    ):
+        model_prediction, student_feature = self._self_flow_sana_prediction(
+            latent,
+            quality_map,
+            conditioning_scale,
+            capture_layer=self.self_flow_student_layer,
+        )
+        denoised = self.sched.step(model_prediction, latent)
+        reconstruction = self._vae_decode_with_relay(
+            denoised / self.vae.config.scaling_factor, None
+        ).clamp(-1, 1)
+        self.__dict__["_self_flow_probe_feature"] = student_feature
+        projected_feature = (
+            self.representation_projector(student_feature)
+            if self.representation_projector is not None
+            else None
+        )
+        return reconstruction, projected_feature
+
+    def build_self_flow_teacher(self):
+        if not self.self_flow_enabled:
+            raise RuntimeError("cannot build a Self-Flow teacher when disabled")
+        return SelfFlowTeacher(
+            self.DiT,
+            self.text_proj,
+            self.quality_conditioner,
+            self.self_flow_teacher_layer,
+        )
+
+    def forward_self_flow(
+        self,
+        image,
+        quality_a,
+        quality_b,
+        mask_ratio,
+        mask_seed,
+        conditioning_scale,
+        student_input="mixed",
+        teacher_quality="higher",
+        use_second_view=True,
+    ):
+        if not self.self_flow_enabled:
+            raise RuntimeError("forward_self_flow requires self_flow_params.enabled")
+        if self.decoder_relay is not None:
+            raise RuntimeError("Self-Flow does not define mixed decoder relay features")
+        batch_size = image.shape[0]
+        quality_a = self._normalize_quality_index(
+            quality_a, batch_size, image.device
+        )
+        quality_b = self._normalize_quality_index(
+            quality_b, batch_size, image.device
+        )
+        with torch.no_grad():
+            clean_latent = self.encode_clean_latent(image)
+            view_a = self.codec(clean_latent, quality_a)
+            view_b = (
+                self.codec(clean_latent, quality_b)
+                if use_second_view
+                else view_a
+            )
+        latent_a = view_a["mean"]
+        latent_b = view_b["mean"]
+        generator = torch.Generator(device=latent_a.device)
+        generator.manual_seed(int(mask_seed))
+        mask = torch.rand(
+            (batch_size, 1, latent_a.shape[2], latent_a.shape[3]),
+            generator=generator,
+            device=latent_a.device,
+        ) < float(mask_ratio)
+        if student_input == "uniform":
+            mask = torch.zeros_like(mask)
+        elif student_input != "mixed":
+            raise ValueError("student_input must be mixed or uniform")
+        mixed_latent, quality_map = mix_dual_rate_tokens(
+            latent_a, latent_b, quality_a, quality_b, mask
+        )
+        if teacher_quality == "higher":
+            teacher_quality_index = torch.maximum(quality_a, quality_b)
+            choose_b = quality_b > quality_a
+            if torch.any(choose_b).item() and not use_second_view:
+                raise ValueError("higher-quality teacher requires the second codec view")
+        elif teacher_quality == "student":
+            teacher_quality_index = quality_a
+            choose_b = torch.zeros_like(quality_a, dtype=torch.bool)
+        else:
+            raise ValueError("teacher_quality must be higher or student")
+        teacher_latent = torch.where(
+            choose_b[:, None, None, None], latent_b, latent_a
+        )
+        reconstruction, student_feature = self._decode_self_flow_student(
+            mixed_latent, quality_map, conditioning_scale
+        )
+        return {
+            "reconstruction": reconstruction,
+            "student_feature": student_feature,
+            "teacher_latent": teacher_latent.detach(),
+            "teacher_quality": teacher_quality_index,
+            "likelihoods_a": view_a["likelihoods"],
+            "likelihoods_b": view_b["likelihoods"],
+            "mask": mask,
+            "quality_map": quality_map,
+        }
+
     def encode_clean_latent(self, image):
         latent = self.vae.encode(image).latent * self.vae.config.scaling_factor
         return latent
 
-    def decode_with_model(self, latent, decoder_bridge=None):
-        return self._decode_with_sana(latent, decoder_bridge)
+    def decode_with_model(
+        self, latent, decoder_bridge=None, quality_index=None
+    ):
+        return self._decode_with_sana(
+            latent, decoder_bridge, quality_index=quality_index
+        )
 
-    def forward(self, image, quality_index=None):
-        latent = self.encode_clean_latent(image)
-        codec_output = self.codec(latent, quality_index)
-        compressed_latent = codec_output["mean"]
-        decoder_bridge = (
-            codec_output["decoder_bridge"]
-            if self.decoder_relay_mode == "bitstream"
-            else None
-        )
-        output_image = self.decode_with_model(
-            compressed_latent,
-            decoder_bridge,
-        )
-        return output_image, codec_output["likelihoods"]
+    def forward(self, image, quality_index=None, self_flow_batch=None):
+        if self_flow_batch is not None:
+            if quality_index is not None:
+                raise ValueError(
+                    "quality_index and self_flow_batch are mutually exclusive"
+                )
+            auxiliary_output = self.forward_self_flow(
+                image, **self_flow_batch
+            )
+            output_image = auxiliary_output["reconstruction"]
+        else:
+            latent = self.encode_clean_latent(image)
+            codec_output = self.codec(latent, quality_index)
+            compressed_latent = codec_output["mean"]
+            decoder_bridge = (
+                codec_output["decoder_bridge"]
+                if self.decoder_relay_mode == "bitstream"
+                else None
+            )
+            output_image = self.decode_with_model(
+                compressed_latent,
+                decoder_bridge,
+                quality_index=quality_index,
+            )
+            auxiliary_output = codec_output["likelihoods"]
+        return output_image, auxiliary_output
 
     def compress(self, image, quality_index=None):
         latent = self.encode_clean_latent(image)
         return self.codec.compress(latent, quality_index)
 
     def decompress(self, packet_or_strings, shape=None, quality_index=None):
+        decode_quality = getattr(packet_or_strings, "quality_index", quality_index)
         if self.decoder_relay_mode == "bitstream":
             latent, decoder_bridge = self.codec.decompress(
                 packet_or_strings,
@@ -751,4 +1144,6 @@ class Codec(nn.Module):
                 quality_index=quality_index,
             )
             decoder_bridge = None
-        return self.decode_with_model(latent, decoder_bridge)
+        return self.decode_with_model(
+            latent, decoder_bridge, quality_index=decode_quality
+        )

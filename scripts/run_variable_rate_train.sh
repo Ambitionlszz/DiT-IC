@@ -40,11 +40,46 @@ case "${stage}" in
     config=configs/multirate_plain_dit_adv.yaml
     default_per_gpu_batch_size=8
     ;;
+  self-flow-full)
+    trainer=train_nogan_ddp.py
+    config=configs/dual_rate_self_flow_full.yaml
+    default_per_gpu_batch_size=4
+    ;;
+  self-flow-posttrain-control)
+    trainer=train_nogan_ddp.py
+    config=configs/dual_rate_self_flow_posttrain_control.yaml
+    default_per_gpu_batch_size=4
+    ;;
+  self-flow-q-only)
+    trainer=train_nogan_ddp.py
+    config=configs/dual_rate_self_flow_q_only.yaml
+    default_per_gpu_batch_size=4
+    ;;
+  self-flow-mix-only)
+    trainer=train_nogan_ddp.py
+    config=configs/dual_rate_self_flow_mix_only.yaml
+    default_per_gpu_batch_size=4
+    ;;
+  self-flow-distill-only)
+    trainer=train_nogan_ddp.py
+    config=configs/dual_rate_self_flow_distill_only.yaml
+    default_per_gpu_batch_size=4
+    ;;
+  self-flow-same-rate-teacher)
+    trainer=train_nogan_ddp.py
+    config=configs/dual_rate_self_flow_same_rate_teacher.yaml
+    default_per_gpu_batch_size=4
+    ;;
   *)
-    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-adv-phase2, plain-smoke, plain, plain-adv" >&2
+    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-adv-phase2, plain-smoke, plain, plain-adv, self-flow-full, self-flow-posttrain-control, self-flow-q-only, self-flow-mix-only, self-flow-distill-only, self-flow-same-rate-teacher" >&2
     exit 2
     ;;
 esac
+
+default_accumulation_steps=1
+if [[ "${stage}" == self-flow-* ]]; then
+  default_accumulation_steps=2
+fi
 
 IFS=',' read -r -a gpu_ids <<< "${gpu_list}"
 num_gpus=${#gpu_ids[@]}
@@ -60,7 +95,7 @@ for gpu_id in "${gpu_ids[@]}"; do
 done
 
 per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}
-accumulation_steps=${ACCUMULATION_STEPS:-1}
+accumulation_steps=${ACCUMULATION_STEPS:-${default_accumulation_steps}}
 if (( per_gpu_batch_size < 1 || accumulation_steps < 1 )); then
   echo "PER_GPU_BATCH_SIZE and ACCUMULATION_STEPS must be positive" >&2
   exit 2
@@ -77,8 +112,14 @@ if [[ -n "${PYTHONPATH:-}" ]]; then
   python_path=".:${PYTHONPATH}"
 fi
 
+torchrun_bin=${TORCHRUN_BIN:-/root/miniconda3/envs/ditic/bin/torchrun}
+if [[ ! -x "${torchrun_bin}" ]]; then
+  echo "TORCHRUN_BIN is not executable: ${torchrun_bin}" >&2
+  exit 2
+fi
+
 CUDA_VISIBLE_DEVICES="${gpu_list}" PYTHONPATH="${python_path}" \
-  torchrun --standalone --nproc_per_node="${num_gpus}" \
+  "${torchrun_bin}" --standalone --nproc_per_node="${num_gpus}" \
   "${trainer}" \
   --config "${config}" \
   --per_gpu_batch_size "${per_gpu_batch_size}" \

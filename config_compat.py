@@ -1,4 +1,7 @@
 from copy import deepcopy
+import os
+
+import yaml
 
 from decode_modes import validate_decode_mode
 
@@ -9,6 +12,32 @@ _REMOVED_FEATURE_FLAGS = (
     "use_variance_guide",
     "use_self_dist",
 )
+
+
+def _deep_update_config(base, overrides):
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_update_config(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def load_pure_sana_config(config_path):
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+    base_path = config.pop("_base_", None)
+    if base_path is not None:
+        if not os.path.isabs(base_path):
+            base_path = os.path.join(os.path.dirname(config_path), base_path)
+        with open(base_path, "r") as file:
+            base_config = yaml.safe_load(file)
+        if "_base_" in base_config:
+            raise ValueError("nested config inheritance is not supported")
+        config = _deep_update_config(base_config, config)
+    return normalize_pure_sana_config(config)
+
+
 def normalize_pure_sana_config(config):
     """Map legacy main-branch YAML fields onto the Pure SANA interface."""
     config = deepcopy(config)

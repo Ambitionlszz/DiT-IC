@@ -33,7 +33,7 @@ from codec_packet import (
 from eval.compress_utils import *
 from eval.testing_utils import parse_args_testing
 from eval._update_patch_fid import update_patch_fid
-from config_compat import normalize_pure_sana_config, prepare_inference_config
+from config_compat import load_pure_sana_config, prepare_inference_config
 
 class TeeLogger:
     """
@@ -85,9 +85,7 @@ def codec_models(model, device, **kwargs):
 
 
 def load_config(config_path):
-    with open(config_path, "r") as file:
-        config = yaml.safe_load(file)
-    return normalize_pure_sana_config(config)
+    return load_pure_sana_config(config_path)
 
 
 def print_model_parameters(net, model_name="DiT-IC"):

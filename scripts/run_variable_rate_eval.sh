@@ -7,9 +7,14 @@ gpu=${3:-0}
 config=${4:-configs/multirate_plain_dit.yaml}
 timestamp=$(date +%Y%m%d_%H%M%S)
 output_root=${5:-"results/variable_rate_${timestamp}"}
+python_bin=${PYTHON_BIN:-/root/miniconda3/envs/ditic/bin/python}
+if [[ ! -x "${python_bin}" ]]; then
+  echo "PYTHON_BIN is not executable: ${python_bin}" >&2
+  exit 2
+fi
 
 for quality in 0 1 2 3 4 5; do
-  CUDA_VISIBLE_DEVICES=${gpu} PYTHONPATH=. python -u compress.py \
+  CUDA_VISIBLE_DEVICES=${gpu} PYTHONPATH=. "${python_bin}" -u compress.py \
     --config_path "${config}" \
     --codec_path "${checkpoint}" \
     --img_path "${image_dir}" \

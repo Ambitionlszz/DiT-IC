@@ -1,0 +1,111 @@
+data:
+  data_path:
+    - /data2/luosheng/data/Datasets/DIV2K_train_HR_clean
+    - /data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png
+    - /data2/luosheng/data/Datasets/LSDIR
+    - /data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png
+  valid_path:
+    - /data2/luosheng/data/Datasets/Kodak
+  im_exts: [JPEG, png, jpg, jpeg, PNG]
+  num_workers: 8
+  path_size: [256, 256]
+
+model:
+  model_type: Codec
+  params:
+    decode_mode: sana
+    use_text_condition: true
+    text_encoder_path: /data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers/text_encoder
+    dit_path: SANA
+    codec_path: /data2/luosheng/code/DiT-IC/checkpoints/multirate_plain_dit_p0/checkpoints/best_ckpt.pt
+    use_ema: true
+    use_merge: false
+    training: true
+    freeze_codec: true
+    strict_stage_loading: true
+    train_text_projection: true
+    DiT_params:
+      DiT: true
+      DiT_lora: true
+      lora_rank_DiT: 128
+      lora_alpha_DiT: 128
+      channel_in: 32
+    vae_params:
+      vae_lora: true
+      train_vae_lora: true
+      decoder_lora_only: true
+      lora_rank_vae: 32
+      lora_alpha_vae: 32
+    codec_param:
+      ch_emd: 32
+      channel: 320
+      channel_out: 32
+      num_slices: 5
+      max_support_slices: 5
+      kernel_size: 3
+      drop_path_rate: 0.1
+      depths: [2, 2, 2, 2, 2]
+      num_heads: [16, 16, 16, 16, 16]
+      upsample_mode: pixelshuffle
+      variable_rate: true
+      num_quality_levels: 6
+    loss_params:
+      pp_style: true
+      pixelloss_weight: 1.0
+      perceptual_weight: 1.0
+      rate_weight: 0.0
+      disc_start: 1000000
+      disc_weight: 0.0
+    self_flow_params:
+      enabled: true
+      num_quality_levels: 6
+      sampling: reflected_adjacent
+      student_input: mixed
+      use_second_view: true
+      teacher_enabled: true
+      teacher_quality: higher
+      representation_enabled: true
+      student_layer: 8
+      teacher_layer: 20
+      quality_embedding_dim: 128
+      conditioning_enabled: true
+      projector_expansion: 2
+      mask_ratio_target: 0.25
+      uniform_warmup_steps: 2000
+      ramp_steps: 5000
+      rep_weight_target: 0.1
+      rep_weight_min: 0.01
+      rep_gradient_ratio_max: 0.2
+      teacher_ema_decay: 0.9999
+      deployment_ema_decay: 0.9999
+
+quality_control:
+  enabled: true
+  num_levels: 6
+  sampling: reflected_adjacent_per_sample
+
+train:
+  output_dir: checkpoints
+  exp_name: dual_rate_self_flow_full
+  per_gpu_batch_size: 4
+  accumulation_steps: 2
+  accumulate_disc: false
+  resume: false
+  log_every: 100
+  eval_every: 2000
+  ckpt_every: 5000
+  max_steps: 30000
+  global_seed: 903
+  rate_weight: 0.0
+
+optimizer:
+  lr: 0.00002
+  dit_lr: 0.00002
+  vae_lr: 0.00001
+  condition_lr: 0.0001
+  aux_lr: 0.001
+  entropy_lr: 0.001
+  beta2: 0.999
+  beta_vae: [0.9, 0.999]
+  step_lr: [18000, 25500, 28500]
+  max_grad_norm: 4.0
