@@ -5,6 +5,8 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -518,6 +520,152 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("last_ckpt.pt", pipeline_source)
         self.assertIn("source_checkpoint_sha256", pipeline_source)
         self.assertIn("run_variable_rate_eval.sh", pipeline_source)
+
+    def test_historical_entropy_ablation_preserves_two_stage_baseline(self):
+        baseline_warmup = yaml.safe_load(
+            (ROOT / "configs" / "multirate_e2e_latent_warmup.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        ablation_warmup = yaml.safe_load(
+            (
+                ROOT
+                / "configs"
+                / "multirate_e2e_latent_warmup_historical_entropy.yaml"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            ablation_warmup["optimizer"].pop("entropy_update_mode"),
+            "historical_pre_main",
+        )
+        self.assertEqual(
+            ablation_warmup["train"]["exp_name"],
+            "multirate_e2e_latent_warmup_historical_entropy_50k",
+        )
+        # The completed baseline warmup checkpoint retained the original
+        # 150k Stage-1 milestones, so its first 50k steps had no LR decay.
+        self.assertEqual(
+            ablation_warmup["optimizer"]["step_lr"],
+            [100000, 130000, 145000],
+        )
+        ablation_warmup["optimizer"]["step_lr"] = baseline_warmup["optimizer"][
+            "step_lr"
+        ]
+        ablation_warmup["train"]["exp_name"] = baseline_warmup["train"][
+            "exp_name"
+        ]
+        self.assertEqual(ablation_warmup, baseline_warmup)
+
+        baseline_nogan = yaml.safe_load(
+            (ROOT / "configs" / "multirate_e2e_warmup_nogan.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        ablation_nogan = yaml.safe_load(
+            (
+                ROOT
+                / "configs"
+                / "multirate_e2e_warmup_nogan_historical_entropy_200k.yaml"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            ablation_nogan["optimizer"].pop("entropy_update_mode"),
+            "historical_pre_main",
+        )
+        self.assertEqual(
+            ablation_nogan["train"]["exp_name"],
+            "multirate_e2e_warmup_nogan_historical_entropy_200k",
+        )
+        self.assertEqual(ablation_nogan["train"]["max_steps"], 200000)
+        self.assertEqual(
+            ablation_nogan["model"]["params"]["loss_params"]["disc_start"],
+            200000,
+        )
+        self.assertEqual(
+            ablation_nogan["optimizer"]["step_lr"],
+            [100000, 160000, 190000],
+        )
+        ablation_nogan["train"]["exp_name"] = baseline_nogan["train"][
+            "exp_name"
+        ]
+        ablation_nogan["train"]["max_steps"] = baseline_nogan["train"][
+            "max_steps"
+        ]
+        ablation_nogan["model"]["params"]["loss_params"]["disc_start"] = (
+            baseline_nogan["model"]["params"]["loss_params"]["disc_start"]
+        )
+        ablation_nogan["optimizer"]["step_lr"] = baseline_nogan["optimizer"][
+            "step_lr"
+        ]
+        self.assertEqual(ablation_nogan, baseline_nogan)
+
+        launcher = (
+            ROOT / "scripts" / "run_historical_entropy_warmup_nogan.sh"
+        ).read_text(encoding="utf-8")
+        pipeline = (
+            ROOT / "scripts" / "run_e2e_warmup_nogan_then_gan.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("STOP_AFTER_NOGAN=true", launcher)
+        self.assertIn("PER_GPU_BATCH_SIZE=8", launcher)
+        self.assertIn("ACCUMULATION_STEPS=1", launcher)
+        self.assertIn(
+            "nogan_logical_steps=$((warmup_steps + nogan_steps))", pipeline
+        )
+        self.assertIn("nogan_logical_${nogan_logical_steps}", pipeline)
+        self.assertNotIn("E2E_GAN_CONFIG", launcher)
+        self.assertIn('if [[ "${stop_after_nogan}" == true ]]', pipeline)
+
+    def test_stage1_historical_entropy_order_matches_pre_fix_semantics(self):
+        source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        tree = ast.parse(source)
+        train_function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "train"
+        )
+        train_source = ast.get_source_segment(source, train_function)
+
+        main_backward = train_source.index(
+            "(loss / accumulation_steps).backward()"
+        )
+        historical_branch = train_source.index(
+            "if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:",
+            main_backward,
+        )
+        entropy_objective = train_source.index(
+            "model.module.codec.entropy_bottleneck_loss()",
+            historical_branch,
+        )
+        accumulation_scale = train_source.index(
+            "/ accumulation_steps", entropy_objective
+        )
+        entropy_backward = train_source.index(
+            "entropy_loss.backward()", accumulation_scale
+        )
+        global_clip = train_source.index("model.parameters()", entropy_backward)
+        main_step = train_source.index("optimizer.step()", global_clip)
+        entropy_step = train_source.index("entropy_optimizer.step()", main_step)
+        main_zero = train_source.index(
+            "optimizer.zero_grad(set_to_none=True)", entropy_step
+        )
+        entropy_zero = train_source.index(
+            "entropy_optimizer.zero_grad(set_to_none=True)", main_zero
+        )
+
+        self.assertLess(main_backward, entropy_objective)
+        self.assertLess(entropy_objective, accumulation_scale)
+        self.assertLess(accumulation_scale, entropy_backward)
+        self.assertLess(entropy_backward, global_clip)
+        self.assertLess(global_clip, main_step)
+        self.assertLess(main_step, entropy_step)
+        self.assertLess(entropy_step, main_zero)
+        self.assertLess(main_zero, entropy_zero)
+        self.assertIn(
+            'contract["entropy_update_mode"] = entropy_update_mode',
+            source,
+        )
 
     def test_phase1_warmup_e2e_schedule_and_pipeline_contract(self):
         warmup = (

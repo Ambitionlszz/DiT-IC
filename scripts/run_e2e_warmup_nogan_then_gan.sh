@@ -8,9 +8,15 @@ warmup_config=${E2E_WARMUP_CONFIG:-configs/multirate_e2e_latent_warmup.yaml}
 nogan_config=${E2E_NOGAN_CONFIG:-configs/multirate_e2e_warmup_nogan.yaml}
 gan_config=${E2E_GAN_CONFIG:-configs/multirate_e2e_warmup_gan.yaml}
 result_root=${RESULT_ROOT:-results/e2e_warmup_nogan_then_gan}
+stop_after_nogan=${STOP_AFTER_NOGAN:-false}
 per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-8}
 accumulation_steps=${ACCUMULATION_STEPS:-1}
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+
+if [[ "${stop_after_nogan}" != true && "${stop_after_nogan}" != false ]]; then
+  echo "STOP_AFTER_NOGAN must be true or false." >&2
+  exit 1
+fi
 
 for required_file in "${warmup_config}" "${nogan_config}" "${gan_config}"; do
   if [[ ! -f "${required_file}" ]]; then
@@ -61,6 +67,7 @@ import yaml
 checkpoint_dir = Path(sys.argv[1])
 config = yaml.safe_load(Path(sys.argv[2]).read_text(encoding="utf-8"))
 expected_steps = int(config["train"]["max_steps"])
+expected_entropy_mode = config.get("optimizer", {}).get("entropy_update_mode", "official_post_main")
 candidates = []
 if checkpoint_dir.is_dir():
     paths = list(checkpoint_dir.glob("[0-9]*.pt"))
@@ -75,6 +82,11 @@ if checkpoint_dir.is_dir():
             raise SystemExit(f"Unexpected warmup checkpoint stage: {path}")
         if not checkpoint.get("stop_after_phase_a", False):
             raise SystemExit(f"Checkpoint is not a latent-warmup-only run: {path}")
+        checkpoint_entropy_mode = checkpoint.get("objective_contract", {}).get(
+            "entropy_update_mode", "official_post_main"
+        )
+        if checkpoint_entropy_mode != expected_entropy_mode:
+            raise SystemExit(f"Warmup checkpoint entropy mode mismatch: {path}")
         step = int(checkpoint.get("global_step", -1))
         if not 0 <= step <= expected_steps:
             raise SystemExit(f"Warmup checkpoint has an invalid step: {path}")
@@ -134,6 +146,9 @@ expected_contract = {
     "training_mode": "phase1_warmup_e2e",
     "freeze_quality_endpoints": True,
 }
+entropy_update_mode = config.get("optimizer", {}).get("entropy_update_mode", "official_post_main")
+if entropy_update_mode != "official_post_main":
+    expected_contract["entropy_update_mode"] = entropy_update_mode
 expected_source_hash = sha256(source_path)
 candidates = []
 if checkpoint_dir.is_dir():
@@ -228,17 +243,20 @@ if ! CUDA_VISIBLE_DEVICES="${eval_gpu}" PYTHONPATH=. python -u \
   echo "WARNING: latent-warmup evaluation failed; continuing to NoGAN." >&2
 fi
 
+warmup_steps="$(config_value "${warmup_config}" train.max_steps)"
+nogan_steps="$(config_value "${nogan_config}" train.max_steps)"
+nogan_logical_steps=$((warmup_steps + nogan_steps))
 nogan_state="$(inspect_e2e_phase "${nogan_checkpoint_dir}" "${nogan_config}" "${warmup_final}")"
 case "${nogan_state}" in
-  complete:*) echo "150k E2E NoGAN is already complete." ;;
+  complete:*) echo "${nogan_steps}-step E2E NoGAN is already complete." ;;
   resume:*)
-    echo "Resuming 150k E2E NoGAN from ${nogan_state#resume:}"
+    echo "Resuming ${nogan_steps}-step E2E NoGAN from ${nogan_state#resume:}"
     run_training e2e-warmup-nogan "${nogan_config}" \
       --codec_path "${warmup_final}" \
       --resume_checkpoint "${nogan_state#resume:}"
     ;;
   missing)
-    echo "Starting 150k E2E NoGAN from ${warmup_final}"
+    echo "Starting ${nogan_steps}-step E2E NoGAN from ${warmup_final}"
     run_training e2e-warmup-nogan "${nogan_config}" \
       --codec_path "${warmup_final}"
     ;;
@@ -254,8 +272,17 @@ fi
 if ! run_e2e_eval \
     "${nogan_final}" \
     "${nogan_config}" \
-    "${result_root}/nogan_logical_200k"; then
-  echo "WARNING: NoGAN evaluation failed; continuing to GAN." >&2
+    "${result_root}/nogan_logical_${nogan_logical_steps}"; then
+  if [[ "${stop_after_nogan}" == true ]]; then
+    echo "WARNING: NoGAN evaluation failed after training completed." >&2
+  else
+    echo "WARNING: NoGAN evaluation failed; continuing to GAN." >&2
+  fi
+fi
+
+if [[ "${stop_after_nogan}" == true ]]; then
+  echo "50k latent warmup and ${nogan_steps}-step E2E NoGAN training are complete; evaluations were attempted."
+  exit 0
 fi
 
 gan_state="$(inspect_e2e_phase "${gan_checkpoint_dir}" "${gan_config}" "${nogan_final}")"
