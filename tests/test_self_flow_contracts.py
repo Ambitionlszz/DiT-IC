@@ -5,18 +5,23 @@ import torch
 import torch.nn as nn
 from diffusers import SanaTransformer2DModel
 
+from models.DiT_IC import merge_codec_subset
 from models.sana_self_flow import (
     SelfFlowTeacher,
     TokenQualityConditioner,
     mix_dual_rate_tokens,
     quality_conditioned_sana_forward,
+    restrict_mask_to_asymmetric_samples,
 )
 from self_flow_training import (
     all_token_representation_loss,
+    resolve_self_flow_checkpoint_contract,
     sample_iid_uniform_pairs,
+    sample_rate_anchored_pairs,
     sample_reflected_adjacent_pairs,
     select_post_burnin_best,
     self_flow_schedule,
+    validate_self_flow_config,
 )
 from train_nogan_ddp import load_config
 
@@ -77,6 +82,98 @@ def test_iid_uniform_sampler_covers_all_ordered_pairs():
         assert torch.allclose(
             marginal, torch.full((6,), 1 / 6), atol=0.002, rtol=0
         )
+
+
+def test_rate_anchored_sampler_is_exact_and_preserves_subset_marginals():
+    generator = torch.Generator().manual_seed(7719)
+    quality_a, quality_b, asymmetric = sample_rate_anchored_pairs(
+        720_000, 6, 0.5, generator
+    )
+    assert asymmetric.dtype == torch.bool
+    assert asymmetric.sum().item() == 360_000
+    anchors = ~asymmetric
+    assert torch.equal(quality_a[anchors], quality_b[anchors])
+
+    anchor_distribution = torch.bincount(
+        quality_a[anchors], minlength=6
+    ).float()
+    anchor_distribution /= anchor_distribution.sum()
+    assert torch.allclose(
+        anchor_distribution, torch.full((6,), 1 / 6), atol=0.002, rtol=0
+    )
+
+    mixed_pair_distribution = torch.bincount(
+        quality_a[asymmetric] * 6 + quality_b[asymmetric], minlength=36
+    ).float()
+    mixed_pair_distribution /= mixed_pair_distribution.sum()
+    assert torch.allclose(
+        mixed_pair_distribution,
+        torch.full((36,), 1 / 36),
+        atol=0.001,
+        rtol=0,
+    )
+
+
+def test_codec_subset_merge_reuses_anchor_view_exactly():
+    reference_mean = torch.arange(12, dtype=torch.float32).reshape(4, 3, 1, 1)
+    reference_y = torch.arange(8, dtype=torch.float32).reshape(4, 2, 1, 1)
+    reference_z = torch.arange(4, dtype=torch.float32).reshape(4, 1, 1, 1)
+    reference = {
+        "mean": reference_mean.clone(),
+        "likelihoods": {"y": reference_y.clone(), "z": reference_z.clone()},
+    }
+    subset = {
+        "mean": torch.full((2, 3, 1, 1), 101.0),
+        "likelihoods": {
+            "y": torch.full((2, 2, 1, 1), 102.0),
+            "z": torch.full((2, 1, 1, 1), 103.0),
+        },
+    }
+    asymmetric = torch.tensor([False, True, False, True])
+
+    merged = merge_codec_subset(reference, subset, asymmetric)
+
+    assert torch.equal(merged["mean"][~asymmetric], reference_mean[~asymmetric])
+    assert torch.equal(merged["mean"][asymmetric], subset["mean"])
+    for name, reference_value in (("y", reference_y), ("z", reference_z)):
+        assert torch.equal(
+            merged["likelihoods"][name][~asymmetric],
+            reference_value[~asymmetric],
+        )
+        assert torch.equal(
+            merged["likelihoods"][name][asymmetric],
+            subset["likelihoods"][name],
+        )
+    assert torch.equal(reference["mean"], reference_mean)
+
+
+def test_rate_anchor_mask_never_mixes_legal_samples():
+    token_mask = torch.ones(4, 1, 2, 2, dtype=torch.bool)
+    asymmetric = torch.tensor([False, True, False, True])
+    restricted = restrict_mask_to_asymmetric_samples(token_mask, asymmetric)
+    assert not restricted[~asymmetric].any()
+    assert restricted[asymmetric].all()
+
+
+def test_rate_anchored_checkpoint_contract_is_distinct():
+    direct = resolve_self_flow_checkpoint_contract({})
+    anchored = resolve_self_flow_checkpoint_contract(
+        {"training_distribution": "rate_anchored"}
+    )
+    assert anchored["schema_version"] > direct["schema_version"]
+    assert anchored["stage"] != direct["stage"]
+    assert anchored["mechanism"] != direct["mechanism"]
+
+
+def test_representation_gradient_excludes_legal_anchor_samples():
+    student = torch.randn(4, 7, 5, requires_grad=True)
+    teacher = torch.randn(2, 7, 5, requires_grad=True)
+    asymmetric = torch.tensor([False, True, False, True])
+    loss = all_token_representation_loss(student[asymmetric], teacher)
+    loss.backward()
+    assert torch.count_nonzero(student.grad[~asymmetric]).item() == 0
+    assert torch.count_nonzero(student.grad[asymmetric]).item() > 0
+    assert teacher.grad is None
 
 
 def test_token_mask_selects_all_channels_and_quality_source():
@@ -278,6 +375,57 @@ def test_full_config_uses_iid_sampling_and_100k_budget():
     assert config["optimizer"]["step_lr_gammas"] == [0.5, 0.5, 0.5]
     trainer_source = (ROOT / "train_nogan_ddp.py").read_text()
     assert '"step_lr_gammas", [0.5, 0.2, 0.1]' in trainer_source
+
+
+def test_rate_anchored_config_only_changes_training_distribution():
+    direct = load_config(
+        str(ROOT / "configs" / "dual_rate_self_flow_full.yaml")
+    )
+    anchored = load_config(
+        str(ROOT / "configs" / "rate_anchored_self_flow_full.yaml")
+    )
+    validated = validate_self_flow_config(anchored)
+    assert validated["training_distribution"] == "rate_anchored"
+    assert validated["legal_anchor_ratio"] == 0.5
+    assert anchored["data"] == direct["data"]
+    assert anchored["quality_control"] == direct["quality_control"]
+    assert anchored["optimizer"] == direct["optimizer"]
+
+    direct_params = dict(direct["model"]["params"])
+    anchored_params = dict(anchored["model"]["params"])
+    direct_self_flow = dict(direct_params.pop("self_flow_params"))
+    anchored_self_flow = dict(anchored_params.pop("self_flow_params"))
+    assert anchored_params == direct_params
+    assert anchored_self_flow.pop("training_distribution") == "rate_anchored"
+    assert anchored_self_flow.pop("legal_anchor_ratio") == 0.5
+    assert anchored_self_flow == direct_self_flow
+
+    direct_train = dict(direct["train"])
+    anchored_train = dict(anchored["train"])
+    assert anchored_train.pop("exp_name") == "rate_anchored_self_flow_full"
+    direct_train.pop("exp_name")
+    assert anchored_train == direct_train
+
+
+def test_rate_anchored_trainer_uses_one_student_and_teacher_subbatch():
+    trainer_source = (ROOT / "train_nogan_ddp.py").read_text()
+    trainer_tree = ast.parse(trainer_source)
+    train_function = next(
+        node
+        for node in trainer_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "do_train"
+    )
+    train_source = ast.get_source_segment(trainer_source, train_function)
+    assert train_source.count("output_image, self_flow_output = model(") == 1
+    assert '"asymmetric_samples": asymmetric_samples' in train_source
+    assert (
+        'self_flow_output["teacher_latent"][representation_samples]'
+        in train_source.replace("\n", "").replace(" ", "")
+    )
+    assert (
+        'self_flow_output["student_feature"][representation_samples]'
+        in train_source.replace("\n", "").replace(" ", "")
+    )
 
 
 def test_ablation_configs_share_every_non_mechanism_training_setting():

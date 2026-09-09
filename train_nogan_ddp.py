@@ -29,14 +29,13 @@ from collections import OrderedDict
 from datasets.image import ImageFolder
 from config_compat import load_pure_sana_config
 from self_flow_training import (
-    SELF_FLOW_CHECKPOINT_SCHEMA_VERSION,
-    SELF_FLOW_MECHANISM,
-    SELF_FLOW_STAGE,
+    resolve_self_flow_checkpoint_contract,
     all_token_representation_loss,
     calibrate_representation_weight,
     deterministic_self_flow_seed,
     likelihood_bpp,
     sample_iid_uniform_pairs,
+    sample_rate_anchored_pairs,
     select_post_burnin_best,
     self_flow_schedule,
     validate_self_flow_config,
@@ -135,6 +134,20 @@ def do_train(rank, local_rank, world_size, train_config):
         raise ValueError("multi-rate Plain training requires exactly 6 quality levels")
     self_flow_config = validate_self_flow_config(train_config)
     self_flow_enabled = bool(self_flow_config.get("enabled", False))
+    self_flow_checkpoint_contract = (
+        resolve_self_flow_checkpoint_contract(self_flow_config)
+        if self_flow_enabled
+        else None
+    )
+    rate_anchored_enabled = (
+        self_flow_enabled
+        and self_flow_config.get(
+            "training_distribution", "fully_asymmetric"
+        ) == "rate_anchored"
+    )
+    legal_anchor_ratio = float(
+        self_flow_config.get("legal_anchor_ratio", 0.5)
+    )
     self_flow_teacher_enabled = bool(
         self_flow_config.get("teacher_enabled", False)
     )
@@ -154,6 +167,16 @@ def do_train(rank, local_rank, world_size, train_config):
             (num_quality_levels, num_quality_levels), dtype=torch.long
         )
         if self_flow_enabled
+        else None
+    )
+    self_flow_anchor_quality_counts = (
+        torch.zeros(num_quality_levels, dtype=torch.long)
+        if rate_anchored_enabled
+        else None
+    )
+    self_flow_partition_counts = (
+        torch.zeros(2, dtype=torch.long)
+        if rate_anchored_enabled
         else None
     )
     quality_generator = None
@@ -403,6 +426,23 @@ def do_train(rank, local_rank, world_size, train_config):
                 "train.global_batch_size must be divisible by the DDP world size"
             )
         batch_size_per_gpu = global_batch_size // world_size
+    if rate_anchored_enabled:
+        anchor_count_float = legal_anchor_ratio * batch_size_per_gpu
+        local_anchor_count = int(round(anchor_count_float))
+        if abs(anchor_count_float - local_anchor_count) > 1e-9:
+            raise ValueError(
+                "legal_anchor_ratio must produce an integer per-GPU anchor count"
+            )
+        if not 0 < local_anchor_count < batch_size_per_gpu:
+            raise ValueError(
+                "each GPU batch must contain legal and asymmetric samples"
+            )
+        if rank == 0:
+            logger.info(
+                "Rate-Anchored partition per GPU: "
+                f"{local_anchor_count} legal + "
+                f"{batch_size_per_gpu - local_anchor_count} asymmetric"
+            )
     sampler = DistributedSampler(
         dataset, num_replicas=world_size, rank=rank, shuffle=True
     )
@@ -481,9 +521,18 @@ def do_train(rank, local_rank, world_size, train_config):
             model.train()
             loss_module.train()
             if self_flow_enabled:
-                if checkpoint.get("stage") != SELF_FLOW_STAGE:
+                if checkpoint.get("stage") != self_flow_checkpoint_contract["stage"]:
                     raise ValueError(
                         "Self-Flow resume requires a Self-Flow training checkpoint"
+                    )
+                if rate_anchored_enabled and not np.isclose(
+                    float(checkpoint.get("legal_anchor_ratio", -1.0)),
+                    legal_anchor_ratio,
+                    rtol=0.0,
+                    atol=1e-12,
+                ):
+                    raise ValueError(
+                        "Rate-Anchored resume checkpoint ratio does not match config"
                     )
                 if self_flow_teacher_enabled:
                     teacher_state = checkpoint.get("self_flow_teacher")
@@ -505,6 +554,23 @@ def do_train(rank, local_rank, world_size, train_config):
                         "Self-Flow resume checkpoint lacks pair-count state"
                     )
                 self_flow_pair_counts.copy_(saved_pair_counts.cpu())
+                if rate_anchored_enabled:
+                    saved_anchor_counts = checkpoint.get(
+                        "self_flow_anchor_quality_counts"
+                    )
+                    saved_partition_counts = checkpoint.get(
+                        "self_flow_partition_counts"
+                    )
+                    if saved_anchor_counts is None or saved_partition_counts is None:
+                        raise KeyError(
+                            "Rate-Anchored resume checkpoint lacks partition state"
+                        )
+                    self_flow_anchor_quality_counts.copy_(
+                        saved_anchor_counts.cpu()
+                    )
+                    self_flow_partition_counts.copy_(
+                        saved_partition_counts.cpu()
+                    )
 
             restored_entropy_loss = float(
                 model.module.codec.entropy_bottleneck_loss().detach().item()
@@ -607,12 +673,12 @@ def do_train(rank, local_rank, world_size, train_config):
     def make_checkpoint():
         checkpoint = {
             "schema_version": (
-                SELF_FLOW_CHECKPOINT_SCHEMA_VERSION
+                self_flow_checkpoint_contract["schema_version"]
                 if self_flow_enabled
                 else (MULTIRATE_CHECKPOINT_SCHEMA_VERSION if multirate_plain else 2)
             ),
             "stage": (
-                SELF_FLOW_STAGE
+                self_flow_checkpoint_contract["stage"]
                 if self_flow_enabled
                 else ("multirate_reconstruction" if multirate_plain else "baseline")
             ),
@@ -674,7 +740,7 @@ def do_train(rank, local_rank, world_size, train_config):
                 if parameter.requires_grad
             )
         if self_flow_enabled:
-            checkpoint["self_flow_mechanism"] = SELF_FLOW_MECHANISM
+            checkpoint["self_flow_mechanism"] = self_flow_checkpoint_contract["mechanism"]
             checkpoint["self_flow_teacher"] = (
                 self_flow_teacher.get_ema_state_dict()
                 if self_flow_teacher is not None
@@ -689,6 +755,14 @@ def do_train(rank, local_rank, world_size, train_config):
             checkpoint["self_flow_pair_counts"] = (
                 self_flow_pair_counts.clone()
             )
+            if rate_anchored_enabled:
+                checkpoint["self_flow_anchor_quality_counts"] = (
+                    self_flow_anchor_quality_counts.clone()
+                )
+                checkpoint["self_flow_partition_counts"] = (
+                    self_flow_partition_counts.clone()
+                )
+                checkpoint["legal_anchor_ratio"] = legal_anchor_ratio
             checkpoint["teacher_ema_decay"] = teacher_ema_decay
             checkpoint["deployment_ema_decay"] = deployment_ema_decay
             checkpoint["rng_contract"] = "stateless_step_rank_microstep_v1"
@@ -758,21 +832,53 @@ def do_train(rank, local_rank, world_size, train_config):
                         )
                     quality_a = quality_index.expand(x.shape[0]).cpu()
                     quality_b = quality_a.clone()
+                    asymmetric_samples = torch.full(
+                        (x.shape[0],),
+                        not rate_anchored_enabled,
+                        dtype=torch.bool,
+                    )
                 else:
                     pair_generator = torch.Generator(device="cpu")
                     pair_generator.manual_seed(sample_seed)
-                    quality_a, quality_b = sample_iid_uniform_pairs(
-                        x.shape[0],
-                        num_quality_levels,
-                        pair_generator,
-                    )
+                    if rate_anchored_enabled:
+                        (
+                            quality_a,
+                            quality_b,
+                            asymmetric_samples,
+                        ) = sample_rate_anchored_pairs(
+                            x.shape[0],
+                            num_quality_levels,
+                            legal_anchor_ratio,
+                            pair_generator,
+                        )
+                        anchor_samples = ~asymmetric_samples
+                        anchor_bins = torch.bincount(
+                            quality_a[anchor_samples],
+                            minlength=num_quality_levels,
+                        )
+                        self_flow_anchor_quality_counts.add_(anchor_bins)
+                        self_flow_partition_counts[0] += anchor_samples.sum()
+                        self_flow_partition_counts[1] += asymmetric_samples.sum()
+                    else:
+                        quality_a, quality_b = sample_iid_uniform_pairs(
+                            x.shape[0],
+                            num_quality_levels,
+                            pair_generator,
+                        )
+                        asymmetric_samples = torch.ones(
+                            x.shape[0], dtype=torch.bool
+                        )
+                asymmetric_quality_a = quality_a[asymmetric_samples]
+                asymmetric_quality_b = quality_b[asymmetric_samples]
                 pair_bins = torch.bincount(
-                    quality_a * num_quality_levels + quality_b,
+                    asymmetric_quality_a * num_quality_levels
+                    + asymmetric_quality_b,
                     minlength=num_quality_levels * num_quality_levels,
                 ).reshape(num_quality_levels, num_quality_levels)
                 self_flow_pair_counts.add_(pair_bins)
                 quality_a = quality_a.to(device)
                 quality_b = quality_b.to(device)
+                asymmetric_samples = asymmetric_samples.to(device)
                 schedule_values = self_flow_schedule(
                     train_steps, self_flow_config
                 )
@@ -791,6 +897,7 @@ def do_train(rank, local_rank, world_size, train_config):
                         "use_second_view": bool(
                             self_flow_config.get("use_second_view", True)
                         ),
+                        "asymmetric_samples": asymmetric_samples,
                     },
                 )
                 rate = self_flow_output["likelihoods_a"]
@@ -804,19 +911,35 @@ def do_train(rank, local_rank, world_size, train_config):
                     last_layer=model.module.get_last_layer(),
                     split="train",
                 )
-                if self_flow_representation_enabled:
+                representation_samples = self_flow_output[
+                    "asymmetric_samples"
+                ]
+                representation_sample_count = int(
+                    representation_samples.sum().item()
+                )
+                if (
+                    self_flow_representation_enabled
+                    and representation_sample_count > 0
+                ):
                     with torch.no_grad():
                         teacher_feature = self_flow_teacher(
-                            self_flow_output["teacher_latent"],
+                            self_flow_output["teacher_latent"][
+                                representation_samples
+                            ],
                             model.module.fixed_text_embed,
                             model.module.self_flow_timestep(
-                                x.shape[0], x.device
+                                representation_sample_count, x.device
                             ),
-                            self_flow_output["teacher_quality"],
+                            self_flow_output["teacher_quality"][
+                                representation_samples
+                            ],
                             schedule_values["conditioning_scale"],
                         )
                     representation_loss = all_token_representation_loss(
-                        self_flow_output["student_feature"], teacher_feature
+                        self_flow_output["student_feature"][
+                            representation_samples
+                        ],
+                        teacher_feature,
                     )
                     if (
                         resolved_representation_weight is None
@@ -865,12 +988,49 @@ def do_train(rank, local_rank, world_size, train_config):
                 legal_bpp_b = likelihood_bpp(
                     self_flow_output["likelihoods_b"], x
                 )
+                token_mask = self_flow_output["mask"]
+                if representation_sample_count > 0:
+                    asymmetric_mask_ratio = token_mask[
+                        representation_samples
+                    ].float().mean()
+                else:
+                    asymmetric_mask_ratio = torch.zeros((), device=x.device)
+                mask_has_a = (~token_mask).flatten(1).any(dim=1)
+                mask_has_b = token_mask.flatten(1).any(dim=1)
+                genuinely_mixed = (
+                    representation_samples
+                    & quality_a.ne(quality_b)
+                    & mask_has_a
+                    & mask_has_b
+                )
+                legal_student_inputs = ~genuinely_mixed
                 log_dict.update({
+                    "train/total_loss": loss.detach(),
                     "train/base_loss": base_loss.detach(),
                     "train/representation_loss": representation_loss.detach(),
                     "train/representation_weight": gamma,
+                    "train/representation_contribution": (
+                        gamma * representation_loss.detach()
+                    ),
+                    "train/representation_sample_count": (
+                        representation_sample_count
+                    ),
                     "train/mask_ratio_scheduled": schedule_values["mask_ratio"],
-                    "train/mask_ratio_actual": self_flow_output["mask"].float().mean().detach(),
+                    "train/mask_ratio_actual": (
+                        asymmetric_mask_ratio.detach()
+                    ),
+                    "train/mixed_token_fraction_all": (
+                        token_mask.float().mean().detach()
+                    ),
+                    "train/legal_anchor_fraction": (
+                        (~representation_samples).float().mean().detach()
+                    ),
+                    "train/asymmetric_fraction": (
+                        representation_samples.float().mean().detach()
+                    ),
+                    "train/legal_student_input_fraction_actual": (
+                        legal_student_inputs.float().mean().detach()
+                    ),
                     "train/q_conditioning_scale": schedule_values["conditioning_scale"],
                     "train/legal_bpp_a": legal_bpp_a.detach(),
                     "train/legal_bpp_b": legal_bpp_b.detach(),
@@ -1057,6 +1217,29 @@ def do_train(rank, local_rank, world_size, train_config):
                                 "Self-Flow q_a/q_b pair counts: "
                                 + json.dumps(reduced_pair_counts.cpu().tolist())
                             )
+                            if rate_anchored_enabled:
+                                logger.info(
+                                    "Rate-Anchored legal q counts: "
+                                    + json.dumps(
+                                        self_flow_anchor_quality_counts.tolist()
+                                    )
+                                )
+                                logger.info(
+                                    "Rate-Anchored [legal, asymmetric] counts: "
+                                    + json.dumps(
+                                        self_flow_partition_counts.tolist()
+                                    )
+                                )
+                                writer.add_scalar(
+                                    "RateAnchor/legal_samples",
+                                    int(self_flow_partition_counts[0]),
+                                    train_steps,
+                                )
+                                writer.add_scalar(
+                                    "RateAnchor/asymmetric_samples",
+                                    int(self_flow_partition_counts[1]),
+                                    train_steps,
+                                )
                             for quality_a_index in range(num_quality_levels):
                                 for quality_b_index in range(num_quality_levels):
                                     writer.add_scalar(

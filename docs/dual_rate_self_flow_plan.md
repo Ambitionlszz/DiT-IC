@@ -96,3 +96,37 @@ deployment-EMA Student weights. The P0 and Self-Flow evaluation use identical
 source images and codec bitstreams; the frozen-codec hash is stored in every
 checkpoint. The primary comparison is the six-rate macro average, with q0/q1
 reported explicitly.
+
+## Rate-Anchored Main Variant
+
+The paper-facing variant is configured by
+`configs/rate_anchored_self_flow_full.yaml`. It preserves the direct
+Self-Flow model, losses, optimizer, 100k budget, seed, and schedule while changing
+only the post-warmup batch distribution:
+
+```text
+per-GPU batch 8
+  4 legal anchors: q_a = q_b = q, q sampled uniformly
+  4 asymmetric samples: q_a and q_b sampled IID uniformly
+concatenate -> one full Student forward
+all 8 samples -> reconstruction loss
+4 asymmetric samples only -> EMA Teacher and representation loss
+```
+
+The sample assignment is randomly permuted every step. Token masks are forced to
+zero on legal anchors and retain the scheduled 25% B-source probability on the
+asymmetric subset. The representation loss is normalized over the asymmetric
+subset, while reconstruction remains normalized over the full batch. Consequently,
+the representation term is not accidentally halved by the 50/50 partition.
+
+Steps 0-1999 remain the exact legal, batch-shared-q P0 continuation. From step
+2000 through 6999, the 50/50 partition is active while mask ratio, q conditioning,
+and representation weight follow the same ramp as the direct run. From step 7000
+onward the distribution is `0.5 P_legal + 0.5 P_asymmetric` with mask ratio
+0.25. The EMA Teacher receives only the asymmetric half and always uses its
+uniform `q_H = max(q_a, q_b)` view.
+
+Rate-Anchored checkpoints use a distinct schema and stage, persist anchor quality
+and partition counts, and reject resume when the configured anchor ratio differs.
+Training logs expose the designated partition, asymmetric-only mask ratio,
+whole-batch mixed-token fraction, and actual legal-Student-input fraction.

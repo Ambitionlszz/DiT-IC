@@ -22,6 +22,18 @@ def mix_dual_rate_tokens(view_a, view_b, quality_a, quality_b, mask):
     return mixed, quality_map
 
 
+def restrict_mask_to_asymmetric_samples(mask, asymmetric_samples):
+    if mask.ndim != 4 or mask.shape[1] != 1 or mask.dtype != torch.bool:
+        raise ValueError(
+            "token mask must be bool with shape [batch, 1, height, width]"
+        )
+    if asymmetric_samples.shape != (mask.shape[0],):
+        raise ValueError("asymmetric_samples must have shape [batch]")
+    if asymmetric_samples.dtype != torch.bool:
+        raise TypeError("asymmetric_samples must use torch.bool")
+    return mask & asymmetric_samples[:, None, None, None]
+
+
 def unwrap_sana_transformer(model):
     """Return the SANA module while preserving PEFT-wrapped LoRA layers."""
     candidate = model.get_base_model() if hasattr(model, "get_base_model") else model

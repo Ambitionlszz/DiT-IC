@@ -8,6 +8,7 @@ from diffusers import AutoencoderDC, SanaTransformer2DModel
 from peft import LoraConfig, get_peft_model
 
 from decode_modes import validate_decode_checkpoint, validate_decode_mode
+from self_flow_training import resolve_self_flow_checkpoint_contract
 from .feature_relay import DecoderFeatureRelay, RELAY_MODES
 from .losses import LPIPSWithDiscriminator
 from .sana_self_flow import (
@@ -16,14 +17,11 @@ from .sana_self_flow import (
     TokenQualityConditioner,
     quality_conditioned_sana_forward,
     mix_dual_rate_tokens,
+    restrict_mask_to_asymmetric_samples,
     unwrap_sana_transformer,
 )
 from .scheduler import OneStepFlowScheduler, make_1step_sched
 
-
-SELF_FLOW_STAGE = "dual_rate_self_flow_reconstruction"
-SELF_FLOW_SCHEMA_VERSION = 5
-SELF_FLOW_MECHANISM = "iid_dual_rate_token_mix_ema_l8_l20_v2"
 
 
 def filter_supported_modules(model):
@@ -49,6 +47,17 @@ def latent_models(model, **kwargs):
     module_path, class_name = model_map[model].rsplit(".", 1)
     module = importlib.import_module(module_path)
     return getattr(module, class_name)(**kwargs)
+
+
+def merge_codec_subset(reference_view, subset_view, subset_mask):
+    """Replace selected samples without recomputing the reference subset."""
+    merged_view = {"mean": reference_view["mean"].clone(), "likelihoods": {}}
+    merged_view["mean"][subset_mask] = subset_view["mean"]
+    for name, reference_likelihood in reference_view["likelihoods"].items():
+        merged_likelihood = reference_likelihood.clone()
+        merged_likelihood[subset_mask] = subset_view["likelihoods"][name]
+        merged_view["likelihoods"][name] = merged_likelihood
+    return merged_view
 
 
 class Codec(nn.Module):
@@ -335,11 +344,15 @@ class Codec(nn.Module):
         print("[Pure SANA] Loading trained weights")
         checkpoint = torch.load(codec_path, map_location="cpu", weights_only=True)
         checkpoint_stage = checkpoint.get("stage")
+        self_flow_contract = resolve_self_flow_checkpoint_contract(
+            self.self_flow_params
+        )
+        self_flow_stage = self_flow_contract["stage"]
         if self.strict_stage_loading:
             allowed_stages = {
                 "variable_quality_codec",
                 "multirate_reconstruction",
-                SELF_FLOW_STAGE,
+                self_flow_stage,
             }
             if checkpoint_stage not in allowed_stages:
                 raise ValueError(
@@ -381,11 +394,14 @@ class Codec(nn.Module):
                         "derived from the complete q_e/q_d and w_e/w_d LIC"
                     )
             elif (
-                int(checkpoint.get("schema_version", 0)) != SELF_FLOW_SCHEMA_VERSION
-                or checkpoint.get("self_flow_mechanism") != SELF_FLOW_MECHANISM
+                int(checkpoint.get("schema_version", 0))
+                != self_flow_contract["schema_version"]
+                or checkpoint.get("self_flow_mechanism")
+                != self_flow_contract["mechanism"]
             ):
                 raise ValueError(
-                    "dual-rate Self-Flow requires its schema-version 5 checkpoint"
+                    "Self-Flow checkpoint contract mismatch: "
+                    f"expected {self_flow_contract}"
                 )
         state_key = "ema" if use_ema else "model"
         if state_key not in checkpoint:
@@ -408,7 +424,7 @@ class Codec(nn.Module):
             "state_dict_DiT",
             "state_dict_text_proj",
         }
-        if checkpoint_stage == SELF_FLOW_STAGE:
+        if checkpoint_stage == self_flow_stage:
             if not self.self_flow_enabled:
                 raise ValueError(
                     "Self-Flow checkpoint requires self_flow_params.enabled=true"
@@ -448,7 +464,7 @@ class Codec(nn.Module):
         codec_result = self.codec.load_state_dict(
             state["state_dict_codec"],
             strict=checkpoint_stage == "multirate_reconstruction"
-            or checkpoint_stage == SELF_FLOW_STAGE,
+            or checkpoint_stage == self_flow_stage,
         )
         active_codec_missing = [
             key
@@ -496,7 +512,7 @@ class Codec(nn.Module):
                 + ", ".join(unexpected_adapter_keys)
             )
         self.text_proj.load_state_dict(state["state_dict_text_proj"])
-        if checkpoint_stage == SELF_FLOW_STAGE:
+        if checkpoint_stage == self_flow_stage:
             self.quality_conditioner.load_state_dict(
                 state["state_dict_quality_conditioner"], strict=True
             )
@@ -1023,6 +1039,7 @@ class Codec(nn.Module):
         student_input="mixed",
         teacher_quality="higher",
         use_second_view=True,
+        asymmetric_samples=None,
     ):
         if not self.self_flow_enabled:
             raise RuntimeError("forward_self_flow requires self_flow_params.enabled")
@@ -1035,14 +1052,35 @@ class Codec(nn.Module):
         quality_b = self._normalize_quality_index(
             quality_b, batch_size, image.device
         )
+        if asymmetric_samples is None:
+            asymmetric_samples = torch.ones(
+                batch_size, dtype=torch.bool, device=image.device
+            )
+        elif isinstance(asymmetric_samples, torch.Tensor):
+            if asymmetric_samples.dtype != torch.bool:
+                raise TypeError("asymmetric_samples must use torch.bool")
+            asymmetric_samples = asymmetric_samples.reshape(-1).to(
+                device=image.device
+            )
+        else:
+            raise TypeError("asymmetric_samples must be a bool tensor")
+        if asymmetric_samples.shape != (batch_size,):
+            raise ValueError("asymmetric_samples must have shape [batch]")
         with torch.no_grad():
             clean_latent = self.encode_clean_latent(image)
             view_a = self.codec(clean_latent, quality_a)
-            view_b = (
-                self.codec(clean_latent, quality_b)
-                if use_second_view
-                else view_a
-            )
+            if not use_second_view or not torch.any(asymmetric_samples).item():
+                view_b = view_a
+            elif torch.all(asymmetric_samples).item():
+                view_b = self.codec(clean_latent, quality_b)
+            else:
+                asymmetric_view_b = self.codec(
+                    clean_latent[asymmetric_samples],
+                    quality_b[asymmetric_samples],
+                )
+                view_b = merge_codec_subset(
+                    view_a, asymmetric_view_b, asymmetric_samples
+                )
         latent_a = view_a["mean"]
         latent_b = view_b["mean"]
         generator = torch.Generator(device=latent_a.device)
@@ -1056,6 +1094,7 @@ class Codec(nn.Module):
             mask = torch.zeros_like(mask)
         elif student_input != "mixed":
             raise ValueError("student_input must be mixed or uniform")
+        mask = restrict_mask_to_asymmetric_samples(mask, asymmetric_samples)
         mixed_latent, quality_map = mix_dual_rate_tokens(
             latent_a, latent_b, quality_a, quality_b, mask
         )
@@ -1084,6 +1123,7 @@ class Codec(nn.Module):
             "likelihoods_b": view_b["likelihoods"],
             "mask": mask,
             "quality_map": quality_map,
+            "asymmetric_samples": asymmetric_samples,
         }
 
     def encode_clean_latent(self, image):
