@@ -402,7 +402,8 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         self.assertIn('"variable_rate_mechanism": VARIABLE_RATE_MECHANISM', source)
         self.assertIn('"objective_contract": objective_contract(config)', source)
-        self.assertIn('"dists_input_range": "minus_one_to_one"', source)
+        self.assertIn('"dists_input_range": "zero_to_one"', source)
+        self.assertIn('"dists_input_contract": DISTS_INPUT_CONTRACT', source)
         self.assertIn(
             'resume.get("initialization_contract") != initialization_contract(config)',
             source,
@@ -615,6 +616,32 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertNotIn("E2E_GAN_CONFIG", launcher)
         self.assertIn('if [[ "${stop_after_nogan}" == true ]]', pipeline)
 
+    def test_dists_fix_run_changes_only_name_and_audit_tags(self):
+        control = yaml.safe_load(
+            (
+                ROOT
+                / "configs"
+                / "multirate_e2e_warmup_nogan_historical_entropy_200k.yaml"
+            ).read_text(encoding="utf-8")
+        )
+        treatment = yaml.safe_load(
+            (
+                ROOT
+                / "configs"
+                / "multirate_e2e_warmup_nogan_historical_entropy_dists01_fix_200k.yaml"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            treatment.pop("experiment_contract"),
+            {
+                "control_run": "multirate_e2e_warmup_nogan_historical_entropy_200k",
+                "entropy_update_mode": "historical_pre_main",
+                "dists_input_contract": "rgb_0_1_from_minus1_1_v1",
+            },
+        )
+        treatment["train"]["exp_name"] = control["train"]["exp_name"]
+        self.assertEqual(treatment, control)
+
     def test_stage1_historical_entropy_order_matches_pre_fix_semantics(self):
         source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
@@ -725,21 +752,33 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("return distortion + rate_lambda * rate", function_source)
         self.assertNotIn("distortion / rate_lambda", function_source)
 
-    def test_lic_dists_training_matches_baseline_minus_one_to_one_range(self):
-        losses_source = (ROOT / "models" / "losses.py").read_text(
-            encoding="utf-8"
-        )
+    def test_lic_dists_training_uses_zero_to_one_range(self):
+        import torch
+
+        from models.losses import DISTS_INPUT_CONTRACT, prepare_dists_input
+
+        losses_source = (ROOT / "models" / "losses.py").read_text(encoding="utf-8")
         training_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            "self.dists(\n                    inputs.contiguous(),", losses_source
+        self.assertIn("prepare_dists_input(inputs.contiguous())", losses_source)
+        self.assertIn("prepare_dists_input(reference)", training_source)
+        self.assertIn('"dists_input_range": "zero_to_one"', training_source)
+        self.assertNotIn(
+            '"dists_input_range": "minus_one_to_one"', training_source
         )
-        self.assertIn(
-            "dists_loss = self.dists(reference, reconstruction).mean()",
-            training_source,
+        image = torch.tensor([-1.0, 0.0, 1.0, 2.0], requires_grad=True)
+        converted = prepare_dists_input(image)
+        torch.testing.assert_close(
+            converted, torch.tensor([0.0, 0.5, 1.0, 1.0])
         )
-        self.assertNotIn("def _dists_inputs", losses_source)
+        converted[:3].sum().backward()
+        torch.testing.assert_close(
+            image.grad, torch.tensor([0.5, 0.5, 0.5, 0.0])
+        )
+        self.assertEqual(
+            DISTS_INPUT_CONTRACT, "rgb_0_1_from_minus1_1_v1"
+        )
 
     def test_direct_lic_evaluator_round_trips_serialized_rans_packet(self):
         source = (

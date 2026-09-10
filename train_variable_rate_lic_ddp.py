@@ -32,6 +32,7 @@ from torchvision import transforms
 import yaml
 
 from datasets.image import ImageFolder
+from models.losses import DISTS_INPUT_CONTRACT, prepare_dists_input
 from models.latent_codec import LatentCodec
 from train_nogan_ddp import (
     HISTORICAL_ENTROPY_UPDATE,
@@ -185,7 +186,8 @@ def objective_contract(config, include_adversarial=True):
             "lpips_weight": float(phase_b["lpips_weight"]),
             "dists_weight": float(phase_b["dists_weight"]),
             "lpips_input_range": "minus_one_to_one",
-            "dists_input_range": "minus_one_to_one",
+            "dists_input_range": "zero_to_one",
+            "dists_input_contract": DISTS_INPUT_CONTRACT,
         },
     }
     entropy_update_mode = configured_entropy_update(config)
@@ -319,7 +321,10 @@ class PhaseBPerceptualLosses(nn.Module):
 
     def forward(self, reference, reconstruction):
         lpips_loss = self.lpips(reference, reconstruction).mean()
-        dists_loss = self.dists(reference, reconstruction).mean()
+        dists_loss = self.dists(
+            prepare_dists_input(reference),
+            prepare_dists_input(reconstruction),
+        ).mean()
         return lpips_loss, dists_loss
 
 

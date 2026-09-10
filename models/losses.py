@@ -8,6 +8,14 @@ import torch.nn.functional as F
 from taming.modules.losses.vqperceptual import *
 
 
+DISTS_INPUT_CONTRACT = "rgb_0_1_from_minus1_1_v1"
+
+
+def prepare_dists_input(image: torch.Tensor) -> torch.Tensor:
+    """Map normalized RGB tensors to the DISTS zero-to-one domain."""
+    return image.add(1.0).mul(0.5).clamp(0.0, 1.0)
+
+
 class LPIPSWithDiscriminator(nn.Module):
     def __init__(
         self,
@@ -129,8 +137,8 @@ class LPIPSWithDiscriminator(nn.Module):
             rec_loss = (inputs.contiguous() - reconstructions.contiguous()) ** 2
             if self.perceptual_weight > 0:
                 dists_loss = self.dists(
-                    inputs.contiguous(),
-                    reconstructions.contiguous(),
+                    prepare_dists_input(inputs.contiguous()),
+                    prepare_dists_input(reconstructions.contiguous()),
                 )
                 perceptual_loss = self.perceptual_loss(
                     inputs.contiguous(),
@@ -149,8 +157,8 @@ class LPIPSWithDiscriminator(nn.Module):
             rec_loss = torch.abs(inputs.contiguous() - reconstructions.contiguous())
             if self.perceptual_weight > 0:
                 dists_loss = self.dists(
-                    inputs.contiguous(),
-                    reconstructions.contiguous(),
+                    prepare_dists_input(inputs.contiguous()),
+                    prepare_dists_input(reconstructions.contiguous()),
                 )
                 perceptual_loss = self.perceptual_loss(
                     inputs.contiguous(),

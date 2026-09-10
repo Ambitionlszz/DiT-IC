@@ -29,6 +29,7 @@ from collections import OrderedDict
 
 from datasets.image import ImageFolder
 from config_compat import normalize_pure_sana_config
+from models.losses import DISTS_INPUT_CONTRACT
 
 
 MULTIRATE_CHECKPOINT_SCHEMA_VERSION = 3
@@ -610,6 +611,7 @@ def do_train(rank, local_rank, world_size, train_config):
             "entropy_update_mode": entropy_update_mode,
             "entropy_optimizer_version": entropy_optimizer_version,
             "entropy_parameter_signature": entropy_parameter_signature,
+            "dists_input_contract": DISTS_INPUT_CONTRACT,
         }
         if opt_entropy is not None:
             entropy_state = opt_entropy.state_dict()
