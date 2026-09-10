@@ -253,6 +253,13 @@ def select_post_burnin_best(
     return (test_loss if is_best else best_loss), is_best
 
 
+def zero_connect_feature(base_loss, feature):
+    """Keep optimizer state in step-sync while a feature loss is gated off."""
+    if feature is None:
+        return base_loss
+    return base_loss + feature.sum() * 0.0
+
+
 def all_token_representation_loss(student_feature, teacher_feature):
     if student_feature.shape != teacher_feature.shape:
         raise ValueError(

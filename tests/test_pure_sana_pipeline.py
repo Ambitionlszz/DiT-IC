@@ -168,11 +168,14 @@ class PureSanaStructureTest(unittest.TestCase):
             "entropy_loss.backward()",
             entropy_zero,
         )
-        entropy_step = train_source.index("opt_entropy.step()")
-        entropy_log = train_source.index(
-            "running_entropy_loss += entropy_loss.item()"
+        entropy_step = train_source.index(
+            "opt_entropy.step()",
+            entropy_backward,
         )
-        next_train_step = train_source.index("train_steps += 1")
+        entropy_log = train_source.index(
+            "running_entropy_loss += (",
+            entropy_step,
+        )
 
         self.assertLess(main_backward, main_clip)
         self.assertLess(main_clip, global_clip_parameters)
@@ -186,12 +189,76 @@ class PureSanaStructureTest(unittest.TestCase):
         self.assertLess(entropy_step, entropy_log)
         self.assertNotIn(
             "opt_entropy.zero_grad",
-            train_source[entropy_step:next_train_step],
+            train_source[entropy_step:entropy_log],
         )
         self.assertIn("Aux:", train_source)
         self.assertNotIn("Entropy(post-step)", train_source)
         self.assertIn(
             "Entropy updates: official DiT-IC NoGAN order ",
+            source,
+        )
+
+    def test_historical_entropy_aux_step_matches_pre_fix_semantics(self):
+        source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        do_train = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "do_train"
+        )
+        train_source = ast.get_source_segment(source, do_train)
+
+        main_backward = train_source.index("loss.backward()")
+        historical_branch = train_source.index(
+            "if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:",
+            main_backward,
+        )
+        entropy_objective = train_source.index(
+            "model.module.codec.entropy_bottleneck_loss()",
+            historical_branch,
+        )
+        accumulation_scale = train_source.index(
+            "/ accumulation_steps",
+            entropy_objective,
+        )
+        entropy_backward = train_source.index(
+            "entropy_loss.backward()",
+            accumulation_scale,
+        )
+        main_clip = train_source.index("clip_grad_norm_(", entropy_backward)
+        global_clip_parameters = train_source.index(
+            "model.parameters()",
+            main_clip,
+        )
+        main_step = train_source.index("opt.step()", global_clip_parameters)
+        historical_step_branch = train_source.index(
+            "if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:",
+            main_step,
+        )
+        entropy_step = train_source.index(
+            "opt_entropy.step()",
+            historical_step_branch,
+        )
+        main_zero = train_source.index(
+            "opt.zero_grad(set_to_none=True)",
+            entropy_step,
+        )
+        entropy_zero = train_source.index(
+            "opt_entropy.zero_grad(set_to_none=True)",
+            main_zero,
+        )
+
+        self.assertLess(main_backward, entropy_objective)
+        self.assertLess(entropy_objective, accumulation_scale)
+        self.assertLess(accumulation_scale, entropy_backward)
+        self.assertLess(entropy_backward, main_clip)
+        self.assertLess(main_clip, global_clip_parameters)
+        self.assertLess(global_clip_parameters, main_step)
+        self.assertLess(main_step, entropy_step)
+        self.assertLess(entropy_step, main_zero)
+        self.assertLess(main_zero, entropy_zero)
+        self.assertIn(
+            "Entropy updates: historical pre-fix order ",
             source,
         )
 
@@ -264,7 +331,7 @@ class PureSanaStructureTest(unittest.TestCase):
         train_source = ast.get_source_segment(source, do_train)
 
         self.assertIn(
-            "saved_entropy_version == ENTROPY_OPTIMIZER_VERSION",
+            "saved_entropy_version == entropy_optimizer_version",
             train_source,
         )
         self.assertIn(

@@ -22,6 +22,7 @@ from self_flow_training import (
     select_post_burnin_best,
     self_flow_schedule,
     validate_self_flow_config,
+    zero_connect_feature,
 )
 from train_nogan_ddp import load_config
 
@@ -426,6 +427,26 @@ def test_rate_anchored_trainer_uses_one_student_and_teacher_subbatch():
         'self_flow_output["student_feature"][representation_samples]'
         in train_source.replace("\n", "").replace(" ", "")
     )
+    assert "zero_connect_feature(" in train_source
+    launcher_source = (ROOT / "scripts" / "run_variable_rate_train.sh").read_text()
+    assert "rate-anchored-self-flow)" in launcher_source
+
+
+def test_rate_anchored_warmup_advances_projector_optimizer_state():
+    projector = nn.Linear(4, 4)
+    optimizer = torch.optim.AdamW(
+        projector.parameters(), lr=1e-4, weight_decay=0.0
+    )
+    feature = projector(torch.ones(2, 4))
+    base_loss = torch.ones((), requires_grad=True)
+
+    loss = zero_connect_feature(base_loss, feature)
+    loss.backward()
+
+    assert projector.weight.grad is not None
+    assert torch.count_nonzero(projector.weight.grad).item() == 0
+    optimizer.step()
+    assert optimizer.state[projector.weight]["step"].item() == 1
 
 
 def test_ablation_configs_share_every_non_mechanism_training_setting():

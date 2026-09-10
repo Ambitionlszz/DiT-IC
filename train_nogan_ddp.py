@@ -27,6 +27,7 @@ from copy import deepcopy
 from collections import OrderedDict
 
 from datasets.image import ImageFolder
+from models.losses import DISTS_INPUT_CONTRACT
 from config_compat import load_pure_sana_config
 from self_flow_training import (
     resolve_self_flow_checkpoint_contract,
@@ -39,6 +40,7 @@ from self_flow_training import (
     select_post_burnin_best,
     self_flow_schedule,
     validate_self_flow_config,
+    zero_connect_feature,
 )
 
 
@@ -50,6 +52,25 @@ VARIABLE_RATE_MECHANISM = "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2"
 # Version 4 follows the official DiT-IC NoGAN order: main backward/clip/step,
 # then recompute and update the entropy-bottleneck quantiles.
 ENTROPY_OPTIMIZER_VERSION = 4
+HISTORICAL_ENTROPY_OPTIMIZER_VERSION = 3
+OFFICIAL_ENTROPY_UPDATE = "official_post_main"
+HISTORICAL_ENTROPY_UPDATE = "historical_pre_main"
+SUPPORTED_ENTROPY_UPDATES = {
+    OFFICIAL_ENTROPY_UPDATE,
+    HISTORICAL_ENTROPY_UPDATE,
+}
+
+
+def configured_entropy_update(config):
+    mode = config.get("optimizer", {}).get(
+        "entropy_update_mode", OFFICIAL_ENTROPY_UPDATE
+    )
+    if mode not in SUPPORTED_ENTROPY_UPDATES:
+        raise ValueError(
+            "optimizer.entropy_update_mode must be one of "
+            f"{sorted(SUPPORTED_ENTROPY_UPDATES)}, got {mode!r}"
+        )
+    return mode
 
 
 def file_sha256(path):
@@ -127,6 +148,12 @@ def move_to_device(obj, device):
 
 def do_train(rank, local_rank, world_size, train_config):
     device = f'cuda:{local_rank}'
+    entropy_update_mode = configured_entropy_update(train_config)
+    entropy_optimizer_version = (
+        ENTROPY_OPTIMIZER_VERSION
+        if entropy_update_mode == OFFICIAL_ENTROPY_UPDATE
+        else HISTORICAL_ENTROPY_OPTIMIZER_VERSION
+    )
     quality_config = train_config.get("quality_control", {})
     multirate_plain = bool(quality_config.get("enabled", False))
     num_quality_levels = int(quality_config.get("num_levels", 0))
@@ -363,10 +390,17 @@ def do_train(rank, local_rank, world_size, train_config):
         else None
     )
     if rank == 0:
-        logger.info(
-            "Entropy updates: official DiT-IC NoGAN order "
-            "(global model clip, post-main auxiliary step)"
-        )
+        if entropy_update_mode == OFFICIAL_ENTROPY_UPDATE:
+            logger.info(
+                "Entropy updates: official DiT-IC NoGAN order "
+                "(global model clip, post-main auxiliary step)"
+            )
+        else:
+            logger.info(
+                "Entropy updates: historical pre-fix order "
+                "(pre-main accumulated auxiliary backward, global model clip, "
+                "then main and auxiliary steps)"
+            )
     
     milestones = train_config["optimizer"]["step_lr"]
     gammas = train_config["optimizer"].get(
@@ -607,6 +641,15 @@ def do_train(rank, local_rank, world_size, train_config):
                     "Legacy checkpoint has no discriminator weights; "
                     "starting the discriminator from its fresh initialization."
                 )
+            saved_entropy_update_mode = checkpoint.get(
+                "entropy_update_mode", OFFICIAL_ENTROPY_UPDATE
+            )
+            if saved_entropy_update_mode != entropy_update_mode:
+                raise ValueError(
+                    "resume checkpoint entropy update mode does not match config: "
+                    f"checkpoint={saved_entropy_update_mode!r}, "
+                    f"config={entropy_update_mode!r}"
+                )
             entropy_state = checkpoint.get("opt_entropy", checkpoint.get("opt_aux"))
             if opt_entropy is not None and entropy_state is not None:
                 saved_entropy_version = checkpoint.get("entropy_optimizer_version")
@@ -616,7 +659,7 @@ def do_train(rank, local_rank, world_size, train_config):
                 # Legacy moments were accumulated while entropy gradients
                 # participated in model-wide clipping.
                 if (
-                    saved_entropy_version == ENTROPY_OPTIMIZER_VERSION
+                    saved_entropy_version == entropy_optimizer_version
                     and saved_entropy_signature == entropy_parameter_signature
                 ):
                     opt_entropy.load_state_dict(entropy_state)
@@ -698,8 +741,10 @@ def do_train(rank, local_rank, world_size, train_config):
             "entropy_bottleneck_loss": float(
                 model.module.codec.entropy_bottleneck_loss().detach().item()
             ),
-            "entropy_optimizer_version": ENTROPY_OPTIMIZER_VERSION,
+            "entropy_update_mode": entropy_update_mode,
+            "entropy_optimizer_version": entropy_optimizer_version,
             "entropy_parameter_signature": entropy_parameter_signature,
+            "dists_input_contract": DISTS_INPUT_CONTRACT,
         }
         if opt_entropy is not None:
             entropy_state = opt_entropy.state_dict()
@@ -981,7 +1026,13 @@ def do_train(rank, local_rank, world_size, train_config):
                 else:
                     representation_loss = torch.zeros((), device=x.device)
                     gamma = 0.0
-                    loss = base_loss
+                    loss = (
+                        zero_connect_feature(
+                            base_loss, self_flow_output["student_feature"]
+                        )
+                        if rate_anchored_enabled
+                        else base_loss
+                    )
                 legal_bpp_a = likelihood_bpp(
                     self_flow_output["likelihoods_a"], x
                 )
@@ -1081,6 +1132,22 @@ def do_train(rank, local_rank, world_size, train_config):
 
             # ---- backward pass (accumulate gradients) ----
             loss.backward()
+
+            if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:
+                if opt_entropy is not None:
+                    entropy_loss = (
+                        model.module.codec.entropy_bottleneck_loss()
+                        / accumulation_steps
+                    )
+                    if not torch.isfinite(entropy_loss).item():
+                        raise FloatingPointError(
+                            "Entropy-bottleneck loss became non-finite before "
+                            f"the historical auxiliary update at step {train_steps}"
+                        )
+                    entropy_loss.backward()
+                else:
+                    entropy_loss = torch.tensor(0.0, device=x.device)
+                running_entropy_loss += entropy_loss.item() * accumulation_steps
             if self_flow_enabled:
                 model.module.__dict__["_self_flow_probe_feature"] = None
 
@@ -1134,23 +1201,28 @@ def do_train(rank, local_rank, world_size, train_config):
                         decay=teacher_ema_decay,
                     )
 
-                # Official DiT-IC NoGAN ordering: recompute the quantile
-                # objective after the main entropy-model parameters move.
-                if opt_entropy is not None:
-                    entropy_loss = (
-                        model.module.codec.entropy_bottleneck_loss()
-                    )
-                    if not torch.isfinite(entropy_loss).item():
-                        raise FloatingPointError(
-                            "Entropy-bottleneck loss became non-finite before "
-                            f"the auxiliary update at step {train_steps}"
-                        )
-                    opt_entropy.zero_grad(set_to_none=True)
-                    entropy_loss.backward()
-                    opt_entropy.step()
+                if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:
+                    if opt_entropy is not None:
+                        opt_entropy.step()
                 else:
-                    entropy_loss = torch.tensor(0.0, device=x.device)
-                running_entropy_loss += entropy_loss.item() * accumulation_steps
+                    # Official DiT-IC NoGAN ordering: recompute after the main step.
+                    if opt_entropy is not None:
+                        entropy_loss = (
+                            model.module.codec.entropy_bottleneck_loss()
+                        )
+                        if not torch.isfinite(entropy_loss).item():
+                            raise FloatingPointError(
+                                "Entropy-bottleneck loss became non-finite before "
+                                f"the auxiliary update at step {train_steps}"
+                            )
+                        opt_entropy.zero_grad(set_to_none=True)
+                        entropy_loss.backward()
+                        opt_entropy.step()
+                    else:
+                        entropy_loss = torch.tensor(0.0, device=x.device)
+                    running_entropy_loss += (
+                        entropy_loss.item() * accumulation_steps
+                    )
 
                 # Discriminator step
                 if run_discriminator:
@@ -1170,6 +1242,11 @@ def do_train(rank, local_rank, world_size, train_config):
 
                 # Zero all gradients for next accumulation cycle
                 opt.zero_grad(set_to_none=True)
+                if (
+                    entropy_update_mode == HISTORICAL_ENTROPY_UPDATE
+                    and opt_entropy is not None
+                ):
+                    opt_entropy.zero_grad(set_to_none=True)
                 opt_disc.zero_grad(set_to_none=True)
 
                 train_steps += 1

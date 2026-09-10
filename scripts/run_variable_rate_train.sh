@@ -45,6 +45,11 @@ case "${stage}" in
     config=configs/dual_rate_self_flow_full.yaml
     default_per_gpu_batch_size=8
     ;;
+  rate-anchored-self-flow)
+    trainer=train_nogan_ddp.py
+    config=configs/rate_anchored_self_flow_full.yaml
+    default_per_gpu_batch_size=8
+    ;;
   self-flow-posttrain-control)
     trainer=train_nogan_ddp.py
     config=configs/dual_rate_self_flow_posttrain_control.yaml
@@ -71,7 +76,7 @@ case "${stage}" in
     default_per_gpu_batch_size=8
     ;;
   *)
-    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-adv-phase2, plain-smoke, plain, plain-adv, self-flow-full, self-flow-posttrain-control, self-flow-q-only, self-flow-mix-only, self-flow-distill-only, self-flow-same-rate-teacher" >&2
+    echo "STAGE must be one of: lic-smoke, lic-pilot, lic-main, lic-adv-phase2, plain-smoke, plain, plain-adv, self-flow-full, rate-anchored-self-flow, self-flow-posttrain-control, self-flow-q-only, self-flow-mix-only, self-flow-distill-only, self-flow-same-rate-teacher" >&2
     exit 2
     ;;
 esac

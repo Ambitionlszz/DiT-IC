@@ -179,7 +179,7 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("num_gpus < 1 || num_gpus > 2", launcher)
         self.assertIn("--nproc_per_node=\"${num_gpus}\"", launcher)
         self.assertNotIn("default_per_gpu_batch_size=16", launcher)
-        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 13)
+        self.assertEqual(launcher.count("default_per_gpu_batch_size=8"), 14)
         self.assertIn(
             "per_gpu_batch_size=${PER_GPU_BATCH_SIZE:-${default_per_gpu_batch_size}}",
             launcher,
@@ -398,7 +398,8 @@ class VariableRateStructureTest(unittest.TestCase):
         )
         self.assertIn('"variable_rate_mechanism": VARIABLE_RATE_MECHANISM', source)
         self.assertIn('"objective_contract": objective_contract(config)', source)
-        self.assertIn('"dists_input_range": "minus_one_to_one"', source)
+        self.assertIn('"dists_input_range": "zero_to_one"', source)
+        self.assertIn('"dists_input_contract": DISTS_INPUT_CONTRACT', source)
         self.assertIn(
             'resume.get("initialization_contract") != initialization_contract(config)',
             source,
@@ -492,21 +493,56 @@ class VariableRateStructureTest(unittest.TestCase):
         self.assertIn("return distortion + rate_lambda * rate", function_source)
         self.assertNotIn("distortion / rate_lambda", function_source)
 
-    def test_lic_dists_training_matches_baseline_minus_one_to_one_range(self):
+    def test_old_and_new_entropy_update_modes_are_explicit(self):
+        nogan_source = (ROOT / "train_nogan_ddp.py").read_text(encoding="utf-8")
+        lic_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
+            encoding="utf-8"
+        )
+        for token in (
+            "historical_pre_main",
+            "official_post_main",
+            "configured_entropy_update",
+            '"entropy_update_mode": entropy_update_mode',
+            "saved_entropy_update_mode != entropy_update_mode",
+        ):
+            self.assertIn(token, nogan_source)
+        self.assertIn(
+            "if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:",
+            lic_source,
+        )
+        self.assertIn(
+            "if entropy_update_mode != HISTORICAL_ENTROPY_UPDATE:",
+            lic_source,
+        )
+
+    def test_lic_dists_training_uses_zero_to_one_range(self):
         losses_source = (ROOT / "models" / "losses.py").read_text(
             encoding="utf-8"
         )
         training_source = (ROOT / "train_variable_rate_lic_ddp.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            "self.dists(\n                    inputs.contiguous(),", losses_source
+        self.assertIn("prepare_dists_input(inputs.contiguous())", losses_source)
+        self.assertIn("prepare_dists_input(reference)", training_source)
+        self.assertIn('"dists_input_range": "zero_to_one"', training_source)
+        self.assertNotIn(
+            '"dists_input_range": "minus_one_to_one"', training_source
         )
-        self.assertIn(
-            "dists_loss = self.dists(reference, reconstruction).mean()",
-            training_source,
+        import torch
+        from models.losses import DISTS_INPUT_CONTRACT, prepare_dists_input
+
+        image = torch.tensor([-1.0, 0.0, 1.0, 2.0], requires_grad=True)
+        converted = prepare_dists_input(image)
+        torch.testing.assert_close(
+            converted, torch.tensor([0.0, 0.5, 1.0, 1.0])
         )
-        self.assertNotIn("def _dists_inputs", losses_source)
+        converted[:3].sum().backward()
+        torch.testing.assert_close(
+            image.grad, torch.tensor([0.5, 0.5, 0.5, 0.0])
+        )
+        self.assertEqual(
+            DISTS_INPUT_CONTRACT, "rgb_0_1_from_minus1_1_v1"
+        )
 
     def test_direct_lic_evaluator_round_trips_serialized_rans_packet(self):
         source = (

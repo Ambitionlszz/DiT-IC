@@ -32,9 +32,12 @@ from torchvision import transforms
 import yaml
 
 from datasets.image import ImageFolder
+from models.losses import DISTS_INPUT_CONTRACT, prepare_dists_input
 from models.latent_codec import LatentCodec
 from train_nogan_ddp import (
+    HISTORICAL_ENTROPY_UPDATE,
     ResizeIfSmall,
+    configured_entropy_update,
     my_worker_init_fn,
     sample_shared_quality_index,
     set_seed,
@@ -128,6 +131,7 @@ def load_config(path, calibration_confirmed=False):
         raise ValueError("scratch Stage 1 must not define model.source_checkpoint")
     if (model_config.get("vae_params") or {}).get("vae_lora", False):
         raise ValueError("scratch Stage 1 uses the frozen pretrained VAE without LoRA")
+    configured_entropy_update(config)
     return config
 
 
@@ -176,9 +180,13 @@ def objective_contract(config, include_adversarial=True):
             "lpips_weight": float(phase_b["lpips_weight"]),
             "dists_weight": float(phase_b["dists_weight"]),
             "lpips_input_range": "minus_one_to_one",
-            "dists_input_range": "minus_one_to_one",
+            "dists_input_range": "zero_to_one",
+            "dists_input_contract": DISTS_INPUT_CONTRACT,
         },
     }
+    entropy_update_mode = configured_entropy_update(config)
+    if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:
+        contract["entropy_update_mode"] = entropy_update_mode
     if include_adversarial and adversarial_enabled(config):
         adversarial = phase_b["adversarial"]
         contract["phase_b"]["adversarial"] = {
@@ -307,7 +315,10 @@ class PhaseBPerceptualLosses(nn.Module):
 
     def forward(self, reference, reconstruction):
         lpips_loss = self.lpips(reference, reconstruction).mean()
-        dists_loss = self.dists(reference, reconstruction).mean()
+        dists_loss = self.dists(
+            prepare_dists_input(reference),
+            prepare_dists_input(reconstruction),
+        ).mean()
         return lpips_loss, dists_loss
 
 
@@ -541,6 +552,7 @@ def evaluate_with_codec_state(
 def train(rank, local_rank, world_size, config):
     device = torch.device(f"cuda:{local_rank}")
     train_config = config["train"]
+    entropy_update_mode = configured_entropy_update(config)
     output_dir = Path(train_config["output_dir"]) / train_config["exp_name"]
     checkpoint_dir = output_dir / "checkpoints"
     if rank == 0:
@@ -868,12 +880,13 @@ def train(rank, local_rank, world_size, config):
     if rank == 0:
         logger.info(
             "starting phase=%s global_step=%d phase_step=%d phase_a_steps=%d "
-            "phase_b_steps=%d",
+            "phase_b_steps=%d entropy_update_mode=%s",
             training_phase(train_steps, phase_a_steps),
             train_steps,
             phase_step(train_steps, phase_a_steps),
             phase_a_steps,
             phase_b_steps,
+            entropy_update_mode,
         )
 
     while train_steps < max_steps:
@@ -945,6 +958,14 @@ def train(rank, local_rank, world_size, config):
                 adaptive_weight = generator_stats["adaptive_weight"]
                 disc_factor = generator_stats["disc_factor"]
             (loss / accumulation_steps).backward()
+            if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:
+                entropy_loss = (
+                    model.module.codec.entropy_bottleneck_loss()
+                    / accumulation_steps
+                )
+                if not torch.isfinite(entropy_loss).item():
+                    raise FloatingPointError("non-finite entropy-bottleneck loss")
+                entropy_loss.backward()
             if current_phase == PHASE_B and adversarial_loss is not None:
                 discriminator_loss, discriminator_stats = (
                     adversarial_loss.discriminator_loss(
@@ -990,11 +1011,12 @@ def train(rank, local_rank, world_size, config):
             )
             optimizer.step()
             scheduler.step()
-            entropy_loss = model.module.codec.entropy_bottleneck_loss()
-            if not torch.isfinite(entropy_loss).item():
-                raise FloatingPointError("non-finite entropy-bottleneck loss")
-            entropy_optimizer.zero_grad(set_to_none=True)
-            entropy_loss.backward()
+            if entropy_update_mode != HISTORICAL_ENTROPY_UPDATE:
+                entropy_loss = model.module.codec.entropy_bottleneck_loss()
+                if not torch.isfinite(entropy_loss).item():
+                    raise FloatingPointError("non-finite entropy-bottleneck loss")
+                entropy_optimizer.zero_grad(set_to_none=True)
+                entropy_loss.backward()
             entropy_optimizer.step()
             if current_phase == PHASE_B and discriminator_optimizer is not None:
                 torch.nn.utils.clip_grad_norm_(
@@ -1004,6 +1026,8 @@ def train(rank, local_rank, world_size, config):
                 discriminator_optimizer.step()
                 discriminator_scheduler.step()
             optimizer.zero_grad(set_to_none=True)
+            if entropy_update_mode == HISTORICAL_ENTROPY_UPDATE:
+                entropy_optimizer.zero_grad(set_to_none=True)
             if discriminator_optimizer is not None:
                 discriminator_optimizer.zero_grad(set_to_none=True)
             update_codec_ema(ema_codec, model.module.codec)
