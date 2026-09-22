@@ -16,6 +16,7 @@ from models.sana_self_flow import (
 from self_flow_training import (
     all_token_representation_loss,
     resolve_self_flow_checkpoint_contract,
+    resolve_gradient_balanced_weight,
     sample_iid_uniform_pairs,
     sample_rate_anchored_pairs,
     sample_reflected_adjacent_pairs,
@@ -113,6 +114,30 @@ def test_rate_anchored_sampler_is_exact_and_preserves_subset_marginals():
         atol=0.001,
         rtol=0,
     )
+
+
+def test_iid_uniform_distinct_sampler_excludes_diagonal_uniformly():
+    generator = torch.Generator().manual_seed(5513)
+    quality_a, quality_b = sample_iid_uniform_pairs(
+        600_000, 6, generator, exclude_same_rate=True
+    )
+    assert not torch.any(quality_a == quality_b)
+    counts = torch.bincount(quality_a * 6 + quality_b, minlength=36).reshape(6, 6)
+    expected = torch.full((6, 6), 1 / 30)
+    expected.fill_diagonal_(0)
+    distribution = counts.float() / counts.sum()
+    assert torch.allclose(distribution, expected, atol=0.001, rtol=0)
+
+
+def test_rate_anchored_distinct_sampler_has_exact_partitions():
+    generator = torch.Generator().manual_seed(7129)
+    quality_a, quality_b, asymmetric = sample_rate_anchored_pairs(
+        80_000, 6, 0.5, generator, exclude_same_rate=True
+    )
+    assert asymmetric.sum().item() == 40_000
+    assert torch.equal(quality_a[~asymmetric], quality_b[~asymmetric])
+    assert not torch.any(quality_a[asymmetric] == quality_b[asymmetric])
+
 
 
 def test_codec_subset_merge_reuses_anchor_view_exactly():
@@ -447,6 +472,76 @@ def test_rate_anchored_warmup_advances_projector_optimizer_state():
     assert torch.count_nonzero(projector.weight.grad).item() == 0
     optimizer.step()
     assert optimizer.state[projector.weight]["step"].item() == 1
+
+
+def test_gradient_balanced_weight_hits_target_and_respects_cap():
+    resolved, raw_target, cap = resolve_gradient_balanced_weight(
+        target_base_norm=1.0,
+        target_representation_norm=0.01,
+        cap_base_norm=1.0,
+        cap_representation_norm=0.01,
+        target_gradient_ratio=0.05,
+        maximum_gradient_ratio=0.1,
+        minimum_weight=0.01,
+        maximum_weight=10.0,
+    )
+    assert resolved == raw_target == 5.0
+    assert cap == 10.0
+
+    resolved, raw_target, cap = resolve_gradient_balanced_weight(
+        target_base_norm=1.0,
+        target_representation_norm=0.01,
+        cap_base_norm=1.0,
+        cap_representation_norm=0.1,
+        target_gradient_ratio=0.05,
+        maximum_gradient_ratio=0.1,
+        minimum_weight=0.01,
+        maximum_weight=10.0,
+    )
+    assert raw_target == 5.0
+    assert cap == resolved == 1.0
+
+
+def test_fixed4_config_preserves_baseline_training_contract():
+    config = load_config(
+        str(
+            ROOT
+            / "configs"
+            / "self_flow_fixed4_fullfrom0_officialentropy_dists01_100k.yaml"
+        )
+    )
+    self_flow = validate_self_flow_config(config)
+    assert self_flow["training_distribution"] == "rate_anchored"
+    assert self_flow["legal_anchor_ratio"] == 0.5
+    assert self_flow["exclude_same_rate_pairs"] is True
+    assert self_flow["projector_trainable"] is False
+    assert self_flow["adaptive_representation_weight"] is True
+    assert self_flow["rep_gradient_ratio_target"] == 0.05
+    assert self_flow["rep_gradient_ratio_max"] == 0.1
+    assert self_flow["uniform_warmup_steps"] == 0
+    assert self_flow["ramp_steps"] == 0
+    assert config["train"]["per_gpu_batch_size"] == 8
+    assert config["train"]["accumulation_steps"] == 1
+    assert config["train"]["max_steps"] == 100_000
+    assert config["optimizer"]["dit_lr"] == 1e-4
+    assert config["optimizer"]["vae_lr"] == 1e-5
+    assert config["optimizer"]["condition_lr"] == 1e-4
+    assert config["model"]["params"]["codec_path"].endswith(
+        "multirate_e2e_warmup_nogan_official_entropy_dists01_fix_200k/"
+        "checkpoints/0200000.pt"
+    )
+
+
+def test_fixed4_projector_is_frozen_and_adaptive_weight_is_periodic():
+    model_source = (ROOT / "models" / "DiT_IC.py").read_text()
+    assert 'self_flow_params.get("projector_trainable", True)' in model_source
+    assert "self.representation_projector.requires_grad_(False)" in model_source
+
+    trainer_source = (ROOT / "train_nogan_ddp.py").read_text()
+    assert "adaptive_update_step % rep_weight_update_every == 0" in trainer_source
+    assert "resolve_gradient_balanced_weight(" in trainer_source
+    assert "asymmetric_same_rate_fraction" in trainer_source
+
 
 
 def test_ablation_configs_share_every_non_mechanism_training_setting():

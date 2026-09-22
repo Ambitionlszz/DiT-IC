@@ -15,10 +15,26 @@ RATE_ANCHORED_SELF_FLOW_MECHANISM = (
     "rate_anchored_iid_dual_rate_token_mix_ema_l8_l20_v1"
 )
 
+DISTINCT_RATE_ANCHORED_SELF_FLOW_CHECKPOINT_SCHEMA_VERSION = 7
+DISTINCT_RATE_ANCHORED_SELF_FLOW_STAGE = (
+    "distinct_rate_anchored_self_flow_reconstruction"
+)
+DISTINCT_RATE_ANCHORED_SELF_FLOW_MECHANISM = (
+    "rate_anchored_iid_off_diagonal_token_mix_ema_l8_l20_v2"
+)
+
 
 def resolve_self_flow_checkpoint_contract(config):
     distribution = config.get("training_distribution", "fully_asymmetric")
     if distribution == "rate_anchored":
+        if bool(config.get("exclude_same_rate_pairs", False)):
+            return {
+                "schema_version": (
+                    DISTINCT_RATE_ANCHORED_SELF_FLOW_CHECKPOINT_SCHEMA_VERSION
+                ),
+                "stage": DISTINCT_RATE_ANCHORED_SELF_FLOW_STAGE,
+                "mechanism": DISTINCT_RATE_ANCHORED_SELF_FLOW_MECHANISM,
+            }
         return {
             "schema_version": RATE_ANCHORED_SELF_FLOW_CHECKPOINT_SCHEMA_VERSION,
             "stage": RATE_ANCHORED_SELF_FLOW_STAGE,
@@ -52,6 +68,8 @@ def validate_self_flow_config(train_config):
         raise ValueError(
             "training_distribution must be fully_asymmetric or rate_anchored"
         )
+    if not isinstance(config.get("exclude_same_rate_pairs", False), bool):
+        raise TypeError("exclude_same_rate_pairs must be bool")
     if quality.get("sampling") != "iid_uniform_per_sample":
         raise ValueError(
             "Self-Flow quality control must use iid_uniform_per_sample"
@@ -66,6 +84,33 @@ def validate_self_flow_config(train_config):
     )
     if representation_enabled and not teacher_enabled:
         raise ValueError("representation loss requires the EMA teacher")
+    if representation_enabled:
+        if not isinstance(config.get("projector_trainable", True), bool):
+            raise TypeError("projector_trainable must be bool")
+        if bool(config.get("adaptive_representation_weight", False)):
+            target_ratio = float(
+                config.get("rep_gradient_ratio_target", 0.05)
+            )
+            maximum_ratio = float(
+                config.get("rep_gradient_ratio_max", 0.1)
+            )
+            minimum_weight = float(config.get("rep_weight_min", 0.01))
+            maximum_weight = float(config.get("rep_weight_max", 10.0))
+            update_every = int(config.get("rep_weight_update_every", 500))
+            ema_decay = float(config.get("rep_weight_ema_decay", 0.9))
+            if not 0.0 < target_ratio <= maximum_ratio:
+                raise ValueError(
+                    "rep_gradient_ratio_target must be in "
+                    "(0, rep_gradient_ratio_max]"
+                )
+            if minimum_weight <= 0 or maximum_weight < minimum_weight:
+                raise ValueError(
+                    "representation weight bounds must satisfy 0 < min <= max"
+                )
+            if update_every <= 0:
+                raise ValueError("rep_weight_update_every must be positive")
+            if not 0.0 <= ema_decay < 1.0:
+                raise ValueError("rep_weight_ema_decay must be in [0, 1)")
     if float(train_config["train"]["rate_weight"]) != 0.0:
         raise ValueError("Self-Flow mixed views do not define a rate objective")
     loss_params = params["loss_params"]
@@ -153,6 +198,7 @@ def sample_iid_uniform_pairs(
     num_levels,
     generator,
     same_rate=False,
+    exclude_same_rate=False,
 ):
     """Sample both source qualities independently from the full rate range."""
     quality_a = torch.randint(
@@ -160,9 +206,21 @@ def sample_iid_uniform_pairs(
     )
     if same_rate:
         return quality_a, quality_a.clone()
-    quality_b = torch.randint(
-        0, num_levels, (batch_size,), generator=generator, dtype=torch.long
-    )
+    if exclude_same_rate:
+        if num_levels < 2:
+            raise ValueError("distinct quality pairs require at least two levels")
+        quality_b = torch.randint(
+            0,
+            num_levels - 1,
+            (batch_size,),
+            generator=generator,
+            dtype=torch.long,
+        )
+        quality_b += quality_b.ge(quality_a)
+    else:
+        quality_b = torch.randint(
+            0, num_levels, (batch_size,), generator=generator, dtype=torch.long
+        )
     return quality_a, quality_b
 
 
@@ -171,6 +229,7 @@ def sample_rate_anchored_pairs(
     num_levels,
     legal_anchor_ratio,
     generator,
+    exclude_same_rate=False,
 ):
     """Create exact-size legal and asymmetric subsets in one shuffled batch."""
     if batch_size < 2:
@@ -195,13 +254,21 @@ def sample_rate_anchored_pairs(
 
     quality_b = quality_a.clone()
     asymmetric_count = int(asymmetric_samples.sum().item())
-    quality_b[asymmetric_samples] = torch.randint(
-        0,
-        num_levels,
-        (asymmetric_count,),
-        generator=generator,
-        dtype=torch.long,
-    )
+    asymmetric_quality_a = quality_a[asymmetric_samples]
+    if exclude_same_rate:
+        if num_levels < 2:
+            raise ValueError("distinct quality pairs require at least two levels")
+        asymmetric_quality_b = torch.randint(
+            0, num_levels - 1, (asymmetric_count,),
+            generator=generator, dtype=torch.long,
+        )
+        asymmetric_quality_b += asymmetric_quality_b.ge(asymmetric_quality_a)
+    else:
+        asymmetric_quality_b = torch.randint(
+            0, num_levels, (asymmetric_count,),
+            generator=generator, dtype=torch.long,
+        )
+    quality_b[asymmetric_samples] = asymmetric_quality_b
     return quality_a, quality_b, asymmetric_samples
 
 
@@ -334,3 +401,82 @@ def calibrate_representation_weight(
             f"pre-registered minimum {float(minimum_weight):.6g}"
         )
     return resolved, base_norm.item(), representation_norm.item()
+
+
+def loss_gradient_l2_norm(loss, parameters):
+    """Measure a loss gradient without populating optimizer gradients."""
+    parameters = [parameter for parameter in parameters if parameter.requires_grad]
+    if not parameters:
+        return torch.zeros((), device=loss.device)
+    gradients = torch.autograd.grad(
+        loss,
+        parameters,
+        retain_graph=True,
+        allow_unused=True,
+    )
+    terms = [
+        gradient.detach().float().square().sum()
+        for gradient in gradients
+        if gradient is not None
+    ]
+    squared_norm = (
+        torch.stack(terms).sum()
+        if terms
+        else torch.zeros((), device=loss.device)
+    )
+    if dist.is_available() and dist.is_initialized():
+        dist.all_reduce(squared_norm, op=dist.ReduceOp.SUM)
+    return squared_norm.sqrt()
+
+
+def resolve_gradient_balanced_weight(
+    target_base_norm,
+    target_representation_norm,
+    cap_base_norm,
+    cap_representation_norm,
+    target_gradient_ratio,
+    maximum_gradient_ratio,
+    minimum_weight,
+    maximum_weight,
+    previous_weight=None,
+    ema_decay=0.0,
+):
+    """Resolve gamma to hit one gradient ratio without breaking a second cap."""
+    values = (
+        target_base_norm,
+        target_representation_norm,
+        cap_base_norm,
+        cap_representation_norm,
+    )
+    if not all(math.isfinite(float(value)) for value in values):
+        raise FloatingPointError("non-finite adaptive representation gradient norm")
+    if float(target_representation_norm) <= 0 or float(cap_representation_norm) <= 0:
+        raise RuntimeError("adaptive representation gradient norm must be positive")
+
+    target_weight = (
+        float(target_gradient_ratio)
+        * float(target_base_norm)
+        / float(target_representation_norm)
+    )
+    cap_weight = (
+        float(maximum_gradient_ratio)
+        * float(cap_base_norm)
+        / float(cap_representation_norm)
+    )
+    upper_bound = min(float(maximum_weight), cap_weight)
+    if upper_bound < float(minimum_weight):
+        raise RuntimeError(
+            "adaptive representation gradient cap is below the minimum weight"
+        )
+    raw_weight = min(max(target_weight, float(minimum_weight)), upper_bound)
+    if previous_weight is None:
+        resolved_weight = raw_weight
+    else:
+        resolved_weight = (
+            float(ema_decay) * float(previous_weight)
+            + (1.0 - float(ema_decay)) * raw_weight
+        )
+        resolved_weight = min(
+            max(resolved_weight, float(minimum_weight)), upper_bound
+        )
+    return resolved_weight, target_weight, cap_weight

@@ -35,6 +35,8 @@ from self_flow_training import (
     calibrate_representation_weight,
     deterministic_self_flow_seed,
     likelihood_bpp,
+    loss_gradient_l2_norm,
+    resolve_gradient_balanced_weight,
     sample_iid_uniform_pairs,
     sample_rate_anchored_pairs,
     select_post_burnin_best,
@@ -175,6 +177,30 @@ def do_train(rank, local_rank, world_size, train_config):
     legal_anchor_ratio = float(
         self_flow_config.get("legal_anchor_ratio", 0.5)
     )
+    exclude_same_rate_pairs = bool(
+        self_flow_config.get("exclude_same_rate_pairs", False)
+    )
+    adaptive_representation_weight = bool(
+        self_flow_config.get("adaptive_representation_weight", False)
+    )
+    rep_gradient_ratio_target = float(
+        self_flow_config.get("rep_gradient_ratio_target", 0.05)
+    )
+    rep_gradient_ratio_max = float(
+        self_flow_config.get("rep_gradient_ratio_max", 0.1)
+    )
+    rep_weight_update_every = int(
+        self_flow_config.get("rep_weight_update_every", 500)
+    )
+    rep_weight_ema_decay = float(
+        self_flow_config.get("rep_weight_ema_decay", 0.9)
+    )
+    rep_weight_min = float(
+        self_flow_config.get("rep_weight_min", 0.01)
+    )
+    rep_weight_max = float(
+        self_flow_config.get("rep_weight_max", 10.0)
+    )
     self_flow_teacher_enabled = bool(
         self_flow_config.get("teacher_enabled", False)
     )
@@ -279,6 +305,11 @@ def do_train(rank, local_rank, world_size, train_config):
     if rank == 0:
         logger.info(f"Model Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
         logger.info(f"Trainable Parameters: {sum(p.numel() for p in main_parameters) / 1e6:.2f}M")
+        if source_checkpoint_sha256 is not None:
+            logger.info(
+                f"Source checkpoint: {params['codec_path']} "
+                f"sha256={source_checkpoint_sha256}"
+            )
         trainable_codec_params = sum(
             parameter.numel()
             for parameter in model.codec.parameters()
@@ -305,6 +336,14 @@ def do_train(rank, local_rank, world_size, train_config):
                 if model.representation_projector is not None
                 else 0
             )
+            projector_trainable_parameters = (
+                sum(
+                    parameter.numel()
+                    for parameter in model.representation_projector.parameters()
+                    if parameter.requires_grad
+                )
+                if model.representation_projector is not None else 0
+            )
             teacher_parameters = (
                 sum(parameter.numel() for parameter in self_flow_teacher.parameters())
                 if self_flow_teacher is not None
@@ -315,6 +354,7 @@ def do_train(rank, local_rank, world_size, train_config):
             )
             logger.info(
                 f"Self-Flow projector={projector_parameters / 1e6:.3f}M, "
+                f"projector_trainable={projector_trainable_parameters / 1e6:.3f}M, "
                 f"truncated_teacher={teacher_parameters / 1e6:.3f}M"
             )
         if quality_rate_weights is not None:
@@ -895,6 +935,7 @@ def do_train(rank, local_rank, world_size, train_config):
                             num_quality_levels,
                             legal_anchor_ratio,
                             pair_generator,
+                            exclude_same_rate=exclude_same_rate_pairs,
                         )
                         anchor_samples = ~asymmetric_samples
                         anchor_bins = torch.bincount(
@@ -909,12 +950,17 @@ def do_train(rank, local_rank, world_size, train_config):
                             x.shape[0],
                             num_quality_levels,
                             pair_generator,
+                            exclude_same_rate=exclude_same_rate_pairs,
                         )
                         asymmetric_samples = torch.ones(
                             x.shape[0], dtype=torch.bool
                         )
                 asymmetric_quality_a = quality_a[asymmetric_samples]
                 asymmetric_quality_b = quality_b[asymmetric_samples]
+                if exclude_same_rate_pairs and torch.any(
+                    asymmetric_quality_a.eq(asymmetric_quality_b)
+                ).item():
+                    raise RuntimeError("asymmetric Self-Flow pair used one quality")
                 pair_bins = torch.bincount(
                     asymmetric_quality_a * num_quality_levels
                     + asymmetric_quality_b,
@@ -962,6 +1008,7 @@ def do_train(rank, local_rank, world_size, train_config):
                 representation_sample_count = int(
                     representation_samples.sum().item()
                 )
+                representation_weight_diagnostics = {}
                 if (
                     self_flow_representation_enabled
                     and representation_sample_count > 0
@@ -986,8 +1033,76 @@ def do_train(rank, local_rank, world_size, train_config):
                         ],
                         teacher_feature,
                     )
+                    adaptive_update_step = train_steps + int(will_step)
                     if (
-                        resolved_representation_weight is None
+                        adaptive_representation_weight
+                        and train_steps >= warmup_steps
+                        and will_step
+                        and (
+                            resolved_representation_weight is None
+                            or adaptive_update_step % rep_weight_update_every == 0
+                        )
+                    ):
+                        probe_parameters = [
+                            model.module.__dict__["_self_flow_probe_feature"]
+                        ]
+                        cap_parameters = [
+                            parameter
+                            for name, parameter in model.module.DiT.named_parameters()
+                            if "lora" in name and parameter.requires_grad
+                        ]
+                        target_base_norm = loss_gradient_l2_norm(
+                            base_loss, probe_parameters
+                        )
+                        target_representation_norm = loss_gradient_l2_norm(
+                            representation_loss, probe_parameters
+                        )
+                        cap_base_norm = loss_gradient_l2_norm(
+                            base_loss, cap_parameters
+                        )
+                        cap_representation_norm = loss_gradient_l2_norm(
+                            representation_loss, cap_parameters
+                        )
+                        (
+                            resolved_representation_weight,
+                            raw_target_weight,
+                            cap_weight,
+                        ) = resolve_gradient_balanced_weight(
+                            target_base_norm.item(),
+                            target_representation_norm.item(),
+                            cap_base_norm.item(),
+                            cap_representation_norm.item(),
+                            rep_gradient_ratio_target,
+                            rep_gradient_ratio_max,
+                            rep_weight_min,
+                            rep_weight_max,
+                            previous_weight=resolved_representation_weight,
+                            ema_decay=rep_weight_ema_decay,
+                        )
+                        representation_weight_diagnostics.update({
+                            "train/representation_weight_raw_target": raw_target_weight,
+                            "train/representation_weight_cap": cap_weight,
+                            "train/grad_ratio_rep_to_base_layer8": (
+                                resolved_representation_weight
+                                * target_representation_norm
+                                / target_base_norm
+                            ),
+                            "train/grad_ratio_rep_to_base_dit_lora": (
+                                resolved_representation_weight
+                                * cap_representation_norm
+                                / cap_base_norm
+                            ),
+                        })
+                        if rank == 0:
+                            logger.info(
+                                "Updated adaptive representation weight: "
+                                f"gamma={resolved_representation_weight:.6g}, "
+                                f"raw_target={raw_target_weight:.6g}, "
+                                f"cap={cap_weight:.6g}"
+                            )
+                    elif (
+                        not adaptive_representation_weight
+                        and resolved_representation_weight is None
                         and train_steps >= warmup_steps
                     ):
                         (
@@ -1055,6 +1170,9 @@ def do_train(rank, local_rank, world_size, train_config):
                     & mask_has_b
                 )
                 legal_student_inputs = ~genuinely_mixed
+                asymmetric_same_rate_fraction = quality_a[representation_samples].eq(
+                    quality_b[representation_samples]
+                ).float().mean()
                 log_dict.update({
                     "train/total_loss": loss.detach(),
                     "train/base_loss": base_loss.detach(),
@@ -1079,6 +1197,9 @@ def do_train(rank, local_rank, world_size, train_config):
                     "train/asymmetric_fraction": (
                         representation_samples.float().mean().detach()
                     ),
+                    "train/asymmetric_same_rate_fraction": (
+                        asymmetric_same_rate_fraction.detach()
+                    ),
                     "train/legal_student_input_fraction_actual": (
                         legal_student_inputs.float().mean().detach()
                     ),
@@ -1086,6 +1207,7 @@ def do_train(rank, local_rank, world_size, train_config):
                     "train/legal_bpp_a": legal_bpp_a.detach(),
                     "train/legal_bpp_b": legal_bpp_b.detach(),
                 })
+                log_dict.update(representation_weight_diagnostics)
             else:
                 if multirate_plain and accum_count == 0:
                     quality_index = sample_shared_quality_index(

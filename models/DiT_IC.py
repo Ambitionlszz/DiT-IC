@@ -225,6 +225,8 @@ class Codec(nn.Module):
                     self.self_flow_params.get("projector_expansion", 2)
                 ),
             )
+            if not bool(self.self_flow_params.get("projector_trainable", True)):
+                self.representation_projector.requires_grad_(False)
         if not self._init_for_training:
             self.quality_conditioner.requires_grad_(False)
         print(
