@@ -176,6 +176,8 @@ def quality_conditioned_sana_forward(
     conditioning_scale=1.0,
     capture_layer=None,
     stop_layer=None,
+    continuous_conditioning=False,
+    checkpoint_blocks=False,
 ):
     """Run SANA with spatial q conditioning and optionally expose one layer."""
     batch_size, _, height, width = hidden_states.shape
@@ -206,7 +208,8 @@ def quality_conditioned_sana_forward(
     encoder_hidden_states = sana.caption_norm(encoder_hidden_states)
 
     quality_tokens = quality_map.reshape(batch_size, -1).to(
-        device=hidden_states.device, dtype=torch.long
+        device=hidden_states.device,
+        dtype=torch.float32 if continuous_conditioning else torch.long,
     )
     block_modulation, output_modulation = quality_conditioner(quality_tokens)
     scale = torch.as_tensor(
@@ -217,17 +220,28 @@ def quality_conditioned_sana_forward(
 
     captured = None
     for layer_index, block in enumerate(sana.transformer_blocks):
-        hidden_states = _quality_conditioned_block_forward(
-            block,
-            hidden_states,
-            encoder_hidden_states,
-            timestep_modulation,
-            quality_conditioner.block_residual(
-                block_modulation, layer_index
-            ),
-            post_patch_height,
-            post_patch_width,
-        )
+        modulation = quality_conditioner.block_residual(block_modulation, layer_index)
+        if checkpoint_blocks and torch.is_grad_enabled():
+            from functools import partial
+            from torch.utils.checkpoint import checkpoint
+
+            # Bind this iteration's block; a late-bound closure breaks recompute.
+            hidden_states = checkpoint(
+                partial(_quality_conditioned_block_forward, block),
+                hidden_states, encoder_hidden_states, timestep_modulation,
+                modulation, post_patch_height, post_patch_width,
+                use_reentrant=False,
+            )
+        else:
+            hidden_states = _quality_conditioned_block_forward(
+                block,
+                hidden_states,
+                encoder_hidden_states,
+                timestep_modulation,
+                modulation,
+                post_patch_height,
+                post_patch_width,
+            )
         if layer_index == capture_layer:
             captured = hidden_states
         if layer_index == stop_layer:

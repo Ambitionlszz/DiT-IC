@@ -40,6 +40,7 @@ def filter_supported_modules(model):
 def latent_models(model, **kwargs):
     model_map = {
         "Codec": "models.latent_codec.LatentCodec",
+        "BTCodec": "models.bt_self_flow.codec.BTLatentCodec",
     }
     if model not in model_map:
         raise ValueError(f"Unknown model name: {model}")
