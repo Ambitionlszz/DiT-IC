@@ -1,0 +1,6 @@
+base: common.yaml
+train:
+  phase: backend
+  steps: 5000
+  accumulation_steps: 8
+  output: /data2/ls/checkpoints/bt_self_flow_v1/C/backend

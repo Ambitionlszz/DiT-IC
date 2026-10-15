@@ -1,0 +1,5 @@
+base: c_backend.yaml
+train:
+  phase: joint
+  steps: 25000
+  output: /data2/ls/checkpoints/bt_self_flow_v1/C/joint

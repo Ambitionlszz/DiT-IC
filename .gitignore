@@ -5,6 +5,7 @@ output/
 logs/
 results/
 configs/*
+!configs/bt_self_flow/
 !configs/baseline_lrd0p4.yaml
 !configs/self_flow_fixed4_fullfrom0_officialentropy_dists01_100k.yaml
 !configs/baseline_lrd0p4_20260722_084454.yaml
