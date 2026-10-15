@@ -106,6 +106,8 @@ def prepare_backend(config, source, output, device):
     checkpoint = read_checkpoint(source)
     if checkpoint["phase"] != "codec" or not checkpoint.get("calibration", {}).get("rate_span_pass"):
         raise ValueError("common codec has not passed calibration/rate-span validation")
+    if config["train"].get("require_quality_span", False) and not checkpoint["calibration"].get("quality_span_pass"):
+        raise ValueError("common codec has not shown higher bitrate and lower latent distortion at high quality")
     if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
         raise ValueError("shared codec phase has not completed")
     check_stage_model(config, checkpoint["config"])
@@ -118,11 +120,12 @@ def prepare_backend(config, source, output, device):
     model = make_model(target, device)
     model.load_bt_state(checkpoint["raw"], codec_only=True)
     state = clone_state(model.export_state(), cpu=True)
+    source_hash = sha256_file(source)
     save_atomic(output, {"method": METHOD, "schema": SCHEMA, "phase": "backend_init", "backend": "shared",
                          "step": 0, "raw": state, "ema": state, "config": target,
-                         "assets": asset_identity(config), "source_sha256": sha256_file(source),
+                         "assets": asset_identity(config), "source_sha256": source_hash,
                          "calibration": checkpoint["calibration"]})
-    print(json.dumps({"backend_init": str(output), "source_sha256": sha256_file(source)}), flush=True)
+    print(json.dumps({"backend_init": str(output), "source_sha256": source_hash}), flush=True)
 
 
 def auxiliary_update(codec, optimizer, world):
@@ -323,7 +326,7 @@ def train(config, args, rank, world, device):
                         raise FloatingPointError("nonfinite main loss")
                     scaler.scale(loss/settings["accumulation_steps"]).backward()
                 for key, value in metrics.items():
-                    metrics_sum[key] = metrics_sum.get(key, 0.)+float(value.detach())/settings["accumulation_steps"]
+                    metrics_sum[key] = metrics_sum.get(key, 0.)+value.detach()/settings["accumulation_steps"]
             scaler.unscale_(optimizer)
             norm = torch.nn.utils.clip_grad_norm_([p for group in optimizer.param_groups for p in group["params"]],
                                                    config["optimizer"].get("max_grad_norm", 4.))
@@ -354,10 +357,10 @@ def train(config, args, rank, world, device):
                 accumulated_time += elapsed
                 accumulated_updates += 1
             if step % settings.get("log_every", 100) == 0 or step == 1:
+                values = torch.stack(list(metrics_sum.values()))
                 if world > 1:
-                    values = torch.tensor(list(metrics_sum.values()), device=device)
                     dist.all_reduce(values)
-                    metrics_sum = dict(zip(metrics_sum, (values/world).tolist()))
+                metrics_sum = dict(zip(metrics_sum, (values/world).tolist()))
                 if rank == 0:
                     record = dict(step=step, attempts=attempts, lambda_low=control.value, mixed=control.mixed,
                                   transition=transition, grad_norm=float(norm), seconds_per_update=elapsed,
@@ -376,7 +379,10 @@ def train(config, args, rank, world, device):
                     (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
                 if world > 1:
                     dist.barrier()
-            if step % settings["save_every"] == 0:
+            # Backend/joint endpoints immediately save complete.pt; do not
+            # serialize the same multi-GB state twice. The codec endpoint keeps
+            # a pre-calibration recovery file because calibration can be long.
+            if step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec"):
                 save(f"{step:07d}.pt")
             if args.max_updates and step >= args.max_updates:
                 stop = True

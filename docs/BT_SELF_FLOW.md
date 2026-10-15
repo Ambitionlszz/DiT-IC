@@ -1,7 +1,7 @@
 # BT-SelfFlow v1：实现、启动与验收
 
 实现分支：`codex/bt-self-flow-v1-20261015`；基线提交：`7d3323abd54187d48dd9256bd7c938007de6f800`。
-工作区：`/data2/ls/code/DiT-IC-bt-self-flow`。原工作区和旧实验不受影响。
+工作区：`/data2/ls/code/DiT-IC-bt-self-flow`。原工作区保留。
 设计依据：[完整方案 v2](/data2/ls/BT_SelfFlow_完整方案_20261015.md)。
 
 ## 实现范围与边界
@@ -12,7 +12,7 @@
 | 自包含码流 | `models/bt_self_flow/packet.py` | 版本、尺寸、16 bit λ、各载荷长度、超先验、主码流、分配图、可选尺度和混合掩码 |
 | 实测失真尺度 | `models/bt_self_flow/scale.py`、`validation.py` | 编码端由真实恢复 μ 测 RMS；固定训练集标定；4 bit log 尺度；停止梯度 |
 | C/D 单步后端 | `models/bt_self_flow/model.py`、`conditioning.py` | 原固定时间更新 / 连续失真条件和局部尺度更新；完整 SANA、1 NFE |
-| 内存控制 | `models/bt_self_flow/decoder.py`、`models/sana_self_flow.py` | SANA block 与 DC-AE decoder stage 的梯度检查点 |
+| 内存控制 | `models/bt_self_flow/decoder.py`、`models/sana_self_flow.py` | 支持 SANA / DC-AE decoder 检查点；C/D 实测后关闭重算加速，D_mix/E 开启 |
 | 混合精度稳定性 | `models/bt_self_flow/precision.py` | 投影保持 AMP；SANA / DC-AE 注意力乘法与归一化明确 FP32，避免 FP16 分母下溢 |
 | 训练与恢复 | `train_bt_self_flow.py`、`checkpoint.py`、`data.py` | 分阶段优化、DDP 累积、辅助 quantile 优化器、部署 EMA、完整恢复、独立数据随机流 |
 | 真实评测 | `eval_bt_self_flow.py` | 保存实际包、从序列化包解码、完整字节计费、图像指标、耗时、NFE 和诊断 |
@@ -77,7 +77,7 @@ GPU 资源预检会写 JSON。`--smoke` 进一步使用真实公共权重、512 
 
 每个短阶段 14 个 optimizer updates，后 4 个更新用于估计吞吐。短跑只验证工程路径，不能用作 C/D 研究结果。输出目录必须独立且全新。CUDA 不可访问时退出码为 2，不加载大模型执行训练。
 
-**2026-10-15 当前主机检查：**数据、SANA/DC-AE、文本 embedding 均存在。Codex 沙箱不可见 CUDA；在主机环境确认两张 V100S 32GB 正常，但已有训练各占约 26.9GB。报告在 `/data2/ls/checkpoints/bt_self_flow_v1_host_readiness_20261015/preflight.json`。预检默认要求每张选定卡至少 24GiB 空闲才启动完整短跑，不终止已有进程。因此当前没有完整预训练网络的 512 GPU 短跑、显存/吞吐或长训结果。
+**2026-10-15 更新：**数据、SANA/DC-AE、文本 embedding 均存在。用户随后授权停止旧 GPU0/1 baseline，并切换新 C/D。旧任务已正常退出，可用 checkpoint 保留；停止记录及本轮完整 GPU 验收见 [复核记录](BT_SELF_FLOW_REVIEW_20261015.md)。早期 `/data2/ls/checkpoints/bt_self_flow_v1_host_readiness_20261015/preflight.json` 记录的是授权切换前的资源状态。
 
 小型实际 V100 检查已通过：C/D 各完成两个生产训练入口的 FP16 optimizer updates；真实包与硬前向的图像误差均为 0，均为 1 NFE。该检查峰值分配约 179MiB，**不代表完整网络的显存需求**。报告在 `/data2/ls/checkpoints/bt_self_flow_v1_gpu_microcheck_20261015.json`。CPU 测试还覆盖小型真实 AutoencoderDC、独立 rANS 解码、断点恢复和双进程主/辅助优化器同步。DDP 测试需要主机上正常可用的本地 loopback。
 
@@ -92,20 +92,24 @@ GPU 资源预检会写 JSON。`--smoke` 进一步使用真实公共权重、512 
 以下命令按阶段执行。实际 GPU 编号可替换；不自动占用/终止已有任务。
 
 ```bash
-# 共同 codec：两卡、每卡 microbatch 1、累积 4，50k updates。
+# 共同 codec：两卡、每卡 microbatch 2、累积 2，50k updates。
 bash scripts/run_bt_self_flow.sh codec 0,1
 
 # 完成共同前端、训练集尺度标定和真实码率跨度检查后，生成一次共享初始化。
 bash scripts/run_bt_self_flow.sh prepare 0
 
-# 随后分别在两个终端启动；每组单卡、累积 8。
+# 随后分别在两个终端启动；每组单卡、microbatch 2、累积 4。
 bash scripts/run_bt_self_flow.sh C 0
 bash scripts/run_bt_self_flow.sh D 1
 ```
 
 默认输出根目录 `/data2/ls/checkpoints/bt_self_flow_v1`；另一次实验通过 `BT_RUN_ROOT=/新的目录` 覆盖，所有阶段保持一致。`C` / `D` 各顺序执行 5k 冻结 codec 的后端适配和 25k 联合训练，适配未完成不会进入联合阶段。
 
+也可在 tmux 中执行 `python scripts/launch_bt_pair.py --root /data2/ls/checkpoints/bt_self_flow_v1 --gpus 0,1` 自动衔接全部阶段。该入口固定已提交的代码与配置、按 checkpoint 恢复，记录 `pipeline.json` / `manifest.json`，并将 C 放 GPU0、D 放 GPU1。共同前端尚未完成时，两组后端处于等待状态。
+
 共同前端前 2k 使用参考质量、均匀分配；再 3k 打开 λ 范围与 Router。SANA 不参与此阶段。完成后固定六个质量点的训练集标定。必须得到至少三个不同的实际总码率点，才允许生成共享后端初始化；这项检查只确认形成码率跨度，质量是否有效仍需检查验证曲线。
+
+正式配置还要求标定集合的高质量端相较低质量端具有更高实际码率和更低粗 latent NMSE，否则停止阶段衔接。完整 GPU 验收与速度记录见复核文档：最终 C/D 均使用 bs2、累积4，关闭重算后联合训练约 4.53/4.57 秒每更新，峰值分配 22.59/23.50 GiB。
 
 C/D 均使用 SANA LoRA 128/128、DC-AE decoder-only LoRA 32/32、可训练文本投影；DC-AE encoder 与两个公共底座冻结。不构造 GAN 判别器。C/D 的共享初始参数、数据顺序、裁剪和 λ 采样相同。
 

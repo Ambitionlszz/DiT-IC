@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 import hashlib
+import os
 from pathlib import Path
 import random
 
@@ -70,12 +71,24 @@ def save_atomic(path, checkpoint):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix+".tmp")
-    torch.save(checkpoint, temporary)
-    temporary.replace(path)
+    try:
+        # Buffered Python I/O avoids a tiny native write for each tensor/storage
+        # on the experiment volume. Publish only a completely flushed file.
+        with temporary.open("wb", buffering=8*1024*1024) as target:
+            torch.save(checkpoint, target)
+            target.flush()
+            os.fsync(target.fileno())
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def read_checkpoint(path):
-    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    # BT checkpoints always use torch.save's zip format. Map storages lazily
+    # instead of reading multi-GB raw/EMA/optimizer copies up front; atomic
+    # replacement keeps the mapped inode valid during subsequent saves.
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True, mmap=True)
     if checkpoint.get("method") != METHOD or checkpoint.get("schema") != SCHEMA:
         raise ValueError("not a supported BT checkpoint; legacy checkpoints cannot be mixed")
     return checkpoint

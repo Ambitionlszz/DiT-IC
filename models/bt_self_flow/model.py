@@ -66,6 +66,10 @@ class BTCodecStage(nn.Module):
     def forward(self, image, rate_control=None, **kwargs):
         clean = self.encode_clean_latent(image)
         source = self.codec.analyze(clean)
+        return self.forward_analysis(source, rate_control, **kwargs)
+
+    def forward_analysis(self, source, rate_control=None, **kwargs):
+        clean = source.clean
         view = self.codec.quantize_analysis(source, rate_control or RateControl())
         h, w = view["mean"].shape[-2:]
         return BTForwardResult(clean, view["mean"], view["mean"], None, view["likelihoods"],
@@ -160,9 +164,13 @@ class BTCodec(Codec):
         return latent, image, feature
 
     def forward(self, image, rate_control=None, transition=1.0, capture=False, **kwargs):
-        control = rate_control or RateControl()
         clean = self.encode_clean_latent(image)
         source = self.codec.analyze(clean)
+        return self.forward_analysis(source, rate_control, transition, capture)
+
+    def forward_analysis(self, source, rate_control=None, transition=1.0, capture=False):
+        control = rate_control or RateControl()
+        clean = source.clean
         view = self.codec.quantize_analysis(source, control)
         coarse = view["mean"]
         scale_info = self.distortion_scale(clean, coarse) if self.backend == "D" else {}

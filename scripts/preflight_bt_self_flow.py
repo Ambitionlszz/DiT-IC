@@ -6,6 +6,7 @@ Smoke checkpoints are engineering checks, never the C/D research result.
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import version
 import json
 import os
@@ -49,10 +50,11 @@ def run_smoke(args, report, visible):
         value = load_config(args.config)
         value["model"]["backend"] = backend
         value["train"].update(phase=phase, steps=steps, accumulation_steps=accumulation,
-                              effective_batch=8, output=str(root/name), log_every=1,
+                              batch_size=2, effective_batch=8, output=str(root/name), log_every=1,
                               eval_every=steps, save_every=steps,
                               router_uniform_steps=2, router_ramp_steps=3,
-                              data_scale_samples=2, calibration_samples=4, packet_samples=1)
+                              data_scale_samples=2, calibration_samples=4, packet_samples=1,
+                              require_quality_span=False)
         value["data"].update(valid_limit=1, workers=0)
         value["optimizer"]["warmup"] = 2
         path = root/f"{name}.yaml"
@@ -60,25 +62,25 @@ def run_smoke(args, report, visible):
         return str(path)
 
     python = sys.executable
-    common = config("common", "codec", "C", 14, 8//world)
+    common = config("common", "codec", "C", 14, 4//world)
     command = ([python, "-m", "torch.distributed.run", "--standalone", f"--nproc_per_node={world}"]
                if world > 1 else [python])
     execute("common", command+["train_bt_self_flow.py", "--config", common])
     first = visible.split(",")[0]
-    c_config = config("C_backend", "backend", "C", 14, 8)
+    c_config = config("C_backend", "backend", "C", 14, 4)
     execute("prepare", [python, "train_bt_self_flow.py", "--config", c_config,
                          "--prepare-backend", str(root/"common/complete.pt"),
                          "--output", str(root/"backend_init.pt")], first)
-    for backend in ("C", "D"):
-        cfg = c_config if backend == "C" else config("D_backend", "backend", "D", 14, 8)
+    def backend_smoke(backend, selected):
+        cfg = c_config if backend == "C" else config("D_backend", "backend", "D", 14, 4)
         # Exercise the real continuation path instead of doing a fresh second run.
         execute(f"{backend}_pause", [python, "train_bt_self_flow.py", "--config", cfg,
-                                    "--init-checkpoint", str(root/"backend_init.pt"), "--max-updates", "2"], first)
+                                    "--init-checkpoint", str(root/"backend_init.pt"), "--max-updates", "2"], selected)
         execute(f"{backend}_resume", [python, "train_bt_self_flow.py", "--config", cfg,
-                                     "--resume", str(root/f"{backend}_backend/paused.pt")], first)
-        joint = config(f"{backend}_joint", "joint", backend, 14, 8)
+                                     "--resume", str(root/f"{backend}_backend/paused.pt")], selected)
+        joint = config(f"{backend}_joint", "joint", backend, 14, 4)
         execute(f"{backend}_joint", [python, "train_bt_self_flow.py", "--config", joint,
-                                    "--init-checkpoint", str(root/f"{backend}_backend/complete.pt")], first)
+                                    "--init-checkpoint", str(root/f"{backend}_backend/complete.pt")], selected)
         times = {}
         for phase in ("backend", "joint"):
             rows = [json.loads(line) for line in (root/f"{backend}_{phase}/train.jsonl").read_text().splitlines()]
@@ -89,7 +91,16 @@ def run_smoke(args, report, visible):
             5000*times["backend"]["seconds_per_effective_batch8_update"]
             +25000*times["joint"]["seconds_per_effective_batch8_update"])/86400
         times["note"] = "short-run estimate; excludes validation/checkpoint time"
-        report.setdefault("throughput", {})[backend] = times
+        return backend, times
+
+    devices = (visible.split(",")*2)[:2]
+    if world > 1:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(backend_smoke, backend, selected)
+                       for backend, selected in zip(("C", "D"), devices)]
+            report["throughput"] = dict(future.result() for future in futures)
+    else:
+        report["throughput"] = dict(backend_smoke(backend, devices[0]) for backend in ("C", "D"))
     report["smoke_output"] = str(root)
 
 

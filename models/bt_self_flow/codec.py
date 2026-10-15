@@ -53,7 +53,10 @@ class BTLatentCodec(LatentCodec):
     def _hyper_forward(self, y):
         hyper = self.h_a(y)
         median = self.entropy_bottleneck._get_medians().reshape(1, -1, 1, 1)
-        hyper_hat = median + ste_round(hyper - median)
+        # EntropyBottleneck decoding returns NCHW. Preserve that exact layout
+        # in the hard simulation too: channels-last convolutions can differ by
+        # a few FP32 ulps and a pretrained one-step backend can amplify them.
+        hyper_hat = (median + ste_round(hyper - median)).contiguous()
         values = hyper_hat.permute(1, 0, 2, 3).reshape(hyper.shape[1], 1, -1)
         likelihood, _, _ = self.entropy_bottleneck._likelihood(values)
         likelihood = self.entropy_bottleneck.likelihood_lower_bound(likelihood)
@@ -77,10 +80,13 @@ class BTLatentCodec(LatentCodec):
                 raise ValueError("BT requires padded image dimensions divisible by 256")
             hyper_hat, hyper_likelihood = self._hyper_forward(y)
             base = self.h_s(hyper_hat)
-            mean, scale = self._prior(base, 0)
-            reference_step = ((self.log_delta_coarse + self.log_delta_fine) / 2).exp()
-            reference_symbols = ((y - mean) / reference_step).round()
-            cost = -self._mass(reference_symbols, scale / reference_step).log2().sum(1, keepdim=True)
+            # Router's reference cost is detached by design. Avoid retaining an
+            # otherwise unused prior/probability graph for every microbatch.
+            with torch.no_grad():
+                mean, scale = self._prior(base, 0)
+                reference_step = ((self.log_delta_coarse + self.log_delta_fine) / 2).exp()
+                reference_symbols = ((y - mean) / reference_step).round()
+                cost = -self._mass(reference_symbols, scale / reference_step).log2().sum(1, keepdim=True)
             allocation, codes = self.router(clean, y, cost)
             return SourceAnalysis(clean, y, hyper_hat, hyper_likelihood, base, allocation, codes)
 
@@ -98,6 +104,7 @@ class BTLatentCodec(LatentCodec):
 
     def _groups(self, base, delta, y=None, mode="forward", stream=None, trace=False):
         """The same group order, units and LRP context in all three modes."""
+        base = base.contiguous()
         b, c, h, w = base.shape
         masks = self.get_mask_four_parts(b, c, h, w, device=base.device)
         restored = torch.zeros_like(base)
@@ -121,7 +128,7 @@ class BTLatentCodec(LatentCodec):
                 symbols = torch.tensor(flat, device=base.device, dtype=base.dtype).reshape_as(mean_s)
             else:
                 values = (self.sequeeze_with_mask(y, mask) - mean_s) / delta
-                symbols = ste_round(values) if mode == "forward" else values.round()
+                symbols = (ste_round(values) if mode == "forward" else values.round()).contiguous()
                 if mode == "encode":
                     all_symbols.extend(symbols.to(torch.int32).reshape(-1).tolist())
                     all_indexes.extend(indexes.reshape(-1).tolist())
@@ -166,7 +173,7 @@ class BTLatentCodec(LatentCodec):
             source = self.analyze(clean)
             # Always reconstruct the actual transmitted hyperprior first.
             hyper_stream = self.entropy_bottleneck.compress(self.h_a(source.y))[0]
-            hyper_hat = self.entropy_bottleneck.decompress([hyper_stream], source.hyper_hat.shape[-2:])
+            hyper_hat = self.entropy_bottleneck.decompress([hyper_stream], source.hyper_hat.shape[-2:]).contiguous()
             base = self.h_s(hyper_hat)
             # analysis and entropy-bottleneck decoding must agree on the medians.
             if not torch.equal(hyper_hat, source.hyper_hat):
@@ -189,7 +196,7 @@ class BTLatentCodec(LatentCodec):
         device = next(self.parameters()).device
         with torch.autocast(device_type=device.type, enabled=False):
             h, w = packet.y_shape
-            hyper_hat = self.entropy_bottleneck.decompress([packet.hyper_stream], packet.hyper_shape)
+            hyper_hat = self.entropy_bottleneck.decompress([packet.hyper_stream], packet.hyper_shape).contiguous()
             codes = torch.tensor(unpack_codes(packet.allocation, 3, h*w), device=device).reshape(1, 1, h, w)
             delta = self.steps(packet.rate_control(device), allocation_from_codes(codes))
             mean, _, _, audit = self._groups(self.h_s(hyper_hat), delta, mode="decode",

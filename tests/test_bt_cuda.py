@@ -20,8 +20,9 @@ from diffusers.models.attention_processor import SanaMultiscaleLinearAttention
 import train_bt_self_flow as trainer
 from models.bt_self_flow.checkpoint import METHOD, SCHEMA, read_checkpoint, save_atomic
 from models.bt_self_flow.decoder import decode_latent
+from models.bt_self_flow.codec import BTLatentCodec
 from models.bt_self_flow.losses import ImageLoss
-from models.bt_self_flow.packet import RateControl
+from models.bt_self_flow.packet import BTImagePacket, RateControl
 from models.bt_self_flow.precision import install_stable_attention
 from test_bt_backend import tiny_model, tiny_sana
 from test_bt_training import small_config
@@ -29,6 +30,26 @@ from test_bt_training import small_config
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is inaccessible")
 class GPUPrecisionTest(unittest.TestCase):
+    @torch.no_grad()
+    def test_channels_last_analysis_has_bit_exact_coded_reconstruction(self):
+        torch.manual_seed(907)
+        codec = BTLatentCodec(ch_emd=4, channel=32, channel_out=4).cuda().eval()
+        codec.update(force=True)
+        clean = torch.randn(1, 4, 16, 16, device="cuda").contiguous(memory_format=torch.channels_last)
+        for quality in (0., .4, 1.):
+            control = RateControl(quality)
+            direct = codec(clean, control, trace=True)
+            encoded = codec.compress(clean, control, trace=True)
+            packet = BTImagePacket("C", (512, 512), encoded["y_shape"], encoded["hyper_shape"],
+                                   control.low_code, control.high_code, encoded["hyper_stream"],
+                                   encoded["main_stream"], encoded["allocation"])
+            decoded = codec.decompress(packet, trace=True)
+            self.assertTrue(torch.equal(direct["mean"], encoded["mean"]))
+            self.assertTrue(torch.equal(encoded["mean"], decoded["mean"]))
+            for simulated, restored in zip(direct["trace"], decoded["trace"]):
+                for field in ("symbols", "indexes", "restored"):
+                    self.assertTrue(torch.equal(simulated[field], restored[field]), field)
+
     def test_fp16_zero_attention_and_dc_decoder_are_finite(self):
         sana = tiny_sana().cuda()
         install_stable_attention(sana=sana)

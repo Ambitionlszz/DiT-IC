@@ -1,4 +1,6 @@
 base: d_joint.yaml
+model:
+  checkpoint_blocks: true
 self_flow:
   mixed_sampling: true
 train:
