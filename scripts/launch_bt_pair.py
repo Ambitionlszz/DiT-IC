@@ -143,10 +143,32 @@ class PairedRun:
 
     def stop(self, signum, frame):
         self.stop_requested = True
-        # Only process groups created by this supervisor receive a signal.
-        for process in list(self.children.values()):
+        for name, process in list(self.children.items()):
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGTERM)
+                targets = [process.pid]
+                if name == "common":
+                    # Signal the actual DDP trainers, keeping torchrun alive to
+                    # wait for their multi-GB paused checkpoint. Signalling the
+                    # launcher starts its finite shutdown/kill timeout instead.
+                    children = Path(f"/proc/{process.pid}/task/{process.pid}/children")
+                    workers = []
+                    if children.exists():
+                        for child in children.read_text().split():
+                            try:
+                                command = Path(f"/proc/{child}/cmdline").read_bytes().split(b"\0")
+                            except FileNotFoundError:
+                                continue
+                            if any(arg.rsplit(b"/", 1)[-1] == b"train_bt_self_flow.py" for arg in command):
+                                workers.append(int(child))
+                    if workers:
+                        targets = workers
+                # Do not signal the process group: DataLoader children need to
+                # stay alive until the trainer finishes its accumulated update.
+                for pid in targets:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
 
 
 def main():

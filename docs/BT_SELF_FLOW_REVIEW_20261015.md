@@ -72,6 +72,8 @@
 最初 `full_gpu_review/preflight.json` 保留为发现问题的失败记录，不能用作通过凭据。
 最终标定/保存调整后的训练、恢复与效率行为补充回归 9 项通过：`final_training_tests.xml`。
 
+正式共同前端启动后补做暂停验收，第 295 次完整更新保存 `common/paused.pt`，两个训练 rank 和 torchrun 均以退出码 0 结束。监督器停止逻辑进一步改为只向训练主进程发信号，不杀 DataLoader 子进程；DDP 保持 torchrun 等待实际训练进程存盘。单进程/双进程真实子进程行为测试 2 项通过，报告 `supervisor_tests.xml`。恢复沿用全部模型、优化器、scaler、RNG 和数据位置；此次仅监督器及文档/测试提交变更，配置和训练计算不变，提交迁移证据写入正式输出根目录。
+
 正式输出根目录：`/data2/ls/checkpoints/bt_self_flow_v1`。
 `pipeline.json` 是阶段/进程/日志的实际状态，`manifest.json` 固定提交、GPU、解释器和配置。
 共同前端 50k → 训练集尺度标定/共享初始化 → GPU0 C、GPU1 D，各后端 5k + 联合 25k。
