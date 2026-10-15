@@ -81,7 +81,11 @@ GPU 资源预检会写 JSON。`--smoke` 进一步使用真实公共权重、512 
 
 小型实际 V100 检查已通过：C/D 各完成两个生产训练入口的 FP16 optimizer updates；真实包与硬前向的图像误差均为 0，均为 1 NFE。该检查峰值分配约 179MiB，**不代表完整网络的显存需求**。报告在 `/data2/ls/checkpoints/bt_self_flow_v1_gpu_microcheck_20261015.json`。CPU 测试还覆盖小型真实 AutoencoderDC、独立 rANS 解码、断点恢复和双进程主/辅助优化器同步。DDP 测试需要主机上正常可用的本地 loopback。
 
-最终回归：**113 项通过，0 失败、0 跳过**；JUnit 报告位于 `/data2/ls/checkpoints/bt_self_flow_v1_validation_20261015/tests.xml`。此外已在 CPU 加载真实公共权重，核对 C/D 共享初始化完全一致，并完成 D 的完整 28 层、512×512 硬前向与码流解码，最大图像误差 `2.93255e-5`（容差 `2e-4`）、1 NFE。全规格 CPU 报告位于 `/data2/ls/checkpoints/bt_self_flow_v1_public_cpu_check_20261015.json`。该检查使用未训练前端与单裁剪工程标定，不是训练 checkpoint 或率失真结果。
+完整回归：**114 项通过，0 失败、0 跳过**；JUnit 报告位于 `/data2/ls/checkpoints/bt_self_flow_v1_validation_20261015/tests.xml`。此外已在 CPU 加载真实公共权重，核对 C/D 共享初始化完全一致，并完成 D 的完整 28 层、512×512 硬前向与码流解码，最大图像误差 `2.93255e-5`（容差 `2e-4`）、1 NFE。全规格 CPU 报告位于 `/data2/ls/checkpoints/bt_self_flow_v1_public_cpu_check_20261015.json`。该检查使用未训练前端与单裁剪工程标定，不是训练 checkpoint 或率失真结果。
+
+真实 LPIPS AlexNet / DISTS 权重的图像梯度已在 CPU 与物理 GPU 1 核验为有限且非零，见 `/data2/ls/checkpoints/bt_self_flow_v1_validation_20261015/perceptual_loss.json`。DISTS 直接使用可微网络，避免 pyiqa 0.1.16 推理包装器残留的设备标记破坏 `.to()` 迁移。
+
+另有一项评测入口集成检查通过，报告为同目录的 `evaluation_tests.xml`：覆盖实际文件字节/占比计费、原尺寸 bpp、硬前向检查，以及移走原始图像目录后，仅凭包与 checkpoint 在新模型实例中解码；独立解码不构建感知网络。
 
 ## 两卡主实验
 
@@ -156,7 +160,7 @@ CUDA_VISIBLE_DEVICES=1 /data2/ls/code/venvs/ditic/bin/python eval_bt_self_flow.p
   --output /data2/ls/checkpoints/bt_eval/comparison_joint
 ```
 
-评测默认六个 λ，写出每图 `.btic`、指标 JSONL 和汇总 JSON：真实总 bpp、各载荷字节、PSNR/LPIPS/DISTS、编/解码时间、峰值显存、NFE、粗 latent MSE、修复 RMS、尺度饱和率，以及高精度区域 PSNR。高精度区域定义为原图区域内恢复 Δ 的下四分位（包含并列项）。`--check-forward` 同时报告估计/实测码长差距。
+评测默认六个 λ，写出每图 `.btic`、指标 JSONL 和汇总 JSON：真实总 bpp、各载荷字节与占比、PSNR/LPIPS/DISTS、编/解码时间、峰值显存、NFE、粗 latent MSE、修复 RMS、尺度饱和率，以及高精度区域 PSNR。汇总的字节占比按该质量点所有实际包的总字节计算。高精度区域定义为原图区域内恢复 Δ 的下四分位（包含并列项）。`--check-forward` 同时报告估计/实测码长差距。
 
 比较脚本核对数据、步数、阶段、权重和指标协议，在共同实际总 bpp 区间内取三个点，按 log bpp 插值；禁止外推。插值结果需结合原曲线看，不能把相同 λ 当成相同码率。D 的尺度图成本已在横轴内。
 

@@ -1,5 +1,3 @@
-import math
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -25,7 +23,10 @@ class ImageLoss(nn.Module):
             self.lpips = lpips.LPIPS(net="alex").requires_grad_(False).eval()
         if dists_weight:
             import pyiqa
-            self.dists = pyiqa.create_metric("dists", as_loss=True).requires_grad_(False).eval()
+            # pyiqa 0.1.16's wrapper keeps a device sentinel outside registered
+            # state after its initial CUDA move. Use the differentiable network
+            # directly so this loss follows normal nn.Module.to() semantics.
+            self.dists = pyiqa.create_metric("dists", as_loss=True, device="cpu").net.requires_grad_(False).eval()
 
     def forward(self, predicted, target):
         # Perceptual statistics and losses are evaluated in FP32, with image

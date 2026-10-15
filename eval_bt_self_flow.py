@@ -101,6 +101,7 @@ def evaluate(args):
             row = {"image": str(source_path), "lambda": control.value, "lambda_code": control.low_code,
                    "height": h, "width": w, "bytes": len(data), "bpp": 8*len(data)/(h*w),
                    "bytes_by_component": packet.byte_breakdown(), "encode_seconds": encode_seconds,
+                   "byte_fractions": {name: count/len(data) for name, count in packet.byte_breakdown().items()},
                    "decode_seconds": decode_seconds, "nfe": nfe,
                    "peak_memory_bytes": torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0,
                    "high_precision_area_fraction": precise.mean().item(),
@@ -136,6 +137,9 @@ def evaluate(args):
         summary[str(code)] = {key: sum(row[key] for row in subset)/len(subset) for key in keys}
         summary[str(code)]["bytes_by_component"] = {
             name: sum(row["bytes_by_component"][name] for row in subset)/len(subset)
+            for name in subset[0]["bytes_by_component"]}
+        summary[str(code)]["byte_fractions"] = {
+            name: sum(row["bytes_by_component"][name] for row in subset)/sum(row["bytes"] for row in subset)
             for name in subset[0]["bytes_by_component"]}
     manifest = {"checkpoint": str(Path(args.checkpoint).resolve()), "checkpoint_sha256": sha256_file(args.checkpoint),
                 "weights": args.weights, "backend": model.backend, "step": checkpoint["step"], "phase": checkpoint["phase"],
