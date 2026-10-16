@@ -41,19 +41,13 @@ if (( ${#bt_gpus[@]} != 1 )); then
 fi
 case "${stage}" in
   prepare)
-    "${bt_python}" train_bt_self_flow.py --config configs/bt_self_flow/c_backend.yaml \
+    "${bt_python}" train_bt_self_flow.py --config configs/bt_self_flow/c_joint.yaml \
       --prepare-backend "${bt_root}/common/complete.pt" --output "${bt_root}/backend_init.pt" "$@"
     ;;
   C|D)
     lower=${stage,,}
-    "${bt_python}" train_bt_self_flow.py --config "configs/bt_self_flow/${lower}_backend.yaml" \
-      --run-root "${bt_root}" --init-checkpoint "${bt_root}/backend_init.pt" "$@"
-    if [[ ! -f "${bt_root}/${stage}/backend/complete.pt" ]]; then
-      echo 'backend adaptation paused; resume it explicitly before joint training'
-      exit 0
-    fi
     "${bt_python}" train_bt_self_flow.py --config "configs/bt_self_flow/${lower}_joint.yaml" \
-      --run-root "${bt_root}" --init-checkpoint "${bt_root}/${stage}/backend/complete.pt" "$@"
+      --run-root "${bt_root}" --init-checkpoint "${bt_root}/backend_init.pt" "$@"
     ;;
   D_mix|E)
     config=d_mix

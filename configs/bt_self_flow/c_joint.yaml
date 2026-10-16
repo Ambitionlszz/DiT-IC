@@ -1,5 +1,10 @@
-base: c_backend.yaml
+base: common.yaml
+model:
+  checkpoint_blocks: false
 train:
   phase: joint
-  steps: 25000
+  steps: 200000
+  batch_size: 2
+  accumulation_steps: 4
+  keep_last_checkpoints: 3
   output: /data2/ls/checkpoints/bt_self_flow_v1/C/joint

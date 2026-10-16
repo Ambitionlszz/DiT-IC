@@ -49,6 +49,8 @@ def run_smoke(args, report, visible):
     def config(name, phase, backend, steps, accumulation):
         value = load_config(args.config)
         value["model"]["backend"] = backend
+        if phase == "joint":
+            value["model"]["checkpoint_blocks"] = False
         value["train"].update(phase=phase, steps=steps, accumulation_steps=accumulation,
                               batch_size=2, effective_batch=8, output=str(root/name), log_every=1,
                               eval_every=steps, save_every=steps,
@@ -67,29 +69,24 @@ def run_smoke(args, report, visible):
                if world > 1 else [python])
     execute("common", command+["train_bt_self_flow.py", "--config", common])
     first = visible.split(",")[0]
-    c_config = config("C_backend", "backend", "C", 14, 4)
+    c_config = config("C_joint", "joint", "C", 14, 4)
     execute("prepare", [python, "train_bt_self_flow.py", "--config", c_config,
                          "--prepare-backend", str(root/"common/complete.pt"),
                          "--output", str(root/"backend_init.pt")], first)
     def backend_smoke(backend, selected):
-        cfg = c_config if backend == "C" else config("D_backend", "backend", "D", 14, 4)
+        cfg = c_config if backend == "C" else config("D_joint", "joint", "D", 14, 4)
         # Exercise the real continuation path instead of doing a fresh second run.
         execute(f"{backend}_pause", [python, "train_bt_self_flow.py", "--config", cfg,
                                     "--init-checkpoint", str(root/"backend_init.pt"), "--max-updates", "2"], selected)
         execute(f"{backend}_resume", [python, "train_bt_self_flow.py", "--config", cfg,
-                                     "--resume", str(root/f"{backend}_backend/paused.pt")], selected)
-        joint = config(f"{backend}_joint", "joint", backend, 14, 4)
-        execute(f"{backend}_joint", [python, "train_bt_self_flow.py", "--config", joint,
-                                    "--init-checkpoint", str(root/f"{backend}_backend/complete.pt")], selected)
+                                     "--resume", str(root/f"{backend}_joint/paused.pt")], selected)
         times = {}
-        for phase in ("backend", "joint"):
+        for phase in ("joint",):
             rows = [json.loads(line) for line in (root/f"{backend}_{phase}/train.jsonl").read_text().splitlines()]
             steady = [row["seconds_per_update"] for row in rows if row["step"] > 10]
             times[phase] = {"seconds_per_effective_batch8_update": sum(steady)/len(steady),
                             "peak_memory_bytes": max(row["max_memory_bytes"] for row in rows)}
-        times["nominal_5000_backend_25000_joint_days"] = (
-            5000*times["backend"]["seconds_per_effective_batch8_update"]
-            +25000*times["joint"]["seconds_per_effective_batch8_update"])/86400
+        times["nominal_200000_joint_days"] = 200000*times["joint"]["seconds_per_effective_batch8_update"]/86400
         times["note"] = "short-run estimate; excludes validation/checkpoint time"
         return backend, times
 

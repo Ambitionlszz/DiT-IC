@@ -226,6 +226,50 @@ class TrainingTest(unittest.TestCase):
                                                         micro_batches_seen=3), 6))
         self.assertEqual(full[6:], resumed)
 
+    def test_shared_initialization_trains_frontend_from_first_joint_update(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.random.default_rng(903).integers(0, 256, (256, 256, 3), dtype=np.uint8)).save(root/"images/one.png")
+            shared = tiny_model("C").eval()
+            shared.vae.requires_grad_(False)
+            initial = deepcopy(shared.export_state())
+            source_config = small_config(root, "joint")
+            save_atomic(root/"shared.pt", {"method": METHOD, "schema": SCHEMA, "phase": "backend_init",
+                                          "backend": "shared", "step": 0, "config": source_config,
+                                          "raw": initial, "assets": {"test": "shared"}})
+            for backend in ("C", "D"):
+                models = []
+                def factory(config, device):
+                    model = tiny_model(backend).to(device)
+                    model.vae.requires_grad_(False)
+                    models.append(model)
+                    return model
+                config = small_config(root, "joint")
+                config["model"]["backend"] = backend
+                config["train"]["output"] = str(root/backend)
+                args = SimpleNamespace(resume=None, init_checkpoint=str(root/"shared.pt"), max_updates=1)
+                with patch.object(trainer, "make_model", side_effect=factory), \
+                     patch.object(trainer, "asset_identity", return_value={"test": "shared"}), \
+                     patch.object(trainer, "ImageLoss", side_effect=lambda **kw: ImageLoss(lpips_weight=0, dists_weight=0)), \
+                     redirect_stdout(io.StringIO()):
+                    trainer.train(config, args, 0, 1, torch.device("cpu"))
+                    first = read_checkpoint(root/backend/"paused.pt")
+                    args.resume, args.init_checkpoint, args.max_updates = str(root/backend/"paused.pt"), None, None
+                    trainer.train(config, args, 0, 1, torch.device("cpu"))
+                self.assertEqual(first["step"], 1)
+                self.assertFalse(models[0].freeze_codec)
+                self.assertTrue(any(p.requires_grad for p in models[0].codec.g_a.parameters()))
+                self.assertTrue(any(not torch.equal(v, first["raw"]["codec"][k])
+                                    for k, v in initial["codec"].items() if k.startswith("g_a.")))
+                record = json.loads((root/backend/"train.jsonl").read_text().splitlines()[0])
+                self.assertEqual(record["transition"], 1.)
+                saved = read_checkpoint(root/backend/"complete.pt")
+                self.assertEqual(saved["step"], 2)
+                self.assertTrue(torch.isfinite(torch.tensor(record["grad_norm"])))
+                if backend == "D":
+                    self.assertIn("conditioner", saved["raw"])
+
     def test_recipes_keep_the_paired_factors_fixed(self):
         root = Path(__file__).resolve().parents[1]/"configs"/"bt_self_flow"
         for phase in ("backend", "joint"):

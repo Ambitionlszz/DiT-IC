@@ -74,3 +74,37 @@ sys.exit(max(codes))
         if process.poll() is None:
             process.kill()
             process.wait()
+
+
+def test_supervisor_runs_both_joint_arms_directly_from_shared_init(tmp_path):
+    (tmp_path/"common").mkdir()
+    (tmp_path/"common/complete.pt").write_bytes(b"completed common fixture")
+    (tmp_path/"logs").mkdir()
+
+    class RecordingRun(PairedRun):
+        def __init__(self):
+            super().__init__(tmp_path, ["0", "1"], sys.executable)
+            self.started = []
+
+        def start(self, name, command, gpus):
+            self.started.append((name, command, gpus))
+            if name == "prepare":
+                (tmp_path/"backend_init.pt").write_bytes(b"shared init fixture")
+            else:
+                directory = tmp_path/name[0].upper()/"joint"
+                directory.mkdir(parents=True)
+                (directory/"complete.pt").write_bytes(b"joint complete fixture")
+
+        def wait(self, name):
+            pass
+
+        def finish(self, name):
+            return True
+
+    run = RecordingRun()
+    run.execute()
+    assert [name for name, _, _ in run.started] == ["prepare", "c_joint", "d_joint"]
+    for name, command, gpus in run.started[1:]:
+        assert command[command.index("--init-checkpoint")+1] == str(tmp_path/"backend_init.pt")
+        assert gpus == (["0"] if name == "c_joint" else ["1"])
+    assert run.state["status"] == "completed"

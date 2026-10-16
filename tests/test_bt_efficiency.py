@@ -7,7 +7,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from models.bt_self_flow.checkpoint import BestCheckpoint, METHOD, SCHEMA, evaluation_state, read_checkpoint, save_atomic
+from models.bt_self_flow.checkpoint import (BestCheckpoint, METHOD, SCHEMA, evaluation_state,
+                                           prune_checkpoints, read_checkpoint, save_atomic)
 from models.bt_self_flow.losses import reconstruction_objective
 from models.bt_self_flow.data import ImageDataset
 from models.bt_self_flow.packet import RateControl
@@ -109,3 +110,16 @@ def test_best_selection_does_not_mix_validation_datasets(tmp_path):
     current = BestCheckpoint(tmp_path, resume_step=2, restored=previous.state, identity={"dataset": "Kodak"})
     assert current.state is None
     assert current.consider({q: {"loss": 5.} for q in qualities}, 2)
+
+
+def test_long_run_retention_preserves_best_recent_and_resume_files(tmp_path):
+    for step in range(1, 7):
+        save_atomic(tmp_path/f"{step:07d}.pt", {"method": METHOD, "schema": SCHEMA, "step": step})
+    for name in ("paused.pt", "complete.pt"):
+        save_atomic(tmp_path/name, {"method": METHOD, "schema": SCHEMA, "step": 6})
+    best = {"checkpoint": "0000001.pt"}
+    prune_checkpoints(tmp_path, 3, best)
+    assert {p.name for p in tmp_path.glob("*.pt")} == {
+        "0000001.pt", "0000004.pt", "0000005.pt", "0000006.pt", "paused.pt", "complete.pt"}
+    for path in tmp_path.glob("*.pt"):
+        assert read_checkpoint(path)["step"] in (1, 4, 5, 6)

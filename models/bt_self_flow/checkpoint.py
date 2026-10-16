@@ -97,6 +97,19 @@ def read_checkpoint(path):
     return checkpoint
 
 
+def prune_checkpoints(directory, keep, best=None):
+    """Bound long-run storage while retaining best and complete/paused states."""
+    if keep is None:
+        return
+    if int(keep) < 1:
+        raise ValueError("keep_last_checkpoints must be positive")
+    snapshots = sorted((p for p in Path(directory).glob("*.pt") if p.stem.isdecimal()),
+                       key=lambda p: int(p.stem), reverse=True)
+    for path in snapshots[int(keep):]:
+        if best is None or path.name != best["checkpoint"]:
+            path.unlink()
+
+
 class BestCheckpoint:
     """Select deployment EMA by mean validation RD loss within one phase."""
 

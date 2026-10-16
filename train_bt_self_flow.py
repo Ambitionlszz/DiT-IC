@@ -21,7 +21,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
 from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, DeploymentEMA, capture_rng, clone_state,
-                                            read_checkpoint, restore_rng, save_atomic, sha256_file)
+                                            prune_checkpoints, read_checkpoint, restore_rng, save_atomic, sha256_file)
 from models.bt_self_flow.data import CounterSampler, ImageDataset, counter_seed
 from models.bt_self_flow.distributed import make_control_group, rank_zero_section
 from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config, lr_factor, make_model,
@@ -84,11 +84,15 @@ def initialize_from(model, checkpoint, phase):
             raise ValueError("C/D backend adaptation requires the shared backend_init checkpoint")
         model.load_bt_state(checkpoint["raw"], initialize_conditioner=True)
     elif phase == "joint":
-        if source_phase != "backend" or checkpoint["backend"] != model.backend:
-            raise ValueError("joint stage requires its own completed backend checkpoint")
-        if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
-            raise ValueError("backend adaptation has not completed")
-        model.load_bt_state(checkpoint["raw"])
+        if source_phase == "backend_init" and checkpoint["backend"] == "shared":
+            model.load_bt_state(checkpoint["raw"], initialize_conditioner=True)
+        elif source_phase == "backend" and checkpoint["backend"] == model.backend:
+            # Keep explicit continuation of earlier staged experiments usable.
+            if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
+                raise ValueError("backend adaptation has not completed")
+            model.load_bt_state(checkpoint["raw"])
+        else:
+            raise ValueError("joint stage requires shared initialization or its own completed backend checkpoint")
     elif phase == "self_flow":
         if source_phase not in ("joint", "self_flow") or checkpoint["backend"] != "D":
             raise ValueError("cross-rate continuation requires an adapted D backend")
@@ -115,7 +119,7 @@ def prepare_backend(config, source, output, device):
     if checkpoint["assets"] != asset_identity(config):
         raise ValueError("shared initialization pretrained assets differ")
     target = json.loads(json.dumps(config))
-    target["train"]["phase"] = "backend"
+    target["train"]["phase"] = "joint"
     target["model"]["backend"] = "C"
     target["self_flow"] = {"enabled": False, "mixed_sampling": False}
     model = make_model(target, device)
@@ -280,6 +284,7 @@ def train(config, args, rank, world, device):
                     checkpoint["teacher"] = teacher.get_ema_state_dict()
                 save_atomic(output/name, checkpoint)
                 best.publish(output/name)
+                prune_checkpoints(output, settings.get("keep_last_checkpoints"), best.state)
                 print(json.dumps({"checkpoint_saved": name, "step": step,
                                   "seconds": time.monotonic()-started_save, "best": best.state}), flush=True)
 

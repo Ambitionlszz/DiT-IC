@@ -111,33 +111,29 @@ class PairedRun:
         if not shared.exists():
             self.update("shared_initialization")
             self.start("prepare", [self.python, "train_bt_self_flow.py", "--config",
-                                    str(self.root/"configs/c_backend.yaml"), "--prepare-backend", str(common),
+                                    str(self.root/"configs/c_joint.yaml"), "--prepare-backend", str(common),
                                     "--output", str(shared)], [self.gpus[0]])
             self.wait("prepare")
         self.update("paired_training")
         phases = {}
 
-        def next_phase(backend):
-            for phase in ("backend", "joint"):
-                directory = self.root/backend/phase
-                if (directory/"complete.pt").exists():
-                    continue
-                name = f"{backend.lower()}_{phase}"
-                initialization = shared if phase == "backend" else self.root/backend/"backend/complete.pt"
-                self.start(name, self.command(name, directory, initialization),
-                           [self.gpus[0 if backend == "C" else 1]])
-                phases[backend] = (name, directory)
+        def start_joint(backend):
+            directory = self.root/backend/"joint"
+            if (directory/"complete.pt").exists():
                 return
-            phases.pop(backend, None)
+            name = f"{backend.lower()}_joint"
+            self.start(name, self.command(name, directory, shared),
+                       [self.gpus[0 if backend == "C" else 1]])
+            phases[backend] = (name, directory)
 
         for backend in ("C", "D"):
-            next_phase(backend)
+            start_joint(backend)
         while phases:
             for backend, (name, directory) in list(phases.items()):
                 if self.finish(name):
                     if not (directory/"complete.pt").exists():
                         raise InterruptedError(f"{name} paused; restart supervisor to resume")
-                    next_phase(backend)
+                    phases.pop(backend)
             time.sleep(2)
         self.update("completed")
 
@@ -191,7 +187,7 @@ def main():
         manifest = {"repository": str(REPO), "commit": commit, "python": args.python, "gpus": gpus}
         manifest_path = root/"manifest.json"
         configs = {}
-        for name in ("common", "c_backend", "d_backend", "c_joint", "d_joint"):
+        for name in ("common", "c_joint", "d_joint"):
             config = load_config(REPO/"configs/bt_self_flow"/f"{name}.yaml")
             phase, backend = config["train"]["phase"], config["model"]["backend"]
             config["train"]["output"] = str(root/("common" if phase == "codec" else f"{backend}/{phase}"))

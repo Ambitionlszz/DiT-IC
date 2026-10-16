@@ -68,7 +68,7 @@ export GLOO_SOCKET_IFNAME=lo
 /data2/ls/code/venvs/ditic/bin/python -m pytest tests -q -p no:cacheprovider
 ```
 
-GPU 资源预检会写 JSON。`--smoke` 进一步使用真实公共权重、512 裁剪、完整损失和有效 batch 8，执行共同前端、C/D 后端与联合训练的短跑，包含暂停/恢复和实际包验证。
+GPU 资源预检会写 JSON。`--smoke` 进一步使用真实公共权重、512 裁剪、完整损失和有效 batch 8，执行共同前端及 C/D 直接联合训练的短跑，包含暂停/恢复和实际包验证。
 
 ```bash
 /data2/ls/code/venvs/ditic/bin/python scripts/preflight_bt_self_flow.py \
@@ -103,7 +103,7 @@ bash scripts/run_bt_self_flow.sh C 0
 bash scripts/run_bt_self_flow.sh D 1
 ```
 
-默认输出根目录 `/data2/ls/checkpoints/bt_self_flow_v1`；另一次实验通过 `BT_RUN_ROOT=/新的目录` 覆盖，所有阶段保持一致。`C` / `D` 各顺序执行 5k 冻结 codec 的后端适配和 25k 联合训练，适配未完成不会进入联合阶段。
+默认输出根目录 `/data2/ls/checkpoints/bt_self_flow_v1`；另一次实验通过 `BT_RUN_ROOT=/新的目录` 覆盖，所有阶段保持一致。共同前端 50k 结束并完成训练集尺度标定后，`C` / `D` 从同一份 `backend_init.pt` 各直接进入 **200k 端到端训练**，无独立冻结适配阶段。前端、Router、主熵模型、SANA LoRA、文本投影及 DC-AE decoder LoRA 从第一步共同更新；D 的尺度调制和局部尺度更新从第一步完整启用。旧 `*_backend.yaml` 仅用于明确恢复旧阶段，不被主实验启动器调用。
 
 也可在 tmux 中执行 `python scripts/launch_bt_pair.py --root /data2/ls/checkpoints/bt_self_flow_v1 --gpus 0,1` 自动衔接全部阶段。该入口固定已提交的代码与配置、按 checkpoint 恢复，记录 `pipeline.json` / `manifest.json`，并将 C 放 GPU0、D 放 GPU1。共同前端尚未完成时，两组后端处于等待状态。
 
@@ -117,7 +117,7 @@ Ampere 及更新 GPU 使用原生 BF16；V100 使用 FP16＋GradScaler。AMP 溢
 
 训练日志中 `rate_est` 是“似然估计＋确定侧信息”，不是实测码率。各阶段每 2k 保存完整恢复点，并用全部 24 张 Kodak 原图验证，六档平均验证率失真损失变好时更新 `best.pt` / `best.json`。验证的 `rate_actual` 包含完整码流字节，选择 best 时使用实际码率；D 也计入尺度图。图像独立解码一致性检查只在完整过渡后执行。阶段开始重建优化器和 LR 调度，恢复训练则恢复全部状态。最终等步数比较使用 `complete.pt` 的 decay=0.999 部署 EMA，best 作为补充。
 
-根据预检测得的完整 optimizer-update 秒数重新估算 50k+5k+25k 预算，C/D 成对调整步数。默认 LR、损失、数据和阶段预算均在 `configs/bt_self_flow/`，修改前保留实验配置记录。
+按实测完整 optimizer-update 秒数估算 50k 共同前端加两组并行 200k 的预算。每组有效 batch=8（bs2、累积4），主优化器前 500 步仅做学习率 warmup，所有训练模块同时更新；随后按完整 200k 余弦下降至初始 LR 的 0.1。新联合阶段每 2k 保存，保留最近三个数字恢复点及历史 best 对应的恢复点，`paused.pt` / `complete.pt` 不受清理影响。已有共同前端恢复点不清理。默认量化端点、码率惩罚、损失和数据不变，参数在 `configs/bt_self_flow/`。
 
 ## 暂停与恢复
 
@@ -135,17 +135,17 @@ CUDA_VISIBLE_DEVICES=0,1 /data2/ls/code/venvs/ditic/bin/python -m torch.distribu
   --config configs/bt_self_flow/common.yaml \
   --resume /data2/ls/checkpoints/bt_self_flow_v1/common/paused.pt
 
-# 如果是恢复后完成了 backend 阶段，接下来显式交接到 joint：
+# 共同前端完成并生成共享初始化后，直接开始 joint：
 CUDA_VISIBLE_DEVICES=1 /data2/ls/code/venvs/ditic/bin/python train_bt_self_flow.py \
   --config configs/bt_self_flow/d_joint.yaml \
-  --init-checkpoint /data2/ls/checkpoints/bt_self_flow_v1/D/backend/complete.pt
+  --init-checkpoint /data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt
 ```
 
 checkpoint 保存 raw/EMA、主/辅助优化器、调度器、scaler、阶段/实际更新数、每 rank RNG、已消费的数据位置、标定、完整配置与公共权重 SHA256。恢复会核对配置、数据文件列表指纹、资产与 world size，避免悄悄换实验。
 
 ## 真实码流评测
 
-先分别评测 5k 适配 checkpoint，再评测两组等步数的联合 checkpoint。Kodak 使用原尺寸、右/下 pad 到 256 倍数并裁回，bpp 分母是原图像素数。
+比较两组相同步数的联合 checkpoint，并在 200k 结束后统一使用 `complete.pt` 的部署 EMA；best 作为补充。Kodak 使用原尺寸、右/下 pad 到 256 倍数并裁回，bpp 分母是原图像素数。
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 /data2/ls/code/venvs/ditic/bin/python eval_bt_self_flow.py \

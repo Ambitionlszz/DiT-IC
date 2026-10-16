@@ -107,7 +107,7 @@ def lr_factor(step, total, warmup=500):
 def training_contract(config, dataset, world_size):
     value = deepcopy(config)
     # Storage locations and log cadence do not change the experiment.
-    for key in ("output", "log_every", "eval_every", "save_every"):
+    for key in ("output", "log_every", "eval_every", "save_every", "keep_last_checkpoints"):
         value["train"].pop(key, None)
     value["dataset_fingerprint"] = dataset.fingerprint
     value["world_size"] = world_size
