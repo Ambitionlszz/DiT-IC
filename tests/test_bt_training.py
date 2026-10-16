@@ -88,6 +88,13 @@ class OneOverflowScaler:
         return {"scale": self.value, "attempt": self.attempt}
 
 
+class EnabledScaler(OneOverflowScaler):
+    """Exercise the FP16 replay policy on CPU without injecting gradient skips."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.attempt = 1
+
+
 def ddp_worker(rank, directory, slow_checkpoint=False):
     torch.set_num_threads(1)
     root = Path(directory)
@@ -121,7 +128,110 @@ def ddp_worker(rank, directory, slow_checkpoint=False):
         dist.destroy_process_group()
 
 
+def ddp_nonfinite_worker(rank, directory):
+    torch.set_num_threads(1)
+    root = Path(directory)
+    dist.init_process_group("gloo", rank=rank, world_size=2, init_method=f"file://{root/'rendezvous'}",
+                            timeout=timedelta(seconds=60))
+    original = trainer.reconstruction_objective
+    calls = [0]
+    def corrupt_one_rank(*args, **kwargs):
+        loss, metrics = original(*args, **kwargs)
+        calls[0] += 1
+        return (loss*float("nan") if rank == 1 and calls[0] == 2 else loss), metrics
+    args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=None)
+    config = small_config(root)
+    try:
+        with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+             patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
+             redirect_stdout(io.StringIO()):
+            trainer.train(config, args, rank, 2, torch.device("cpu"))
+            config["train"]["output"] = str(root/"failed")
+            with patch.object(trainer, "reconstruction_objective", side_effect=corrupt_one_rank):
+                try:
+                    trainer.train(config, args, rank, 2, torch.device("cpu"))
+                except FloatingPointError as exc:
+                    assert "last completed update" in str(exc)
+                else:
+                    raise AssertionError("nonfinite rank did not stop the distributed update")
+            paused = read_checkpoint(root/"failed/paused.pt")
+            assert paused["step"] == 0 and paused["micro_seen"] == 0
+            assert len(paused["rng_by_rank"]) == 2
+            args.resume = str(root/"failed/paused.pt")
+            trainer.train(config, args, rank, 2, torch.device("cpu"))
+        reference = read_checkpoint(root/"codec/complete.pt")
+        restored = read_checkpoint(root/"failed/complete.pt")
+        for part, values in reference["raw"].items():
+            for name, value in values.items():
+                assert torch.equal(value, restored["raw"][part][name]), f"{part}.{name}"
+    finally:
+        dist.destroy_process_group()
+
+
 class TrainingTest(unittest.TestCase):
+    def test_nonfinite_last_microbatch_on_one_rank_recovers_both_ranks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.random.default_rng(903).integers(
+                0, 256, (256, 256, 3), dtype=np.uint8)).save(root/"images/one.png")
+            mp.spawn(ddp_nonfinite_worker, args=(directory,), nprocs=2, join=True)
+
+    def test_nonfinite_forward_saves_last_update_and_replays_partial_accumulation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            for index in range(3):
+                Image.fromarray(np.random.default_rng(903+index).integers(
+                    0, 256, (270, 270, 3), dtype=np.uint8)).save(root/f"images/{index}.png")
+            args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=None)
+            original = trainer.reconstruction_objective
+            calls = [0]
+            def nonfinite_once(*a, **kw):
+                loss, metrics = original(*a, **kw)
+                calls[0] += 1
+                # The first microbatch of the second update has backpropagated.
+                if calls[0] == 4:
+                    loss = loss * float("nan")
+                return loss, metrics
+            with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+                 patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
+                 redirect_stdout(io.StringIO()):
+                reference = small_config(root)
+                trainer.train(reference, args, 0, 1, torch.device("cpu"))
+                failed = small_config(root)
+                failed["train"]["output"] = str(root/"failed")
+                with patch.object(trainer, "reconstruction_objective", side_effect=nonfinite_once):
+                    with self.assertRaisesRegex(FloatingPointError, "last completed update"):
+                        trainer.train(failed, args, 0, 1, torch.device("cpu"))
+                paused = read_checkpoint(root/"failed/paused.pt")
+                self.assertEqual(paused["step"], 1)
+                self.assertEqual(paused["micro_seen"], 2)
+                self.assertEqual(paused["scheduler"]["last_epoch"], 1)
+                args.resume = str(root/"failed/paused.pt")
+                trainer.train(failed, args, 0, 1, torch.device("cpu"))
+                automatic = small_config(root)
+                automatic["train"]["output"] = str(root/"automatic")
+                args.resume = None
+                calls[0] = 0
+                with patch.object(trainer.torch.amp, "GradScaler", EnabledScaler), \
+                     patch.object(trainer, "reconstruction_objective", side_effect=nonfinite_once):
+                    trainer.train(automatic, args, 0, 1, torch.device("cpu"))
+            full = read_checkpoint(root/"codec/complete.pt")
+            resumed = read_checkpoint(root/"failed/complete.pt")
+            self.assertEqual(resumed["micro_seen"], full["micro_seen"])
+            for weights in ("raw", "ema"):
+                for part, values in full[weights].items():
+                    for name, value in values.items():
+                        self.assertTrue(torch.equal(value, resumed[weights][part][name]), f"{weights}.{part}.{name}")
+            automatic = read_checkpoint(root/"automatic/complete.pt")
+            self.assertEqual(automatic["attempts"], full["attempts"]+1)
+            self.assertEqual(automatic["micro_seen"], full["micro_seen"])
+            for weights in ("raw", "ema"):
+                for part, values in full[weights].items():
+                    for name, value in values.items():
+                        self.assertTrue(torch.equal(value, automatic[weights][part][name]), f"{weights}.{part}.{name}")
+
     def test_amp_retry_preserves_paired_data_and_weights(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

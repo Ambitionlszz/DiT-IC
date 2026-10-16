@@ -166,6 +166,18 @@ class PairedRun:
                     except ProcessLookupError:
                         pass
 
+    def reap_stopped(self):
+        """Publish each peer's real exit status after an interrupted pair."""
+        for name, process in list(self.children.items()):
+            code = process.wait()
+            directory = self.root/"common" if name == "common" else self.root/name[0].upper()/"joint"
+            status = "failed"
+            if code == 0:
+                status = "completed" if (directory/"complete.pt").exists() else "paused"
+            self.state["jobs"][name].update(status=status, returncode=code, ended_at=self.now())
+            del self.children[name]
+        self.update()
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -216,8 +228,7 @@ def main():
             run.update("paused" if run.stop_requested or isinstance(error, InterruptedError) else "failed")
             # A failed arm must not silently leave its peer running unsupervised.
             run.stop(None, None)
-            for process in run.children.values():
-                process.wait()
+            run.reap_stopped()
             raise
 
 

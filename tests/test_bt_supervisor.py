@@ -68,6 +68,10 @@ sys.exit(max(codes))
             wait_file(directory/"ready")
         run.stop(None, None)
         assert process.wait(timeout=10) == 0
+        run.reap_stopped()
+        assert run.state["jobs"][name]["status"] == "paused"
+        assert run.state["jobs"][name]["returncode"] == 0
+        assert not run.children
         for directory in directories:
             assert json.loads((directory/"paused.json").read_text())["data_worker_alive"]
     finally:

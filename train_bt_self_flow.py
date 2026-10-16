@@ -29,6 +29,7 @@ from models.bt_self_flow.experiment import (asset_identity, check_stage_model, l
 from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
+from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
 from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
 
 
@@ -263,23 +264,26 @@ def train(config, args, rank, world, device):
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
                                       broadcast_buffers=False) if world > 1 else model
 
-    def save(name):
+    def save(name, resume_micro_seen=None, resume_rng=None):
         rngs = [None]*world
+        rng = capture_rng(device) if resume_rng is None else resume_rng
         if world > 1:
-            dist.all_gather_object(rngs, capture_rng(device), group=control_group)
+            dist.all_gather_object(rngs, rng, group=control_group)
         else:
-            rngs[0] = capture_rng(device)
+            rngs[0] = rng
         with rank_zero_section(rank, control_group):
             if rank == 0:
                 started_save = time.monotonic()
                 print(json.dumps({"checkpoint_saving": name, "step": step}), flush=True)
                 checkpoint = {"method": METHOD, "schema": SCHEMA, "phase": phase, "backend": model.backend,
-                              "step": step, "micro_seen": micro_seen, "attempts": attempts,
+                              "step": step, "micro_seen": micro_seen if resume_micro_seen is None else resume_micro_seen,
+                              "attempts": attempts,
                               "raw": clone_state(model.export_state(), cpu=True), "ema": clone_state(ema.state, cpu=True),
                               "optimizer": optimizer.state_dict(), "aux_optimizer": aux_optimizer.state_dict() if aux_optimizer else None,
                               "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(), "rng_by_rank": rngs,
                               "contract": contract, "config": config, "assets": assets, "source_sha256": source_hash,
-                              "calibration": calibration, "rep_weight": rep_weight, "validation_best": best.state}
+                              "calibration": calibration, "rep_weight": rep_weight, "validation_best": best.state,
+                              "full_precision_retry": full_precision_retry}
                 if teacher is not None:
                     checkpoint["teacher"] = teacher.get_ema_state_dict()
                 save_atomic(output/name, checkpoint)
@@ -302,6 +306,10 @@ def train(config, args, rank, world, device):
     last_log = time.monotonic()
     accumulated_time, accumulated_updates = 0., 0
     pending_images = []
+    update_rng = None
+    update_rep_weight = rep_weight
+    full_precision_retry = bool(resume and resume.get("full_precision_retry", False))
+    consecutive_amp_skips = 0
     stop = False
     stop_requested = [False]
     old_handlers = {}
@@ -310,6 +318,9 @@ def train(config, args, rank, world, device):
     try:
         while step < settings["steps"] and not stop:
             started = time.monotonic()
+            if not pending_images:
+                update_rng = capture_rng(device)
+                update_rep_weight = rep_weight
             optimizer.zero_grad(set_to_none=True)
             if aux_optimizer:
                 aux_optimizer.zero_grad(set_to_none=True)
@@ -320,6 +331,7 @@ def train(config, args, rank, world, device):
             control = sample_control(config, step, rank, (settings["batch_size"], config["data"]["crop"]//64,
                                                           config["data"]["crop"]//64), device)
             metrics_sum = {}
+            nonfinite_forward = False
             for micro in range(settings["accumulation_steps"]):
                 if len(pending_images) <= micro:
                     pending_images.append(next(iterator))
@@ -327,8 +339,9 @@ def train(config, args, rank, world, device):
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
                 context = wrapped.no_sync() if world > 1 and not synchronize else nullcontext()
-                with context:
-                    with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=device.type == "cuda"):
+                with context, full_precision_recompute(model, full_precision_retry):
+                    with torch.autocast(device_type=device.type, dtype=amp_dtype,
+                                        enabled=device.type == "cuda" and not full_precision_retry):
                         result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
                         loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data, image_loss)
                         if teacher is not None:
@@ -356,11 +369,51 @@ def train(config, args, rank, world, device):
                             metrics.update(sf=sf_loss, teacher_valid=valid_fraction,
                                            sf_weight=sf_loss.new_tensor(ramp*rep_weight),
                                            student_feature_std=result.feature.float().std(dim=1).mean())
-                    if not torch.isfinite(loss).item():
-                        raise FloatingPointError("nonfinite main loss")
+                    finite = torch.isfinite(loss).to(torch.int32)
+                    if world > 1:
+                        dist.all_reduce(finite, op=dist.ReduceOp.MIN)
+                    if not finite.item():
+                        nonfinite_forward = True
+                        diagnostic = dict(step=step, micro=micro, rank=rank, backend=model.backend,
+                                          precision="fp32" if full_precision_retry or device.type != "cuda" else str(amp_dtype),
+                                          **nonfinite_diagnostics(result, metrics))
+                        print(json.dumps({"nonfinite_forward": diagnostic, "rank": rank}), flush=True)
+                        break
                     scaler.scale(loss/settings["accumulation_steps"]).backward()
                 for key, value in metrics.items():
                     metrics_sum[key] = metrics_sum.get(key, 0.)+value.detach()/settings["accumulation_steps"]
+            if nonfinite_forward:
+                attempts += 1
+                rep_weight = update_rep_weight
+                optimizer.zero_grad(set_to_none=True)
+                # No optimizer or EMA update has occurred. A saved retry must
+                # replay all pending batches and the RNG from this update's start.
+                state_ok = torch.tensor(int(finite_state(model)), device=device)
+                if world > 1:
+                    dist.all_reduce(state_ok, op=dist.ReduceOp.MIN)
+                diagnostic["model_state_finite"] = bool(state_ok.item())
+                diagnostics = [None]*world
+                if world > 1:
+                    dist.all_gather_object(diagnostics, diagnostic, group=control_group)
+                else:
+                    diagnostics[0] = diagnostic
+                with rank_zero_section(rank, control_group):
+                    if rank == 0:
+                        (output/f"nonfinite_{step:07d}_{attempts:07d}.json").write_text(
+                            json.dumps({"ranks": diagnostics}, indent=2)+"\n")
+                if not state_ok.item():
+                    raise FloatingPointError("nonfinite model state; refusing to overwrite a valid recovery point")
+                # C/D run one process per model. A DDP synchronized forward
+                # cannot be abandoned and reused without rebuilding its reducer;
+                # distributed failures therefore stop at a valid recovery point.
+                can_retry = scaler.is_enabled() and world == 1 and not full_precision_retry
+                full_precision_retry = scaler.is_enabled() and world == 1
+                del result, loss, metrics
+                save("paused.pt", micro_seen-len(pending_images), update_rng)
+                if not can_retry:
+                    raise FloatingPointError("nonfinite main loss persists; saved the last completed update for diagnosis")
+                restore_rng(update_rng)
+                continue
             scaler.unscale_(optimizer)
             norm = torch.nn.utils.clip_grad_norm_([p for group in optimizer.param_groups for p in group["params"]],
                                                    config["optimizer"].get("max_grad_norm", 4.))
@@ -372,18 +425,26 @@ def train(config, args, rank, world, device):
             attempts += 1
             skipped = scaler.get_scale() < previous_scale
             if skipped:
-                if attempts-step > settings.get("max_amp_skips", 100):
+                consecutive_amp_skips += 1
+                if consecutive_amp_skips > settings.get("max_amp_skips", 100):
                     raise FloatingPointError("too many AMP skipped updates")
                 # Retry the same CPU batches at the lower loss scale. Otherwise
                 # different overflow patterns would change paired C/D crops.
+                rep_weight = update_rep_weight
+                restore_rng(update_rng)
                 continue
             pending_images.clear()
+            replayed_in_fp32 = full_precision_retry
+            full_precision_retry = False
+            consecutive_amp_skips = 0
             auxiliary_update(model.codec, aux_optimizer, world)
             scheduler.step()
             ema.update(model)
             if teacher is not None:
                 teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner, .9999)
             step += 1
+            if replayed_in_fp32 and rank == 0:
+                print(json.dumps({"fp32_replay_completed": True, "step": step, "attempts": attempts}), flush=True)
             if device.type == "cuda":
                 torch.cuda.synchronize(device)
             elapsed = time.monotonic()-started
