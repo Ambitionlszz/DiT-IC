@@ -112,6 +112,15 @@ def training_contract(config, dataset, world_size):
     value["dataset_fingerprint"] = dataset.fingerprint
     value["world_size"] = world_size
     value["format"] = "bt_packet_v1_q16_a3_s4"
+    return optimization_contract(value)
+
+
+def optimization_contract(value):
+    """Validation selection can change explicitly without resetting training."""
+    value = deepcopy(value)
+    for key in ("valid", "valid_limit", "valid_crop"):
+        value["data"].pop(key, None)
+    value["train"].pop("validation_actual_bpp", None)
     return value
 
 

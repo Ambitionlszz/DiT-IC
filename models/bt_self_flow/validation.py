@@ -8,8 +8,9 @@ import torch
 
 from .checkpoint import evaluation_state
 from .data import counter_seed
-from .losses import reconstruction_objective
-from .packet import BTImagePacket, RateControl, fixed_side_bits
+from .losses import rate_beta, reconstruction_objective
+from .model import pad_image
+from .packet import BTImagePacket, RateControl, fixed_side_bits, pack_codes
 
 
 @torch.no_grad()
@@ -62,27 +63,46 @@ def calibrate_interface(model, dataset, output, samples=512, seed=903, packet_sa
 
 
 @torch.no_grad()
-def validate(model, dataset, image_loss=None, state=None, transition=1., packet_samples=0, qualities=None):
+def validate(model, dataset, image_loss=None, state=None, transition=1., packet_samples=0, qualities=None,
+             actual_rate=False):
     device = next(model.parameters()).device
     qualities = qualities or (0., .2, .4, .6, .8, 1.)
     sums_by_quality = {str(quality): {} for quality in qualities}
     with evaluation_state(model, state):
         for index in range(len(dataset)):
             image = dataset[index].unsqueeze(0).to(device)
+            height, width = image.shape[-2:]
             # All quality points share the frozen clean encoder and pre-quant
             # analysis. Quantization, context and repair still run per quality.
-            source = model.codec.analyze(model.encode_clean_latent(image))
+            source = model.codec.analyze(model.encode_clean_latent(pad_image(image)))
             for quality in qualities:
                 control, sums = RateControl(quality), sums_by_quality[str(quality)]
                 result = model.forward_analysis(source, rate_control=control, transition=transition)
+                if result.image is not None:
+                    result.image = result.image[..., :height, :width]
                 loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data, image_loss)
+                packet = None
+                if actual_rate:
+                    # Encode the frontend without a second SANA forward. D's
+                    # scale side information still comes from actual decoded mu.
+                    encoded = model.codec.compress(source.clean, control)
+                    scales = b""
+                    if model.backend == "D":
+                        info = model.distortion_scale(source.clean, encoded["mean"])
+                        scales = pack_codes(info["codes"].flatten().tolist(), 4)
+                    packet = BTImagePacket(model.backend, (height, width), encoded["y_shape"], encoded["hyper_shape"],
+                                           control.low_code, control.high_code, encoded["hyper_stream"],
+                                           encoded["main_stream"], encoded["allocation"], scales)
+                    actual_bpp = loss.new_tensor(8*len(packet.to_bytes())/(height*width))
+                    loss = loss+rate_beta(control)*(actual_bpp-metrics["rate_est"])
+                    metrics["rate_actual"] = actual_bpp
                 metrics["loss"] = loss
                 if result.scale_info:
                     metrics["scale_saturation"] = result.scale_info["saturation"]
                 for name, value in metrics.items():
                     sums[name] = sums.get(name, 0.)+value.detach()
                 if index < packet_samples and hasattr(model, "DiT") and transition == 1:
-                    packet = model.compress(image, control)
+                    packet = packet if packet is not None else model.compress(image, control)
                     decoded = model.decompress(packet)
                     hard_error = (decoded-result.image).abs().max().item()
                     if not math.isfinite(hard_error) or hard_error > 2e-4:

@@ -4,10 +4,11 @@ data:
     - /data2/ls/data/Flickr2K/Flickr2K_png
     - /data2/ls/data/LSDIR
     - /data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png
-  valid: [/data2/ls/data/DIV2K_valid_HR]
+  valid: [/data2/ls/data/Kodak]
   crop: 512
+  valid_crop: 0
   workers: 4
-  valid_limit: 32
+  valid_limit: 24
 model:
   sana_path: /data2/ls/checkpoints/SANA
   text_path: /data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt
@@ -54,7 +55,8 @@ train:
   accumulation_steps: 2
   seed: 903
   eval_every: 2000
-  save_every: 5000
+  save_every: 2000
+  validation_actual_bpp: true
   log_every: 100
   packet_samples: 2
   data_scale_samples: 128

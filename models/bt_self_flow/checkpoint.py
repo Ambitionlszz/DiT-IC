@@ -2,9 +2,12 @@
 
 from contextlib import contextmanager
 import hashlib
+import json
+import math
 import os
 from pathlib import Path
 import random
+import shutil
 
 import numpy as np
 import torch
@@ -92,6 +95,65 @@ def read_checkpoint(path):
     if checkpoint.get("method") != METHOD or checkpoint.get("schema") != SCHEMA:
         raise ValueError("not a supported BT checkpoint; legacy checkpoints cannot be mixed")
     return checkpoint
+
+
+class BestCheckpoint:
+    """Select deployment EMA by mean validation RD loss within one phase."""
+
+    def __init__(self, directory, resume_step=0, restored=None, identity=None):
+        self.directory = Path(directory)
+        self.identity = identity
+        self.state = restored if restored is None or restored.get("validation_identity") == identity else None
+        # Older checkpoints have no selection metadata. Only reports with an
+        # available weight snapshot at/before the resume point are eligible.
+        if self.state is None:
+            for report in sorted(self.directory.glob("validation_*.json")):
+                step = int(report.stem.split("_")[-1])
+                weights = self.directory/f"{step:07d}.pt"
+                if step <= resume_step and weights.is_file():
+                    values = json.loads(report.read_text())
+                    if values.get("_validation_identity") == identity:
+                        self.consider(values, step)
+        if self.state is not None:
+            self.publish(self.directory/self.state["checkpoint"])
+
+    def consider(self, report, step):
+        qualities = ("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")
+        values = [float(report[quality]["loss"]) for quality in qualities]
+        if not all(math.isfinite(value) for value in values):
+            raise FloatingPointError("nonfinite validation checkpoint selection loss")
+        score = sum(values)/len(values)
+        if self.state is not None and score >= self.state["score"]:
+            return False
+        self.state = dict(step=step, score=score, metric="mean_six_quality_validation_rd_loss",
+                          weights="deployment_ema", checkpoint=f"{step:07d}.pt", validation_identity=self.identity)
+        return True
+
+    def publish(self, source):
+        source = Path(source)
+        if self.state is None or source.name != self.state["checkpoint"]:
+            return
+        target = self.directory/"best.pt"
+        temporary = target.with_suffix(".pt.tmp")
+        temporary.unlink(missing_ok=True)
+        try:
+            try:
+                os.link(source, temporary)
+            except OSError:
+                # Some experiment filesystems cannot hardlink. A complete copy
+                # is still published atomically and leaves the old best intact.
+                with source.open("rb") as incoming, temporary.open("wb", buffering=8*1024*1024) as outgoing:
+                    shutil.copyfileobj(incoming, outgoing, length=8*1024*1024)
+                    outgoing.flush()
+                    os.fsync(outgoing.fileno())
+            temporary.replace(target)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+        metadata = self.directory/"best.json"
+        pending = metadata.with_suffix(".json.tmp")
+        pending.write_text(json.dumps(self.state, indent=2)+"\n")
+        pending.replace(metadata)
 
 
 @contextmanager

@@ -115,7 +115,7 @@ C/D 均使用 SANA LoRA 128/128、DC-AE decoder-only LoRA 32/32、可训练文�
 
 Ampere 及更新 GPU 使用原生 BF16；V100 使用 FP16＋GradScaler。AMP 溢出重试复用同一组 CPU batch，不改变 C/D 的数据顺序，也不把跳过的更新计入预算。codec / 熵路径和注意力归一化保持 FP32。
 
-训练日志中 `rate_est` 是“似然估计＋确定侧信息”，不是实测码率。C/D 均每 2k 验证、每 5k 保存；实际包验证只在完整过渡后执行。阶段开始重建优化器和 LR 调度，恢复训练则恢复全部状态。最终比较默认采用 decay=0.999 的部署 EMA。
+训练日志中 `rate_est` 是“似然估计＋确定侧信息”，不是实测码率。各阶段每 2k 保存完整恢复点，并用全部 24 张 Kodak 原图验证，六档平均验证率失真损失变好时更新 `best.pt` / `best.json`。验证的 `rate_actual` 包含完整码流字节，选择 best 时使用实际码率；D 也计入尺度图。图像独立解码一致性检查只在完整过渡后执行。阶段开始重建优化器和 LR 调度，恢复训练则恢复全部状态。最终等步数比较使用 `complete.pt` 的 decay=0.999 部署 EMA，best 作为补充。
 
 根据预检测得的完整 optimizer-update 秒数重新估算 50k+5k+25k 预算，C/D 成对调整步数。默认 LR、损失、数据和阶段预算均在 `configs/bt_self_flow/`，修改前保留实验配置记录。
 

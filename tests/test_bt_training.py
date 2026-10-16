@@ -1,10 +1,12 @@
 from contextlib import redirect_stdout
 from copy import deepcopy
+from datetime import timedelta
 import io
 import itertools
 import json
 from pathlib import Path
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -86,18 +88,24 @@ class OneOverflowScaler:
         return {"scale": self.value, "attempt": self.attempt}
 
 
-def ddp_worker(rank, directory):
+def ddp_worker(rank, directory, slow_checkpoint=False):
     torch.set_num_threads(1)
     root = Path(directory)
-    dist.init_process_group("gloo", rank=rank, world_size=2, init_method=f"file://{root/'rendezvous'}")
+    dist.init_process_group("gloo", rank=rank, world_size=2, init_method=f"file://{root/'rendezvous'}",
+                            timeout=timedelta(seconds=3 if slow_checkpoint else 300))
     models = []
     def factory(config, device):
         model = make_tiny_stage(config, device)
         models.append(model)
         return model
+    def slow_save(path, state):
+        if slow_checkpoint:
+            time.sleep(4)  # Longer than the training collective timeout.
+        return save_atomic(path, state)
     try:
         with patch.object(trainer, "make_model", side_effect=factory), \
              patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
+             patch.object(trainer, "save_atomic", side_effect=slow_save), \
              redirect_stdout(io.StringIO()):
             trainer.train(small_config(root), SimpleNamespace(resume=None, init_checkpoint=None, max_updates=None),
                           rank, 2, torch.device("cpu"))
@@ -150,6 +158,37 @@ class TrainingTest(unittest.TestCase):
             self.assertEqual(state["step"], 2)
             self.assertEqual(len(state["rng_by_rank"]), 2)
             self.assertEqual(state["contract"]["world_size"], 2)
+
+    def test_slow_rank_zero_save_does_not_timeout_training_collectives(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8)).save(root/"images/one.png")
+            mp.spawn(ddp_worker, args=(directory, True), nprocs=2, join=True)
+            self.assertEqual(read_checkpoint(root/"codec/complete.pt")["step"], 2)
+
+    def test_validation_selects_best_and_resume_retains_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8)).save(root/"images/one.png")
+            config = small_config(root)
+            config["train"].update(steps=3, eval_every=1, save_every=1)
+            qualities = ("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")
+            reports = [{quality: {"loss": loss} for quality in qualities} for loss in (3., 1., 2.)]
+            args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=2)
+            with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+                 patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
+                 patch.object(trainer, "validate", side_effect=reports), redirect_stdout(io.StringIO()):
+                trainer.train(config, args, 0, 1, torch.device("cpu"))
+                args.resume, args.max_updates = str(root/"codec/paused.pt"), None
+                trainer.train(config, args, 0, 1, torch.device("cpu"))
+            self.assertTrue(all((root/f"codec/{step:07d}.pt").exists() for step in (1, 2, 3)))
+            self.assertEqual(read_checkpoint(root/"codec/best.pt")["step"], 2)
+            final = read_checkpoint(root/"codec/complete.pt")
+            self.assertEqual(final["step"], 3)
+            self.assertEqual(final["validation_best"]["step"], 2)
+            self.assertEqual(final["validation_best"]["score"], 1.)
 
     def test_cross_rate_trainer_runs_both_global_and_mixed_updates(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -20,11 +20,12 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
-from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, DeploymentEMA, capture_rng, clone_state,
+from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, DeploymentEMA, capture_rng, clone_state,
                                             read_checkpoint, restore_rng, save_atomic, sha256_file)
 from models.bt_self_flow.data import CounterSampler, ImageDataset, counter_seed
+from models.bt_self_flow.distributed import make_control_group, rank_zero_section
 from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config, lr_factor, make_model,
-                                            optimizer_groups, training_contract)
+                                            optimization_contract, optimizer_groups, training_contract)
 from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
@@ -146,6 +147,7 @@ def auxiliary_update(codec, optimizer, world):
 
 
 def train(config, args, rank, world, device):
+    control_group = make_control_group(world)
     settings = config["train"]
     phase = settings["phase"]
     seed_all(settings["seed"]+rank)
@@ -163,8 +165,10 @@ def train(config, args, rank, world, device):
     if error[0]:
         raise ValueError(error[0])
     dataset = ImageDataset(config["data"]["train"], config["data"]["crop"])
-    validation = ImageDataset(config["data"]["valid"], config["data"]["crop"], False,
+    validation = ImageDataset(config["data"]["valid"], config["data"].get("valid_crop", config["data"]["crop"]), False,
                                config["data"].get("valid_limit", 32))
+    validation_identity = dict(dataset_fingerprint=validation.fingerprint, images=len(validation),
+                               crop=validation.crop, actual_rate=settings.get("validation_actual_bpp", False))
     model = make_model(config, device)
     seed_all(settings["seed"]+rank)
     contract = training_contract(config, dataset, world)
@@ -176,7 +180,7 @@ def train(config, args, rank, world, device):
     source_hash = None
     calibration = None
     if resume:
-        if resume["contract"] != contract or resume["assets"] != assets:
+        if optimization_contract(resume["contract"]) != contract or resume["assets"] != assets:
             raise ValueError("resume contract, dataset, assets, batch or training settings differ")
         model.load_bt_state(resume["raw"])
         source_hash, calibration = resume.get("source_sha256"), resume.get("calibration")
@@ -226,6 +230,25 @@ def train(config, args, rank, world, device):
         if teacher is not None:
             teacher.load_ema_state_dict(resume["teacher"])
         restore_rng(resume["rng_by_rank"][rank])
+    with rank_zero_section(rank, control_group):
+        best = BestCheckpoint(output, step, resume.get("validation_best") if resume else None,
+                              identity=validation_identity) if rank == 0 else None
+
+    def validation_report(transition):
+        report = validate(model, validation, image_loss, ema.state, transition,
+                          packet_samples=0 if phase == "codec" else settings.get("packet_samples", 2),
+                          actual_rate=settings.get("validation_actual_bpp", False))
+        report["_validation_identity"] = validation_identity
+        (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
+        return report
+
+    # After an explicit validation-set migration, establish a new baseline from
+    # the resumed weights. Scores from the old dataset cannot select this best.
+    with rank_zero_section(rank, control_group):
+        if rank == 0 and resume and best.state is None and Path(args.resume).stem.isdecimal():
+            transition = min(1., max(step-1, 0)/max(settings["steps"]-1, 1)) if phase == "backend" else 1.
+            best.consider(validation_report(transition), step)
+            best.publish(args.resume)
     sampler = CounterSampler(len(dataset), settings["seed"], rank, world, settings["batch_size"], micro_seen,
                               stream={"codec": 21, "backend": 22, "joint": 23, "self_flow": 24}[phase])
     loader = DataLoader(dataset, batch_size=settings["batch_size"], sampler=sampler,
@@ -239,20 +262,26 @@ def train(config, args, rank, world, device):
     def save(name):
         rngs = [None]*world
         if world > 1:
-            dist.all_gather_object(rngs, capture_rng(device))
+            dist.all_gather_object(rngs, capture_rng(device), group=control_group)
         else:
             rngs[0] = capture_rng(device)
-        if rank == 0:
-            checkpoint = {"method": METHOD, "schema": SCHEMA, "phase": phase, "backend": model.backend,
-                          "step": step, "micro_seen": micro_seen, "attempts": attempts,
-                          "raw": clone_state(model.export_state(), cpu=True), "ema": clone_state(ema.state, cpu=True),
-                          "optimizer": optimizer.state_dict(), "aux_optimizer": aux_optimizer.state_dict() if aux_optimizer else None,
-                          "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(), "rng_by_rank": rngs,
-                          "contract": contract, "config": config, "assets": assets, "source_sha256": source_hash,
-                          "calibration": calibration, "rep_weight": rep_weight}
-            if teacher is not None:
-                checkpoint["teacher"] = teacher.get_ema_state_dict()
-            save_atomic(output/name, checkpoint)
+        with rank_zero_section(rank, control_group):
+            if rank == 0:
+                started_save = time.monotonic()
+                print(json.dumps({"checkpoint_saving": name, "step": step}), flush=True)
+                checkpoint = {"method": METHOD, "schema": SCHEMA, "phase": phase, "backend": model.backend,
+                              "step": step, "micro_seen": micro_seen, "attempts": attempts,
+                              "raw": clone_state(model.export_state(), cpu=True), "ema": clone_state(ema.state, cpu=True),
+                              "optimizer": optimizer.state_dict(), "aux_optimizer": aux_optimizer.state_dict() if aux_optimizer else None,
+                              "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(), "rng_by_rank": rngs,
+                              "contract": contract, "config": config, "assets": assets, "source_sha256": source_hash,
+                              "calibration": calibration, "rep_weight": rep_weight, "validation_best": best.state}
+                if teacher is not None:
+                    checkpoint["teacher"] = teacher.get_ema_state_dict()
+                save_atomic(output/name, checkpoint)
+                best.publish(output/name)
+                print(json.dumps({"checkpoint_saved": name, "step": step,
+                                  "seconds": time.monotonic()-started_save, "best": best.state}), flush=True)
 
     if rank == 0:
         try:
@@ -370,19 +399,20 @@ def train(config, args, rank, world, device):
                     with (output/"train.jsonl").open("a") as fd:
                         fd.write(json.dumps(record)+"\n")
                     print(json.dumps(record), flush=True)
-            if step % settings["eval_every"] == 0:
+            improved = False
+            if step % settings["eval_every"] == 0 or step == settings["steps"]:
+                with rank_zero_section(rank, control_group):
+                    if rank == 0:
+                        report = validation_report(transition)
+                        improved = best.consider(report, step)
                 if world > 1:
-                    dist.barrier()
-                if rank == 0:
-                    report = validate(model, validation, image_loss, ema.state, transition,
-                                      packet_samples=0 if phase == "codec" else settings.get("packet_samples", 2))
-                    (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
-                if world > 1:
-                    dist.barrier()
+                    selected = [improved]
+                    dist.broadcast_object_list(selected, src=0, group=control_group)
+                    improved = selected[0]
             # Backend/joint endpoints immediately save complete.pt; do not
             # serialize the same multi-GB state twice. The codec endpoint keeps
             # a pre-calibration recovery file because calibration can be long.
-            if step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec"):
+            if improved or (step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec")):
                 save(f"{step:07d}.pt")
             if args.max_updates and step >= args.max_updates:
                 stop = True
@@ -396,14 +426,13 @@ def train(config, args, rank, world, device):
         raise
     completed = step >= settings["steps"]
     if completed and phase == "codec":
-        if world > 1:
-            dist.barrier()
-        if rank == 0:
-            calibration = calibrate_interface(model, dataset, output/"calibration.json",
-                                              settings.get("calibration_samples", 512), settings["seed"])
+        with rank_zero_section(rank, control_group):
+            if rank == 0:
+                calibration = calibrate_interface(model, dataset, output/"calibration.json",
+                                                  settings.get("calibration_samples", 512), settings["seed"])
         if world > 1:
             values = [calibration]
-            dist.broadcast_object_list(values, src=0)
+            dist.broadcast_object_list(values, src=0, group=control_group)
             calibration = values[0]
             for buffer in model.distortion_scale.buffers():
                 dist.broadcast(buffer, src=0)
