@@ -197,3 +197,39 @@ CUDA runtime 抽查 SHA256 与原环境一致，原环境保持不变；该副�
 归档首轮 C/D 日志、D 的 paused.pt 和旧 manifest 后，两组均从同一份正式
 `backend_init.pt` 重跑，以保持共同起点；共同前端 50k 及其尺度标定不重复。
 码率参数、损失、数据、batch 和每组 200k 预算不变。
+
+## 2026-10-17：定位实际 query 溢出，重启后的恢复点检查
+
+主机重启后 GPU 进程和 `/tmp` 快速运行环境消失。重新挂载原代码镜像，并重建
+同版本的环境副本；副本文件系统检查发现一处残留隐藏目录项，仅在副本上修复。
+原镜像未执行 fsck。共同前端 complete.pt 的 50k 状态和 backend_init.pt 可加载，
+所有导出浮点权重均有限。C 的 paused.pt 和旧诊断硬链接快照在这次重启后无法
+读取；保留原文件和失败记录，不将其当作可恢复 checkpoint。D paused.pt 可读取。
+
+对 D step364/micro2，利用 CounterSampler 恢复原图、裁剪、质量及粗 latent，
+逐模块 hook 复现首个非有限值：`transformer_blocks.27.attn2.to_q.base_layer`。
+该投影输入仍为有限 FP32，最大绝对值 7360.0903，FP16 输出出现 Inf。同批的
+原生 FP32 SANA 预测有限。此前仅稳定线性自注意力的收缩/分母，不能防止
+Cross-Attention 在生成 query 时已经溢出。
+
+BT 现安装继承原生 SanaAttnProcessor2_0 的 FP32 Cross-Attention 处理器，覆盖
+输入投影、SDPA 和输出投影，保留 PEFT 及原有权重键；输出保持 FP32 参与残差。
+C/D、EMA 教师采用相同规则，固定时间、单步更新和 1 NFE 协议保持原设计。
+修复后的原故障批次所有 SANA 模块均有限；完整图像损失 0.664195，GradScaler
+原 scale=65536 下反向一次即有限，Router/ga 非零梯度范数为 0.05861/2.53104，
+冻结 encoder 无梯度，峰值分配 19.50 GiB。报告位于
+`nonfinite_joint_20261017/D_trace_before.json` 和 `D_trace_after.json`。
+这定位并修复了 D 的实际算子故障；C 的原权重快照不可读取，不能声称已复现
+其精确首个出错算子。
+
+保存路径同时补齐 rename 后的父目录 fsync，保存成功日志必须在该步骤之后。
+该措施并非对 NTFS/FUSE 或设备在突然重启后一定无损的保证。为保持 C/D 的
+共同训练条件，两组此前几百步及元数据均归档，修复后从同一份正式 50k
+backend_init 重新开始 200k 直接联合训练，不重复前端训练或尺度标定。
+
+本轮验证共 32 项通过：后端/训练/监督器 22 项、CUDA 4 项、保存/评测行为 6 项。
+CUDA 新回归用有限输入制造 FP16 query 溢出，并验证新处理器输出与原生 FP32
+逐值一致、输入及参数梯度有限、权重键不变。DDP 测试在允许 loopback 的主机
+环境运行。完整公共 C 模型从正式共同初始化完成两个累积更新，512 输入、
+有效 batch8；checkpoint 保存并重新读取、实验盘小文件落盘往返通过，峰值
+22.30 GiB。该短跑与 D 原故障重放均为工程验证，不能用作 RD 研究结果。

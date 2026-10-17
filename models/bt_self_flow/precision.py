@@ -1,9 +1,12 @@
-"""FP32 attention contractions under AMP, without changing weights or topology.
+"""FP32 attention islands under AMP, without changing weights or topology.
 
 diffusers 0.35.2's SANA processors cast inputs to float, but outer autocast
 still casts their matmuls back to FP16. The 1e-15 normalization denominator
-can then underflow to zero. Keep projections under AMP and isolate only the
-attention contractions/normalization. Used exclusively by the BT models.
+can then underflow to zero. Keep self-attention projections under AMP and
+isolate their contractions/normalization. Cross-attention also needs FP32
+projections: late SANA residuals are finite in FP32, but their query projection
+can exceed FP16's range before scaled-dot-product attention. Used exclusively
+by the BT models.
 """
 
 import torch
@@ -11,6 +14,7 @@ from torch.nn import functional as F
 from diffusers.models.attention_processor import (
     SanaLinearAttnProcessor2_0, SanaMultiscaleAttnProcessor2_0, SanaMultiscaleLinearAttention,
 )
+from diffusers.models.transformers.sana_transformer import SanaAttnProcessor2_0
 
 
 class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
@@ -32,6 +36,20 @@ class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
         output = normalized.flatten(1, 2).transpose(1, 2).to(dtype)
         output = attn.to_out[1](attn.to_out[0](output))
         return output.clamp(-65504, 65504) if dtype == torch.float16 else output
+
+
+class StableSanaCrossAttention(SanaAttnProcessor2_0):
+    """Preserve large finite queries rather than overflowing or clipping them.
+
+    Call the native processor with autocast disabled, including the PEFT
+    projections. Casting only an already overflowing query cannot repair it.
+    Leave the result in FP32 for the following residual addition.
+    """
+
+    def __call__(self, attn, hidden_states, encoder_hidden_states=None, attention_mask=None):
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            context = None if encoder_hidden_states is None else encoder_hidden_states.float()
+            return super().__call__(attn, hidden_states.float(), context, attention_mask)
 
 
 class _FloatContractions:
@@ -62,6 +80,10 @@ def install_stable_attention(sana=None, vae=None):
             if not isinstance(block.attn1.processor, SanaLinearAttnProcessor2_0):
                 raise TypeError("BT expects the native SANA linear self-attention processor")
             block.attn1.set_processor(StableSanaLinearAttention())
+            if block.attn2 is not None:
+                if not isinstance(block.attn2.processor, SanaAttnProcessor2_0):
+                    raise TypeError("BT expects the native SANA cross-attention processor")
+                block.attn2.set_processor(StableSanaCrossAttention())
     if vae is not None:
         for module in vae.modules():
             if isinstance(module, SanaMultiscaleLinearAttention):

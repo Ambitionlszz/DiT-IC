@@ -70,6 +70,17 @@ def restore_rng(state):
         torch.cuda.set_rng_state(state["cuda"].cpu())
 
 
+def _replace_and_sync(temporary, target):
+    temporary.replace(target)
+    # File fsync alone does not persist the rename in its parent directory.
+    # Do not announce a completed save before that directory is synchronized.
+    descriptor = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def save_atomic(path, checkpoint):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +92,7 @@ def save_atomic(path, checkpoint):
             torch.save(checkpoint, target)
             target.flush()
             os.fsync(target.fileno())
-        temporary.replace(path)
+        _replace_and_sync(temporary, path)
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
@@ -159,7 +170,7 @@ class BestCheckpoint:
                     shutil.copyfileobj(incoming, outgoing, length=8*1024*1024)
                     outgoing.flush()
                     os.fsync(outgoing.fileno())
-            temporary.replace(target)
+            _replace_and_sync(temporary, target)
         except BaseException:
             temporary.unlink(missing_ok=True)
             raise

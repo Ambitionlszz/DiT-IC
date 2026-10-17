@@ -13,7 +13,7 @@
 | 实测失真尺度 | `models/bt_self_flow/scale.py`、`validation.py` | 编码端由真实恢复 μ 测 RMS；固定训练集标定；4 bit log 尺度；停止梯度 |
 | C/D 单步后端 | `models/bt_self_flow/model.py`、`conditioning.py` | 原固定时间更新 / 连续失真条件和局部尺度更新；完整 SANA、1 NFE |
 | 内存控制 | `models/bt_self_flow/decoder.py`、`models/sana_self_flow.py` | 支持 SANA / DC-AE decoder 检查点；C/D 实测后关闭重算加速，D_mix/E 开启 |
-| 混合精度稳定性 | `models/bt_self_flow/precision.py` | 投影保持 AMP；SANA / DC-AE 注意力乘法与归一化明确 FP32，避免 FP16 分母下溢 |
+| 混合精度稳定性 | `models/bt_self_flow/precision.py` | SANA 自注意力/DC-AE 收缩与归一化 FP32；SANA Cross-Attention 包含投影的整个处理器 FP32，保留大 query 的有限值 |
 | 训练与恢复 | `train_bt_self_flow.py`、`checkpoint.py`、`data.py` | 分阶段优化、DDP 累积、辅助 quantile 优化器、部署 EMA、完整恢复、独立数据随机流 |
 | 真实评测 | `eval_bt_self_flow.py` | 保存实际包、从序列化包解码、完整字节计费、图像指标、耗时、NFE 和诊断 |
 | 后续 Self-Flow | `model.py`、独立 E 配置 | 同架构 EMA 教师前 20 层；学生第 8 层表征，完整学生生成最终输出 |
@@ -113,7 +113,9 @@ bash scripts/run_bt_self_flow.sh D 1
 
 C/D 均使用 SANA LoRA 128/128、DC-AE decoder-only LoRA 32/32、可训练文本投影；DC-AE encoder 与两个公共底座冻结。不构造 GAN 判别器。C/D 的共享初始参数、数据顺序、裁剪和 λ 采样相同。
 
-Ampere 及更新 GPU 使用原生 BF16；V100 使用 FP16＋GradScaler。AMP 溢出重试复用同一组 CPU batch，不改变 C/D 的数据顺序，也不把跳过的更新计入预算。codec / 熵路径和注意力归一化保持 FP32。
+Ampere 及更新 GPU 使用原生 BF16；V100 使用 FP16＋GradScaler。AMP 溢出重试复用同一组 CPU batch，不改变 C/D 的数据顺序，也不把跳过的更新计入预算。codec / 熵路径、注意力归一化和 SANA Cross-Attention 处理器保持 FP32。实测最后一层未经归一化的残差输入可达 7360，query 投影在 FP16 中溢出；必须在投影前关闭 autocast，不能先产生 Inf 再转 float。C/D 使用同一精度规则，参数结构和 checkpoint key 不变。
+
+checkpoint 先同步临时文件，再原子替换目标，并同步父目录后才打印保存成功。此操作补齐目录项的持久化步骤；存储设备或文件系统在异常重启后仍需检查文件完整性，不能单凭旧日志判定恢复点可用。
 
 GradScaler 处理反向梯度溢出；前向损失非有限时采用独立流程。先核对模型状态仍有限，保存最近完整更新，并把数据游标和 RNG 回退到当前累积更新的起点。C/D 单进程训练最多对同一整批数据重算一次 FP32 前向和反向，临时启用 SANA/DC-AE 激活重算以控制显存；成功后恢复常规 AMP。FP32 仍非有限、模型状态已损坏或分布式前向出错时停止，保留诊断和有效恢复点，不跳过样本继续计步。模型状态损坏时不覆盖已有恢复点。普通梯度溢出的重试上限按连续失败次数计算，累计重试仍由 `attempts` 记录。
 

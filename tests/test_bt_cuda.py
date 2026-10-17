@@ -23,13 +23,40 @@ from models.bt_self_flow.decoder import decode_latent
 from models.bt_self_flow.codec import BTLatentCodec
 from models.bt_self_flow.losses import ImageLoss
 from models.bt_self_flow.packet import BTImagePacket, RateControl
-from models.bt_self_flow.precision import install_stable_attention
+from models.bt_self_flow.precision import StableSanaCrossAttention, install_stable_attention
 from test_bt_backend import tiny_model, tiny_sana
 from test_bt_training import small_config
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is inaccessible")
 class GPUPrecisionTest(unittest.TestCase):
+    def test_large_cross_attention_queries_preserve_finite_forward_and_backward(self):
+        torch.manual_seed(907)
+        attention = tiny_sana().cuda().transformer_blocks[-1].attn2
+        with torch.no_grad():
+            attention.to_q.weight.copy_(torch.eye(32, device="cuda") * 512)
+            attention.to_q.bias.zero_()
+        states = torch.full((1, 8, 32), 512., device="cuda", requires_grad=True)
+        text = torch.randn(1, 2, 32, device="cuda", requires_grad=True)
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
+            overflowing_query = attention.to_q(states)
+            native = attention(states, encoder_hidden_states=text)
+        self.assertFalse(torch.isfinite(overflowing_query).all())
+        self.assertFalse(torch.isfinite(native).all())
+        with torch.no_grad(), torch.autocast("cuda", enabled=False):
+            reference = attention(states, encoder_hidden_states=text)
+        state_keys = tuple(attention.state_dict())
+        attention.set_processor(StableSanaCrossAttention())
+        with torch.autocast("cuda", dtype=torch.float16):
+            actual = attention(states, encoder_hidden_states=text)
+        self.assertEqual(tuple(attention.state_dict()), state_keys)
+        self.assertEqual(actual.dtype, torch.float32)
+        self.assertTrue(torch.equal(actual, reference))
+        actual.square().mean().backward()
+        for gradient in [states.grad, text.grad, *[p.grad for p in attention.parameters()]]:
+            self.assertIsNotNone(gradient)
+            self.assertTrue(torch.isfinite(gradient).all())
+
     @torch.no_grad()
     def test_channels_last_analysis_has_bit_exact_coded_reconstruction(self):
         torch.manual_seed(907)
