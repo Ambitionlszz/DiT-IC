@@ -10,11 +10,33 @@ by the BT models.
 """
 
 import torch
+from torch import nn
 from torch.nn import functional as F
 from diffusers.models.attention_processor import (
     SanaLinearAttnProcessor2_0, SanaMultiscaleAttnProcessor2_0, SanaMultiscaleLinearAttention,
 )
 from diffusers.models.transformers.sana_transformer import SanaAttnProcessor2_0
+from diffusers.models.embeddings import PixArtAlphaTextProjection
+
+
+class StableSanaCaptionProjection(PixArtAlphaTextProjection):
+    """Reuse the original children and keys, retaining FP32 until caption_norm.
+
+    Training text_proj can increase the unnormalized caption magnitude. Its
+    second pretrained projection can exceed FP16 before the following RMSNorm
+    brings the condition back to normal scale. Do not clamp or cast it down.
+    """
+
+    def __init__(self, projection):
+        nn.Module.__init__(self)
+        self.linear_1 = projection.linear_1
+        self.act_1 = projection.act_1
+        self.linear_2 = projection.linear_2
+        self.train(projection.training)
+
+    def forward(self, caption):
+        with torch.autocast(device_type=caption.device.type, enabled=False):
+            return super().forward(caption.float())
 
 
 class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
@@ -76,6 +98,10 @@ class StableDCMultiscaleAttention(SanaMultiscaleAttnProcessor2_0):
 
 def install_stable_attention(sana=None, vae=None):
     if sana is not None:
+        if not isinstance(sana.caption_projection, PixArtAlphaTextProjection):
+            raise TypeError("BT expects the native SANA caption projection")
+        if not isinstance(sana.caption_projection, StableSanaCaptionProjection):
+            sana.caption_projection = StableSanaCaptionProjection(sana.caption_projection)
         for block in sana.transformer_blocks:
             if not isinstance(block.attn1.processor, SanaLinearAttnProcessor2_0):
                 raise TypeError("BT expects the native SANA linear self-attention processor")

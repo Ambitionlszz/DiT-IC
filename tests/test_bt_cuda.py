@@ -30,6 +30,44 @@ from test_bt_training import small_config
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is inaccessible")
 class GPUPrecisionTest(unittest.TestCase):
+    def test_large_caption_projection_stays_finite_through_normalization(self):
+        torch.manual_seed(907)
+        sana = tiny_sana().cuda()
+        projection = sana.caption_projection
+        with torch.no_grad():
+            projection.linear_1.weight.zero_()
+            projection.linear_1.weight[:16].copy_(torch.eye(16, device="cuda") * 64)
+            projection.linear_1.bias.zero_()
+            projection.linear_2.weight.copy_(torch.eye(32, device="cuda") * 256)
+            projection.linear_2.bias.zero_()
+        captions = torch.full((1, 2, 16), 8., device="cuda", requires_grad=True)
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
+            original = projection(captions)
+        self.assertFalse(torch.isfinite(original).all())
+        with torch.no_grad(), torch.autocast("cuda", enabled=False):
+            reference = sana.caption_norm(projection(captions))
+        state = deepcopy(sana.state_dict())
+        parameter_ids = {name: id(value) for name, value in sana.named_parameters()}
+        install_stable_attention(sana=sana)
+        self.assertEqual(parameter_ids, {name: id(value) for name, value in sana.named_parameters()})
+        self.assertEqual(tuple(state), tuple(sana.state_dict()))
+        sana.load_state_dict(state, strict=True)
+        install_stable_attention(sana=sana)  # Repeated installation is harmless.
+        with torch.autocast("cuda", dtype=torch.float16):
+            projected = sana.caption_projection(captions)
+            actual = sana.caption_norm(projected)
+        self.assertGreater(projected.abs().max().item(), 65504)
+        self.assertEqual(projected.dtype, torch.float32)
+        self.assertTrue(torch.equal(actual, reference))
+        actual.square().mean().backward()
+        for gradient in (captions.grad, *[p.grad for p in sana.caption_projection.parameters()]):
+            self.assertIsNotNone(gradient)
+            self.assertTrue(torch.isfinite(gradient).all())
+        teacher_copy = deepcopy(sana).eval()
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
+            copied = teacher_copy.caption_norm(teacher_copy.caption_projection(captions))
+        self.assertTrue(torch.equal(copied, actual))
+
     def test_large_cross_attention_queries_preserve_finite_forward_and_backward(self):
         torch.manual_seed(907)
         attention = tiny_sana().cuda().transformer_blocks[-1].attn2

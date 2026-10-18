@@ -112,3 +112,17 @@ def test_supervisor_runs_both_joint_arms_directly_from_shared_init(tmp_path):
         assert command[command.index("--init-checkpoint")+1] == str(tmp_path/"backend_init.pt")
         assert gpus == (["0"] if name == "c_joint" else ["1"])
     assert run.state["status"] == "completed"
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_finish_distinguishes_paused_from_completed_training(tmp_path, completed):
+    (tmp_path/"logs").mkdir()
+    directory = tmp_path/"D/joint"
+    directory.mkdir(parents=True)
+    (directory/("complete.pt" if completed else "paused.pt")).write_bytes(b"checkpoint fixture")
+    run = PairedRun(tmp_path, ["0", "1"], sys.executable)
+    run.start("d_joint", [sys.executable, "-c", "pass"], ["1"])
+    assert run.children["d_joint"].wait(timeout=10) == 0
+    assert run.finish("d_joint")
+    assert run.state["jobs"]["d_joint"]["status"] == ("completed" if completed else "paused")
+    assert not run.children

@@ -309,6 +309,7 @@ def train(config, args, rank, world, device):
     update_rng = None
     update_rep_weight = rep_weight
     full_precision_retry = bool(resume and resume.get("full_precision_retry", False))
+    first_update_step = step + 1
     consecutive_amp_skips = 0
     stop = False
     stop_requested = [False]
@@ -451,7 +452,7 @@ def train(config, args, rank, world, device):
             if step > 10:
                 accumulated_time += elapsed
                 accumulated_updates += 1
-            if step % settings.get("log_every", 100) == 0 or step == 1:
+            if step % settings.get("log_every", 100) == 0 or step == first_update_step:
                 values = torch.stack(list(metrics_sum.values()))
                 if world > 1:
                     dist.all_reduce(values)

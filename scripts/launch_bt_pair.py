@@ -74,7 +74,7 @@ class PairedRun:
         if code is None:
             return False
         job = self.state["jobs"][name]
-        job.update(status="completed" if code == 0 else "failed", returncode=code, ended_at=self.now())
+        job.update(status=self.exit_status(name, code), returncode=code, ended_at=self.now())
         del self.children[name]
         self.update()
         if code:
@@ -166,15 +166,19 @@ class PairedRun:
                     except ProcessLookupError:
                         pass
 
+    def exit_status(self, name, code):
+        if code:
+            return "failed"
+        if name == "prepare":
+            return "completed"
+        directory = self.root/"common" if name == "common" else self.root/name[0].upper()/"joint"
+        return "completed" if (directory/"complete.pt").exists() else "paused"
+
     def reap_stopped(self):
         """Publish each peer's real exit status after an interrupted pair."""
         for name, process in list(self.children.items()):
             code = process.wait()
-            directory = self.root/"common" if name == "common" else self.root/name[0].upper()/"joint"
-            status = "failed"
-            if code == 0:
-                status = "completed" if (directory/"complete.pt").exists() else "paused"
-            self.state["jobs"][name].update(status=status, returncode=code, ended_at=self.now())
+            self.state["jobs"][name].update(status=self.exit_status(name, code), returncode=code, ended_at=self.now())
             del self.children[name]
         self.update()
 

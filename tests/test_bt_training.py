@@ -422,6 +422,8 @@ class TrainingTest(unittest.TestCase):
                 arguments.max_updates = None
                 trainer.train(deepcopy(config), arguments, 0, 1, torch.device("cpu"))
             full, split = read_checkpoint(root/"full"/"complete.pt"), read_checkpoint(root/"split"/"complete.pt")
+            resumed_logs = [json.loads(line) for line in (root/"split/train.jsonl").read_text().splitlines()]
+            self.assertEqual([row["step"] for row in resumed_logs], [1, 3])
             for weights in ("raw", "ema"):
                 for part in full[weights]:
                     for name, value in full[weights][part].items():
