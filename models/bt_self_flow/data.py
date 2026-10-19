@@ -1,6 +1,7 @@
 """Counter-based data: worker prefetch and model RNG never change the crops."""
 
 import hashlib
+import os
 from pathlib import Path
 import random
 
@@ -11,6 +12,23 @@ from torch.utils.data import Dataset, Sampler
 
 
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+
+
+def image_paths(directory):
+    """Enumerate with directory-entry metadata, avoiding one stat per image.
+
+    As with Path.rglob, directory symlinks are not traversed; file symlinks
+    are included only when their target is a file. The caller sorts paths,
+    preserving the dataset fingerprint and counter-based sample order.
+    """
+    pending = [directory]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(entry.path)
+                elif Path(entry.name).suffix.lower() in EXTENSIONS and entry.is_file():
+                    yield Path(entry.path)
 
 
 def counter_seed(seed, counter, stream=0):
@@ -25,7 +43,7 @@ class ImageDataset(Dataset):
             directory = Path(root)
             if not directory.is_dir():
                 raise ValueError(f"missing image directory: {root}")
-            paths.extend(p for p in directory.rglob("*") if p.suffix.lower() in EXTENSIONS and p.is_file())
+            paths.extend(image_paths(directory))
         self.paths = sorted(set(paths))
         if limit:
             self.paths = self.paths[:limit]
