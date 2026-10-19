@@ -13,10 +13,11 @@ done
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_dir=$(dirname -- "${script_dir}")
 cd -- "${repo_dir}"
-bt_python=${BT_PYTHON:-/data2/ls/code/venvs/ditic/bin/python}
-bt_root=${BT_RUN_ROOT:-/data2/ls/checkpoints/bt_self_flow_v1}
-export TORCH_HOME=${TORCH_HOME:-/data2/ls/checkpoints/torch-hub}
-export HF_HOME=${HF_HOME:-/data2/ls/checkpoints/hf-cache}
+bt_python=${BT_PYTHON:-python3}
+bt_root=${BT_RUN_ROOT:-${repo_dir}/checkpoints/bt_self_flow_v1}
+bt_cache=${BT_CACHE_ROOT:-${HOME}/.cache/ditic}
+export TORCH_HOME=${TORCH_HOME:-${bt_cache}/torch}
+export HF_HOME=${HF_HOME:-${bt_cache}/huggingface}
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-1}
 export PYTHONPATH="${repo_dir}${PYTHONPATH:+:${PYTHONPATH}}"

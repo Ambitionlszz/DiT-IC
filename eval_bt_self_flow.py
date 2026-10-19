@@ -9,6 +9,7 @@ from PIL import Image
 import torch
 from torch.nn import functional as F
 
+from bt_runtime import relocate_config
 from models.bt_self_flow.checkpoint import read_checkpoint, sha256_file
 from models.bt_self_flow.data import ImageDataset
 from models.bt_self_flow.experiment import asset_identity, make_model
@@ -42,7 +43,7 @@ def evaluate(args):
         raise ValueError("image evaluation requires an adapted reconstruction checkpoint")
     if checkpoint["phase"] == "backend" and checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
         raise ValueError("a partially transitioned backend is not a deployment model")
-    config = checkpoint["config"]
+    config = relocate_config(checkpoint["config"])
     if checkpoint["assets"] != asset_identity(config):
         raise ValueError("pretrained asset identity differs from checkpoint")
     model = make_model(config, device)

@@ -1,0 +1,5 @@
+# RTX 5090 sm_120: install a Blackwell-capable wheel in a NEW environment.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+-r ../bt/requirements-common.txt

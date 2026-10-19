@@ -1,0 +1,20 @@
+# Python 3.12. Same model/entropy/perceptual libraries as the V100 environment.
+numpy==1.26.4
+accelerate==1.1.0
+compressai==1.2.8
+diffusers==0.35.2
+einops==0.8.2
+huggingface_hub==1.24.0
+lpips==0.1.4
+openai_clip==1.0.1
+peft==0.18.1
+Pillow==12.1.1
+pyiqa==0.1.16
+PyYAML==6.0.3
+taming_transformers==0.0.1
+timm==1.0.25
+torch_fidelity==0.3.0
+torchmetrics==1.8.2
+tqdm==4.67.1
+transformers==5.4.0
+pytest>=8,<10

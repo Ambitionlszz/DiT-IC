@@ -8,16 +8,17 @@ from pathlib import Path
 import torch
 import yaml
 
+from bt_runtime import relocate_config
 from .checkpoint import sha256_file
 from .model import BTCodec, BTCodecStage
 
 
-def load_config(path):
+def load_config(path, *, _resolve_paths=True):
     path = Path(path).resolve()
     with path.open() as source:
         config = yaml.safe_load(source)
     if "base" in config:
-        parent = load_config(path.parent/config.pop("base"))
+        parent = load_config(path.parent/config.pop("base"), _resolve_paths=False)
         config = merge(parent, config)
     config.setdefault("self_flow", {"enabled": False, "mixed_sampling": False})
     phase = config["train"]["phase"]
@@ -36,7 +37,7 @@ def load_config(path):
     rate_weight = config["train"].get("rate_weight", 1.)
     if not math.isfinite(rate_weight) or rate_weight <= 0:
         raise ValueError("train.rate_weight must be finite and positive")
-    return config
+    return relocate_config(config) if _resolve_paths else config
 
 
 def merge(base, override):

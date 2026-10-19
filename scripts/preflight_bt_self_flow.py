@@ -21,6 +21,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from bt_runtime import configure_caches
 from models.bt_self_flow.experiment import load_config
 
 
@@ -28,8 +29,7 @@ def run_smoke(args, report, visible):
     root = Path(args.output).resolve()/"smoke"
     root.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, CUDA_VISIBLE_DEVICES=visible, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1")
-    env.setdefault("TORCH_HOME", "/data2/ls/checkpoints/torch-hub")
-    env.setdefault("HF_HOME", "/data2/ls/checkpoints/hf-cache")
+    configure_caches(env)
     env["PYTHONPATH"] = str(REPO)+os.pathsep+env.get("PYTHONPATH", "")
     world = min(2, torch.cuda.device_count())
     report["commands"] = []

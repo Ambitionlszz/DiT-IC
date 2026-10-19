@@ -112,3 +112,8 @@ text projection, EMA copy, GAN loss/discriminator state, optimizers, and
 schedulers. Removed historical heads may still exist as extra keys in older
 checkpoints; they are ignored, while missing active Pure SANA weights or
 incompatible LoRA keys fail with an explicit error.
+
+## V100 / RTX 5090：最近 BT 实验
+
+最近的低码率 C 对照与 BT 训练代码、两类 GPU 的安装和验证命令见
+[跨 GPU 运行说明](docs/BT_GPU_PORTABILITY.md)。

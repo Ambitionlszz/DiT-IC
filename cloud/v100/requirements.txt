@@ -1,0 +1,5 @@
+# V100 sm_70: keep the CUDA 12.6 build used by the current training environment.
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.12.0+cu126
+torchvision==0.27.0+cu126
+-r ../bt/requirements-common.txt

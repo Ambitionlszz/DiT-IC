@@ -21,6 +21,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from bt_runtime import configure_caches
 from models.bt_self_flow.experiment import load_config
 
 
@@ -42,8 +43,7 @@ class PairedRun:
         self.state = {"supervisor_pid": os.getpid(), "started_at": self.now(), "status": "starting", "jobs": {}}
         self.env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
                         PYTHONUNBUFFERED="1", PYTHONPATH=str(REPO)+os.pathsep+os.environ.get("PYTHONPATH", ""))
-        self.env.setdefault("TORCH_HOME", "/data2/ls/checkpoints/torch-hub")
-        self.env.setdefault("HF_HOME", "/data2/ls/checkpoints/hf-cache")
+        configure_caches(self.env)
 
     @staticmethod
     def now():
