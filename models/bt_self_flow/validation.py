@@ -5,12 +5,49 @@ import math
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
+from torch.utils.data import Subset
 
 from .checkpoint import evaluation_state
 from .data import counter_seed
 from .losses import rate_beta, reconstruction_objective
 from .model import pad_image
 from .packet import BTImagePacket, RateControl, fixed_side_bits, pack_codes
+
+
+def merge_validation_reports(parts):
+    result = {}
+    qualities = set().union(*(part["report"] for part in parts))
+    for quality in sorted(qualities, key=float):
+        result[quality] = {}
+        names = set().union(*(part["report"][quality] for part in parts))
+        for name in sorted(names):
+            if name == "packet_forward_max_error":
+                value = max(part["report"][quality].get(name, 0.) for part in parts)
+            else:
+                count = "packets" if name == "packet_bpp" else "images"
+                total = sum(part[count] for part in parts)
+                value = sum(part["report"][quality].get(name, 0.)*part[count] for part in parts)/total
+            result[quality][name] = value
+    return result
+
+
+def validate_distributed(model, dataset, *, group=None, packet_samples=0, **kwargs):
+    """Evaluate disjoint images on each rank, preserving all six quality points."""
+    rank, world = dist.get_rank(group), dist.get_world_size(group)
+    subset = Subset(dataset, range(rank, len(dataset), world))
+    packets = min(len(subset), max(0, (packet_samples-rank+world-1)//world))
+    local = dict(images=len(subset), packets=packets, error=None)
+    try:
+        local["report"] = validate(model, subset, packet_samples=packets, **kwargs)
+    except Exception as error:
+        local["error"] = f"rank {rank}: {type(error).__name__}: {error}"
+    gathered = [None]*world
+    dist.all_gather_object(gathered, local, group=group)
+    errors = [part["error"] for part in gathered if part["error"]]
+    if errors:
+        raise RuntimeError("distributed validation failed: "+"; ".join(errors))
+    return merge_validation_reports(gathered)
 
 
 @torch.no_grad()
@@ -68,7 +105,7 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
     device = next(model.parameters()).device
     qualities = qualities or (0., .2, .4, .6, .8, 1.)
     sums_by_quality = {str(quality): {} for quality in qualities}
-    with evaluation_state(model, state):
+    with evaluation_state(model, state, deployment_router=True):
         for index in range(len(dataset)):
             image = dataset[index].unsqueeze(0).to(device)
             height, width = image.shape[-2:]

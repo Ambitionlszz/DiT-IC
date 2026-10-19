@@ -18,7 +18,7 @@ from diffusers import AutoencoderDC
 from diffusers.models.attention_processor import SanaMultiscaleLinearAttention
 
 import train_bt_self_flow as trainer
-from models.bt_self_flow.checkpoint import METHOD, SCHEMA, read_checkpoint, save_atomic
+from models.bt_self_flow.checkpoint import DeploymentEMA, METHOD, SCHEMA, read_checkpoint, save_atomic
 from models.bt_self_flow.decoder import decode_latent
 from models.bt_self_flow.codec import BTLatentCodec
 from models.bt_self_flow.losses import ImageLoss
@@ -30,6 +30,26 @@ from test_bt_training import small_config
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is inaccessible")
 class GPUPrecisionTest(unittest.TestCase):
+    def test_batched_deployment_ema_matches_original_updates_exactly(self):
+        model = tiny_model("C").cuda()
+        ema = DeploymentEMA(model)
+        reference = deepcopy(ema.state)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                if parameter.requires_grad:
+                    parameter.add_(.001)
+            for _ in range(3):
+                for part, values in model.export_state().items():
+                    for name, source in values.items():
+                        if (part, name) in ema.averaged:
+                            reference[part][name].lerp_(source.detach(), 1-ema.decay)
+                        else:
+                            reference[part][name].copy_(source.detach())
+                ema.update(model)
+        for part, values in reference.items():
+            for name, expected in values.items():
+                self.assertTrue(torch.equal(expected, ema.state[part][name]), f"{part}.{name}")
+
     def test_large_caption_projection_stays_finite_through_normalization(self):
         torch.manual_seed(907)
         sana = tiny_sana().cuda()

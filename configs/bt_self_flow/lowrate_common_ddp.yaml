@@ -1,0 +1,3 @@
+base: lowrate_common.yaml
+train:
+  parallel_validation: true

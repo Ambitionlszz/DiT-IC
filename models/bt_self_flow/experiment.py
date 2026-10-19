@@ -125,6 +125,7 @@ def optimization_contract(value):
     for key in ("valid", "valid_limit", "valid_crop"):
         value["data"].pop(key, None)
     value["train"].pop("validation_actual_bpp", None)
+    value["train"].pop("parallel_validation", None)
     return value
 
 

@@ -1,0 +1,7 @@
+base: lowrate_c_no_latent.yaml
+train:
+  output: /data2/ls/checkpoints/bt_self_flow_lowrate_c_no_aux_ddp/C/joint
+  batch_size: 2
+  accumulation_steps: 2
+  effective_batch: 8
+  parallel_validation: true

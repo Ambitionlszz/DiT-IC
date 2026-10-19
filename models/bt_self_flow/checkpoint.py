@@ -43,15 +43,24 @@ class DeploymentEMA:
 
     @torch.no_grad()
     def update(self, model):
+        grouped = {}
         for part, values in model.export_state().items():
             for name, source in values.items():
                 target = self.state[part][name]
                 if target.shape != source.shape:
                     self.state[part][name] = source.detach().clone()
                 elif (part, name) in self.averaged:
-                    target.lerp_(source.detach(), 1-self.decay)
+                    if target.is_cuda:
+                        targets, sources = grouped.setdefault((target.device, target.dtype), ([], []))
+                        targets.append(target)
+                        sources.append(source.detach())
+                    else:
+                        target.lerp_(source.detach(), 1-self.decay)
                 else:
                     target.copy_(source.detach())
+        # Batch the many small LoRA/codec updates into a few CUDA launches.
+        for targets, sources in grouped.values():
+            torch._foreach_lerp_(targets, sources, 1-self.decay)
 
 
 def capture_rng(device=None):
@@ -181,16 +190,23 @@ class BestCheckpoint:
 
 
 @contextmanager
-def evaluation_state(model, state=None):
+def evaluation_state(model, state=None, deployment_router=False):
     training = model.training
     saved = clone_state(model.export_state()) if state is not None else None
+    router_strength = model.codec.router_strength.detach().clone()
     try:
         if state is not None:
             model.load_bt_state(state)
         model.eval()
+        if deployment_router:
+            # Packets contain the allocation map, not the training ramp. Both
+            # hard evaluation and real coding must use the deployed Router.
+            model.codec.router_strength.fill_(1.)
         model.codec.update(force=True)
         yield
     finally:
         if saved is not None:
             model.load_bt_state(saved)
+        else:
+            model.codec.router_strength.copy_(router_strength)
         model.train(training)

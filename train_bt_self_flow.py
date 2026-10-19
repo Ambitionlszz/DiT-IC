@@ -30,7 +30,7 @@ from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
-from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
+from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate, validate_distributed
 
 
 def distributed_setup(device_arg):
@@ -173,7 +173,9 @@ def train(config, args, rank, world, device):
     validation = ImageDataset(config["data"]["valid"], config["data"].get("valid_crop", config["data"]["crop"]), False,
                                config["data"].get("valid_limit", 32))
     validation_identity = dict(dataset_fingerprint=validation.fingerprint, images=len(validation),
-                               crop=validation.crop, actual_rate=settings.get("validation_actual_bpp", False))
+                               crop=validation.crop, actual_rate=settings.get("validation_actual_bpp", False),
+                               router_policy="deployed")
+    parallel_validation = world > 1 and settings.get("parallel_validation", False)
     model = make_model(config, device)
     seed_all(settings["seed"]+rank)
     contract = training_contract(config, dataset, world)
@@ -240,21 +242,36 @@ def train(config, args, rank, world, device):
                               identity=validation_identity) if rank == 0 else None
 
     def validation_report(transition):
-        report = validate(model, validation, image_loss, ema.state, transition,
+        function = validate_distributed if parallel_validation else validate
+        extra = {"group": control_group} if parallel_validation else {}
+        started = time.monotonic()
+        report = function(model, validation, image_loss=image_loss, state=ema.state, transition=transition,
                           packet_samples=0 if phase == "codec" else settings.get("packet_samples", 2),
                           actual_rate=settings.get("validation_actual_bpp", False),
-                          rate_weight=settings.get("rate_weight", 1.))
+                          rate_weight=settings.get("rate_weight", 1.), **extra)
         report["_validation_identity"] = validation_identity
-        (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
+        if rank == 0:
+            (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
+            print(json.dumps(dict(validation_completed=step, seconds=time.monotonic()-started,
+                                   parallel=parallel_validation, images=len(validation))), flush=True)
         return report
 
     # After an explicit validation-set migration, establish a new baseline from
     # the resumed weights. Scores from the old dataset cannot select this best.
-    with rank_zero_section(rank, control_group):
-        if rank == 0 and resume and best.state is None and Path(args.resume).stem.isdecimal():
+    baseline = [bool(rank == 0 and resume and best.state is None and Path(args.resume).stem.isdecimal())]
+    if world > 1:
+        dist.broadcast_object_list(baseline, src=0, group=control_group)
+    if baseline[0]:
+        if parallel_validation:
             transition = min(1., max(step-1, 0)/max(settings["steps"]-1, 1)) if phase == "backend" else 1.
-            best.consider(validation_report(transition), step)
-            best.publish(args.resume)
+            report = validation_report(transition)
+        with rank_zero_section(rank, control_group):
+            if rank == 0:
+                if not parallel_validation:
+                    transition = min(1., max(step-1, 0)/max(settings["steps"]-1, 1)) if phase == "backend" else 1.
+                    report = validation_report(transition)
+                best.consider(report, step)
+                best.publish(args.resume)
     sampler = CounterSampler(len(dataset), settings["seed"], rank, world, settings["batch_size"], micro_seen,
                               stream={"codec": 21, "backend": 22, "joint": 23, "self_flow": 24}[phase])
     loader = DataLoader(dataset, batch_size=settings["batch_size"], sampler=sampler,
@@ -320,6 +337,7 @@ def train(config, args, rank, world, device):
     try:
         while step < settings["steps"] and not stop:
             started = time.monotonic()
+            data_wait = 0.
             if not pending_images:
                 update_rng = capture_rng(device)
                 update_rep_weight = rep_weight
@@ -336,7 +354,9 @@ def train(config, args, rank, world, device):
             nonfinite_forward = False
             for micro in range(settings["accumulation_steps"]):
                 if len(pending_images) <= micro:
+                    loading_started = time.monotonic()
                     pending_images.append(next(iterator))
+                    data_wait += time.monotonic()-loading_started
                     micro_seen += 1
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
@@ -462,6 +482,7 @@ def train(config, args, rank, world, device):
                 if rank == 0:
                     record = dict(step=step, attempts=attempts, lambda_low=control.value, mixed=control.mixed,
                                   transition=transition, grad_norm=float(norm), seconds_per_update=elapsed,
+                                  data_wait_seconds=data_wait,
                                   steady_seconds_per_update=accumulated_time/max(accumulated_updates, 1),
                                   max_memory_bytes=torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0,
                                   **metrics_sum)
@@ -470,9 +491,12 @@ def train(config, args, rank, world, device):
                     print(json.dumps(record), flush=True)
             improved = False
             if step % settings["eval_every"] == 0 or step == settings["steps"]:
+                if parallel_validation:
+                    report = validation_report(transition)
                 with rank_zero_section(rank, control_group):
                     if rank == 0:
-                        report = validation_report(transition)
+                        if not parallel_validation:
+                            report = validation_report(transition)
                         improved = best.consider(report, step)
                 if world > 1:
                     selected = [improved]
