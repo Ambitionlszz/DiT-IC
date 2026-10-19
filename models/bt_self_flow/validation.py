@@ -64,7 +64,7 @@ def calibrate_interface(model, dataset, output, samples=512, seed=903, packet_sa
 
 @torch.no_grad()
 def validate(model, dataset, image_loss=None, state=None, transition=1., packet_samples=0, qualities=None,
-             actual_rate=False):
+             actual_rate=False, rate_weight=1.):
     device = next(model.parameters()).device
     qualities = qualities or (0., .2, .4, .6, .8, 1.)
     sums_by_quality = {str(quality): {} for quality in qualities}
@@ -80,7 +80,8 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                 result = model.forward_analysis(source, rate_control=control, transition=transition)
                 if result.image is not None:
                     result.image = result.image[..., :height, :width]
-                loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data, image_loss)
+                loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
+                                                         image_loss, rate_weight=rate_weight)
                 packet = None
                 if actual_rate:
                     # Encode the frontend without a second SANA forward. D's
@@ -94,7 +95,7 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                                            control.low_code, control.high_code, encoded["hyper_stream"],
                                            encoded["main_stream"], encoded["allocation"], scales)
                     actual_bpp = loss.new_tensor(8*len(packet.to_bytes())/(height*width))
-                    loss = loss+rate_beta(control)*(actual_bpp-metrics["rate_est"])
+                    loss = loss+rate_weight*rate_beta(control)*(actual_bpp-metrics["rate_est"])
                     metrics["rate_actual"] = actual_bpp
                 metrics["loss"] = loss
                 if result.scale_info:

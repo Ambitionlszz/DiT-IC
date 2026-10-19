@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -14,8 +16,13 @@ def estimated_bpp(result, image):
 
 
 class ImageLoss(nn.Module):
-    def __init__(self, lpips_weight=1., dists_weight=.5, mse_weight=2.):
+    def __init__(self, lpips_weight=1., dists_weight=.5, mse_weight=2.,
+                 base_weight=.1, latent_weight=.1):
         super().__init__()
+        for name, value in (("base_weight", base_weight), ("latent_weight", latent_weight)):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be finite and nonnegative")
+        self.base_weight, self.latent_weight = float(base_weight), float(latent_weight)
         self.lpips_weight, self.dists_weight, self.mse_weight = lpips_weight, dists_weight, mse_weight
         self.lpips = self.dists = None
         if lpips_weight:
@@ -43,12 +50,22 @@ class ImageLoss(nn.Module):
             }
 
 
-def reconstruction_objective(result, image, control, s_data, image_loss=None):
-    base = F.mse_loss(result.coarse.float(), result.clean.float())/s_data.square()
+def reconstruction_objective(result, image, control, s_data, image_loss=None, rate_weight=1.):
     rate = estimated_bpp(result, image)
     if image_loss is None:
-        return base + rate_beta(control)*rate, {"base": base, "rate_est": rate}
-    latent = F.mse_loss(result.latent.float(), result.clean.float())/s_data.square()
+        base = F.mse_loss(result.coarse.float(), result.clean.float())/s_data.square()
+        return base + rate_weight*rate_beta(control)*rate, {"base": base, "rate_est": rate}
+    # Disabled auxiliary terms remain observable diagnostics, without building
+    # their backward graphs or contributing a zero-multiplied loss branch.
+    with torch.set_grad_enabled(torch.is_grad_enabled() and image_loss.base_weight > 0):
+        base = F.mse_loss(result.coarse.float(), result.clean.float())/s_data.square()
+    with torch.set_grad_enabled(torch.is_grad_enabled() and image_loss.latent_weight > 0):
+        latent = F.mse_loss(result.latent.float(), result.clean.float())/s_data.square()
     distortion, metrics = image_loss(result.image, image)
-    loss = distortion + .1*latent + .1*base + rate_beta(control)*rate
+    loss = distortion
+    if image_loss.latent_weight:
+        loss = loss + image_loss.latent_weight*latent
+    if image_loss.base_weight:
+        loss = loss + image_loss.base_weight*base
+    loss = loss + rate_weight*rate_beta(control)*rate
     return loss, dict(metrics, base=base, latent=latent, rate_est=rate)

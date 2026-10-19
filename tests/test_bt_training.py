@@ -348,7 +348,7 @@ class TrainingTest(unittest.TestCase):
             save_atomic(root/"shared.pt", {"method": METHOD, "schema": SCHEMA, "phase": "backend_init",
                                           "backend": "shared", "step": 0, "config": source_config,
                                           "raw": initial, "assets": {"test": "shared"}})
-            for backend in ("C", "D"):
+            for backend, no_latent in (("C", False), ("D", False), ("C", True)):
                 models = []
                 def factory(config, device):
                     model = tiny_model(backend).to(device)
@@ -357,24 +357,32 @@ class TrainingTest(unittest.TestCase):
                     return model
                 config = small_config(root, "joint")
                 config["model"]["backend"] = backend
-                config["train"]["output"] = str(root/backend)
+                label = "C_no_latent" if no_latent else backend
+                config["train"]["output"] = str(root/label)
+                if no_latent:
+                    config["image_loss"] = {"base_weight": 0., "latent_weight": 0.}
                 args = SimpleNamespace(resume=None, init_checkpoint=str(root/"shared.pt"), max_updates=1)
                 with patch.object(trainer, "make_model", side_effect=factory), \
                      patch.object(trainer, "asset_identity", return_value={"test": "shared"}), \
-                     patch.object(trainer, "ImageLoss", side_effect=lambda **kw: ImageLoss(lpips_weight=0, dists_weight=0)), \
+                     patch.object(trainer, "ImageLoss", side_effect=lambda **kw: ImageLoss(**dict(kw, lpips_weight=0, dists_weight=0))), \
                      redirect_stdout(io.StringIO()):
                     trainer.train(config, args, 0, 1, torch.device("cpu"))
-                    first = read_checkpoint(root/backend/"paused.pt")
-                    args.resume, args.init_checkpoint, args.max_updates = str(root/backend/"paused.pt"), None, None
+                    first = read_checkpoint(root/label/"paused.pt")
+                    args.resume, args.init_checkpoint, args.max_updates = str(root/label/"paused.pt"), None, None
                     trainer.train(config, args, 0, 1, torch.device("cpu"))
                 self.assertEqual(first["step"], 1)
                 self.assertFalse(models[0].freeze_codec)
                 self.assertTrue(any(p.requires_grad for p in models[0].codec.g_a.parameters()))
                 self.assertTrue(any(not torch.equal(v, first["raw"]["codec"][k])
                                     for k, v in initial["codec"].items() if k.startswith("g_a.")))
-                record = json.loads((root/backend/"train.jsonl").read_text().splitlines()[0])
+                if no_latent:
+                    self.assertTrue(any(not torch.equal(v, first["raw"]["codec"][k])
+                                        for k, v in initial["codec"].items() if k.startswith("router.")))
+                    self.assertEqual(first["contract"]["image_loss"]["base_weight"], 0.)
+                    self.assertEqual(first["contract"]["image_loss"]["latent_weight"], 0.)
+                record = json.loads((root/label/"train.jsonl").read_text().splitlines()[0])
                 self.assertEqual(record["transition"], 1.)
-                saved = read_checkpoint(root/backend/"complete.pt")
+                saved = read_checkpoint(root/label/"complete.pt")
                 self.assertEqual(saved["step"], 2)
                 self.assertTrue(torch.isfinite(torch.tensor(record["grad_norm"])))
                 if backend == "D":

@@ -1,0 +1,15 @@
+base: lowrate_common.yaml
+data:
+  workers: 4
+model:
+  checkpoint_blocks: false
+image_loss:
+  base_weight: 0.1
+  latent_weight: 0.1
+train:
+  phase: joint
+  steps: 200000
+  output: /data2/ls/checkpoints/bt_self_flow_lowrate_20261019/C_aux/joint
+  batch_size: 2
+  accumulation_steps: 4
+  effective_batch: 8

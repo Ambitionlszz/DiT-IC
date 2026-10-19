@@ -33,6 +33,9 @@ def load_config(path):
     for key in ("batch_size", "accumulation_steps", "steps", "eval_every", "save_every"):
         if int(config["train"][key]) < 1:
             raise ValueError(f"train.{key} must be positive")
+    rate_weight = config["train"].get("rate_weight", 1.)
+    if not math.isfinite(rate_weight) or rate_weight <= 0:
+        raise ValueError("train.rate_weight must be finite and positive")
     return config
 
 

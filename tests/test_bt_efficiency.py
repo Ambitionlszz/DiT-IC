@@ -77,7 +77,8 @@ def test_best_copy_failure_preserves_previous_weights(tmp_path):
     assert not (tmp_path/"best.pt.tmp").exists()
 
 
-def test_kodak_style_validation_keeps_full_image_and_counts_real_packet(tmp_path):
+@pytest.mark.parametrize("rate_weight", [1., 3.])
+def test_kodak_style_validation_keeps_full_image_and_counts_real_packet(tmp_path, rate_weight):
     import numpy as np
     from PIL import Image
     pixels = np.random.default_rng(903).integers(0, 256, (512, 768, 3), dtype=np.uint8)
@@ -85,7 +86,7 @@ def test_kodak_style_validation_keeps_full_image_and_counts_real_packet(tmp_path
     dataset = ImageDataset([tmp_path], crop=0, training=False)
     assert tuple(dataset[0].shape) == (3, 512, 768)
     model = make_tiny_stage({"train": {"seed": 903}}, torch.device("cpu"))
-    report = validate(model, dataset, qualities=(0.,), actual_rate=True)
+    report = validate(model, dataset, qualities=(0.,), actual_rate=True, rate_weight=rate_weight)
     from models.bt_self_flow.packet import BTImagePacket
     from models.bt_self_flow.checkpoint import evaluation_state
     with evaluation_state(model):
@@ -94,7 +95,7 @@ def test_kodak_style_validation_keeps_full_image_and_counts_real_packet(tmp_path
         packet = BTImagePacket("C", (512, 768), encoded["y_shape"], encoded["hyper_shape"], 0, 0,
                               encoded["hyper_stream"], encoded["main_stream"], encoded["allocation"])
     assert report["0.0"]["rate_actual"] == pytest.approx(8*len(packet.to_bytes())/(512*768), rel=1e-7)
-    assert report["0.0"]["loss"] == pytest.approx(report["0.0"]["base"]+8*report["0.0"]["rate_actual"], rel=1e-6)
+    assert report["0.0"]["loss"] == pytest.approx(report["0.0"]["base"]+rate_weight*8*report["0.0"]["rate_actual"], rel=1e-6)
 
 
 def test_best_selection_does_not_mix_validation_datasets(tmp_path):

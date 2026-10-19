@@ -242,7 +242,8 @@ def train(config, args, rank, world, device):
     def validation_report(transition):
         report = validate(model, validation, image_loss, ema.state, transition,
                           packet_samples=0 if phase == "codec" else settings.get("packet_samples", 2),
-                          actual_rate=settings.get("validation_actual_bpp", False))
+                          actual_rate=settings.get("validation_actual_bpp", False),
+                          rate_weight=settings.get("rate_weight", 1.))
         report["_validation_identity"] = validation_identity
         (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
         return report
@@ -344,7 +345,8 @@ def train(config, args, rank, world, device):
                     with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                         enabled=device.type == "cuda" and not full_precision_retry):
                         result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
-                        loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data, image_loss)
+                        loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
+                                                                 image_loss, rate_weight=settings.get("rate_weight", 1.))
                         if teacher is not None:
                             with torch.no_grad():
                                 high = model.codec.quantize_analysis(result.source, RateControl(1.))
