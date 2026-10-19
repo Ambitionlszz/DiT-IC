@@ -124,3 +124,33 @@ def test_long_run_retention_preserves_best_recent_and_resume_files(tmp_path):
         "0000001.pt", "0000004.pt", "0000005.pt", "0000006.pt", "paused.pt", "complete.pt"}
     for path in tmp_path.glob("*.pt"):
         assert read_checkpoint(path)["step"] in (1, 4, 5, 6)
+
+
+def test_pause_reuses_saved_bytes_but_codec_calibration_gets_a_fresh_snapshot(tmp_path):
+    from contextlib import redirect_stdout
+    import io
+    import os
+    from types import SimpleNamespace
+    import numpy as np
+    from PIL import Image
+    import train_bt_self_flow as trainer
+    from test_bt_training import small_config
+
+    (tmp_path/"images").mkdir()
+    Image.fromarray(np.random.default_rng(97).integers(0, 256, (256, 256, 3), dtype=np.uint8)).save(tmp_path/"images/one.png")
+    config = small_config(tmp_path)
+    config["train"].update(eval_every=2, save_every=2, steps=4)
+    args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=2)
+    with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+         patch.object(trainer, "asset_identity", return_value={"test": "snapshot-alias"}), \
+         redirect_stdout(io.StringIO()):
+        trainer.train(config, args, 0, 1, torch.device("cpu"))
+        assert os.stat(tmp_path/"codec/paused.pt").st_ino == os.stat(tmp_path/"codec/0000002.pt").st_ino
+        args.resume, args.max_updates = str(tmp_path/"codec/paused.pt"), None
+        trainer.train(config, args, 0, 1, torch.device("cpu"))
+    before = read_checkpoint(tmp_path/"codec/0000004.pt")
+    after = read_checkpoint(tmp_path/"codec/complete.pt")
+    assert before["calibration"] is None and after["calibration"] is not None
+    assert not before["raw"]["distortion_scale"]["calibrated"].item()
+    assert after["raw"]["distortion_scale"]["calibrated"].item()
+    assert os.stat(tmp_path/"codec/complete.pt").st_ino != os.stat(tmp_path/"codec/0000004.pt").st_ino

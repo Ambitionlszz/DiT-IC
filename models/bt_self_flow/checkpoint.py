@@ -90,6 +90,25 @@ def _replace_and_sync(temporary, target):
         os.close(descriptor)
 
 
+def publish_checkpoint_alias(source, target):
+    """Publish identical recovery bytes without serializing the state again."""
+    source, target = Path(source), Path(target)
+    temporary = target.with_suffix(".pt.tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        try:
+            os.link(source, temporary)
+        except OSError:
+            with source.open("rb") as incoming, temporary.open("wb", buffering=8*1024*1024) as outgoing:
+                shutil.copyfileobj(incoming, outgoing, length=8*1024*1024)
+                outgoing.flush()
+                os.fsync(outgoing.fileno())
+        _replace_and_sync(temporary, target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def save_atomic(path, checkpoint):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,22 +186,7 @@ class BestCheckpoint:
         if self.state is None or source.name != self.state["checkpoint"]:
             return
         target = self.directory/"best.pt"
-        temporary = target.with_suffix(".pt.tmp")
-        temporary.unlink(missing_ok=True)
-        try:
-            try:
-                os.link(source, temporary)
-            except OSError:
-                # Some experiment filesystems cannot hardlink. A complete copy
-                # is still published atomically and leaves the old best intact.
-                with source.open("rb") as incoming, temporary.open("wb", buffering=8*1024*1024) as outgoing:
-                    shutil.copyfileobj(incoming, outgoing, length=8*1024*1024)
-                    outgoing.flush()
-                    os.fsync(outgoing.fileno())
-            _replace_and_sync(temporary, target)
-        except BaseException:
-            temporary.unlink(missing_ok=True)
-            raise
+        publish_checkpoint_alias(source, target)
         metadata = self.directory/"best.json"
         pending = metadata.with_suffix(".json.tmp")
         pending.write_text(json.dumps(self.state, indent=2)+"\n")

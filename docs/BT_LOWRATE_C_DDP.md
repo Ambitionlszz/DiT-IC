@@ -34,6 +34,9 @@ and takes the maximum forward/decode error. A validation exception is shared
 with all ranks. CUDA EMA updates batch small tensors into foreach kernels;
 the CUDA regression checks exact agreement with the original EMA update.
 Training logs include data-wait, update, validation and checkpoint durations.
+Pause and joint-completion aliases reuse the last unchanged checkpoint with
+an atomic hardlink (a durable copy on filesystems without hardlinks). Codec
+endpoint calibration always writes a fresh checkpoint with calibrated buffers.
 
 ## Verification and launch
 
