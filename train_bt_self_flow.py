@@ -21,7 +21,8 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
 from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, DeploymentEMA, capture_rng, clone_state,
-                                            prune_checkpoints, read_checkpoint, restore_rng, save_atomic, sha256_file)
+                                            prune_checkpoints, publish_checkpoint_alias, read_checkpoint,
+                                            restore_rng, save_atomic, sha256_file)
 from models.bt_self_flow.data import CounterSampler, ImageDataset, counter_seed
 from models.bt_self_flow.distributed import make_control_group, rank_zero_section
 from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config, lr_factor, make_model,
@@ -240,11 +241,14 @@ def train(config, args, rank, world, device):
                               identity=validation_identity) if rank == 0 else None
 
     def validation_report(transition):
+        started_validation = time.monotonic()
         report = validate(model, validation, image_loss, ema.state, transition,
                           packet_samples=0 if phase == "codec" else settings.get("packet_samples", 2),
                           actual_rate=settings.get("validation_actual_bpp", False))
         report["_validation_identity"] = validation_identity
         (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
+        print(json.dumps(dict(validation_completed=step, seconds=time.monotonic()-started_validation,
+                              parallel=False, images=len(validation))), flush=True)
         return report
 
     # After an explicit validation-set migration, establish a new baseline from
@@ -264,7 +268,23 @@ def train(config, args, rank, world, device):
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
                                       broadcast_buffers=False) if world > 1 else model
 
-    def save(name, resume_micro_seen=None, resume_rng=None):
+    last_saved = {}
+
+    def save(name, resume_micro_seen=None, resume_rng=None, reuse_last=False):
+        version = (step, micro_seen, attempts, rep_weight, full_precision_retry)
+        if reuse_last:
+            reuse = [rank == 0 and last_saved.get("version") == version]
+            if world > 1:
+                dist.broadcast_object_list(reuse, src=0, group=control_group)
+            if reuse[0]:
+                with rank_zero_section(rank, control_group):
+                    if rank == 0:
+                        started_save = time.monotonic()
+                        publish_checkpoint_alias(last_saved["path"], output/name)
+                        print(json.dumps(dict(checkpoint_saved=name, step=step,
+                                               seconds=time.monotonic()-started_save,
+                                               reused_checkpoint=str(last_saved["path"]), best=best.state)), flush=True)
+                return
         rngs = [None]*world
         rng = capture_rng(device) if resume_rng is None else resume_rng
         if world > 1:
@@ -289,6 +309,7 @@ def train(config, args, rank, world, device):
                 save_atomic(output/name, checkpoint)
                 best.publish(output/name)
                 prune_checkpoints(output, settings.get("keep_last_checkpoints"), best.state)
+                last_saved.update(version=version, path=output/name)
                 print(json.dumps({"checkpoint_saved": name, "step": step,
                                   "seconds": time.monotonic()-started_save, "best": best.state}), flush=True)
 
@@ -319,6 +340,7 @@ def train(config, args, rank, world, device):
     try:
         while step < settings["steps"] and not stop:
             started = time.monotonic()
+            data_wait = 0.
             if not pending_images:
                 update_rng = capture_rng(device)
                 update_rep_weight = rep_weight
@@ -335,7 +357,9 @@ def train(config, args, rank, world, device):
             nonfinite_forward = False
             for micro in range(settings["accumulation_steps"]):
                 if len(pending_images) <= micro:
+                    loading_started = time.monotonic()
                     pending_images.append(next(iterator))
+                    data_wait += time.monotonic()-loading_started
                     micro_seen += 1
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
@@ -460,6 +484,7 @@ def train(config, args, rank, world, device):
                 if rank == 0:
                     record = dict(step=step, attempts=attempts, lambda_low=control.value, mixed=control.mixed,
                                   transition=transition, grad_norm=float(norm), seconds_per_update=elapsed,
+                                  data_wait_seconds=data_wait,
                                   steady_seconds_per_update=accumulated_time/max(accumulated_updates, 1),
                                   max_memory_bytes=torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0,
                                   **metrics_sum)
@@ -505,7 +530,8 @@ def train(config, args, rank, world, device):
                 dist.broadcast(buffer, src=0)
         # Endpoint calibration is exact shared metadata, not an EMA average.
         ema.state["distortion_scale"] = clone_state({"scale": model.distortion_scale.state_dict()})["scale"]
-    save("complete.pt" if completed else "paused.pt")
+    # Calibration changes buffers; its endpoint needs a fresh snapshot.
+    save("complete.pt" if completed else "paused.pt", reuse_last=not (completed and phase == "codec"))
     if rank == 0:
         print(json.dumps({"completed": completed, "step": step, "output": str(output),
                           "calibration": calibration}), flush=True)
