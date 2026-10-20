@@ -107,16 +107,21 @@ def initialize_from(model, checkpoint, phase):
         raise ValueError("stage handoff requires calibrated distortion scales")
 
 
-def prepare_backend(config, source, output, device):
+def prepare_backend(config, source, output, device, allow_incomplete_codec=False):
     if Path(output).exists():
         raise ValueError("shared backend initialization already exists; choose a new output")
     checkpoint = read_checkpoint(source)
-    if checkpoint["phase"] != "codec" or not checkpoint.get("calibration", {}).get("rate_span_pass"):
-        raise ValueError("common codec has not passed calibration/rate-span validation")
-    if config["train"].get("require_quality_span", False) and not checkpoint["calibration"].get("quality_span_pass"):
-        raise ValueError("common codec has not shown higher bitrate and lower latent distortion at high quality")
-    if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
+    if checkpoint["phase"] != "codec":
+        raise ValueError("shared initialization requires a common codec checkpoint")
+    planned_steps = checkpoint["config"]["train"]["steps"]
+    early = checkpoint["step"] != planned_steps
+    if not 0 < checkpoint["step"] <= planned_steps:
+        raise ValueError("common codec checkpoint step is outside its training schedule")
+    if early and not allow_incomplete_codec:
         raise ValueError("shared codec phase has not completed")
+    calibration = checkpoint.get("calibration")
+    if not early and not (calibration or {}).get("rate_span_pass"):
+        raise ValueError("common codec has not passed calibration/rate-span validation")
     check_stage_model(config, checkpoint["config"])
     if checkpoint["assets"] != asset_identity(config):
         raise ValueError("shared initialization pretrained assets differ")
@@ -126,12 +131,29 @@ def prepare_backend(config, source, output, device):
     target["self_flow"] = {"enabled": False, "mixed_sampling": False}
     model = make_model(target, device)
     model.load_bt_state(checkpoint["raw"], codec_only=True)
+    if early:
+        source_config = checkpoint["config"]
+        dataset = ImageDataset(source_config["data"]["train"], source_config["data"]["crop"])
+        print(json.dumps({"early_codec_calibration": str(source), "step": checkpoint["step"],
+                          "planned_steps": planned_steps,
+                          "samples": source_config["train"].get("calibration_samples", 512)}), flush=True)
+        calibration = calibrate_interface(model, dataset, Path(output).with_suffix(".calibration.json"),
+                                          source_config["train"].get("calibration_samples", 512),
+                                          source_config["train"]["seed"])
+    if not calibration.get("rate_span_pass"):
+        raise ValueError("common codec has not passed calibration/rate-span validation")
+    if config["train"].get("require_quality_span", False) and not calibration.get("quality_span_pass"):
+        raise ValueError("common codec has not shown higher bitrate and lower latent distortion at high quality")
+    if not model.distortion_scale.calibrated.item():
+        raise ValueError("shared initialization requires calibrated distortion scales")
     state = clone_state(model.export_state(), cpu=True)
     source_hash = sha256_file(source)
     save_atomic(output, {"method": METHOD, "schema": SCHEMA, "phase": "backend_init", "backend": "shared",
                          "step": 0, "raw": state, "ema": state, "config": target,
                          "assets": asset_identity(config), "source_sha256": source_hash,
-                         "calibration": checkpoint["calibration"]})
+                         "calibration": calibration, "source_step": checkpoint["step"],
+                         "source_planned_steps": planned_steps, "source_weights": "raw",
+                         "early_codec_handoff": early})
     print(json.dumps({"backend_init": str(output), "source_sha256": source_hash}), flush=True)
 
 
@@ -567,11 +589,15 @@ def main():
     group.add_argument("--init-checkpoint")
     group.add_argument("--resume")
     group.add_argument("--prepare-backend", metavar="COMMON_CODEC_CHECKPOINT")
+    parser.add_argument("--allow-incomplete-codec", action="store_true",
+                        help="calibrate an explicitly selected early codec checkpoint for --prepare-backend")
     parser.add_argument("--output", help="shared backend_init output, with --prepare-backend")
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--max-updates", type=int, help="stop and save without changing the resume contract")
     parser.add_argument("--run-root", help="override storage root consistently for all phases")
     args = parser.parse_args()
+    if args.allow_incomplete_codec and not args.prepare_backend:
+        parser.error("--allow-incomplete-codec requires --prepare-backend")
     config = load_config(args.config)
     if args.run_root:
         phase = config["train"]["phase"]
@@ -587,7 +613,8 @@ def main():
         if args.prepare_backend:
             if world != 1 or not args.output:
                 raise ValueError("prepare-backend requires one process and --output")
-            prepare_backend(config, args.prepare_backend, args.output, device)
+            prepare_backend(config, args.prepare_backend, args.output, device,
+                            allow_incomplete_codec=args.allow_incomplete_codec)
         else:
             train(config, args, rank, world, device)
     finally:

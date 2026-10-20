@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from models.bt_self_flow.experiment import load_config
+from models.bt_self_flow.checkpoint import sha256_file
 from scripts.launch_bt_pair import PairedRun, write_json
 
 
@@ -33,6 +34,10 @@ def resolved_configs(root):
 
 
 class SingleCRun(PairedRun):
+    def __init__(self, root, gpus, python, warmup_checkpoint=None):
+        super().__init__(root, gpus, python)
+        self.warmup_checkpoint = Path(warmup_checkpoint).resolve() if warmup_checkpoint else None
+
     def directory(self, name):
         return self.root/"common" if name == "common" else self.root/"C/joint"
 
@@ -78,7 +83,9 @@ class SingleCRun(PairedRun):
                     pass
 
     def execute(self):
-        common = self.root/"common/complete.pt"
+        common = self.warmup_checkpoint or self.root/"common/complete.pt"
+        if self.warmup_checkpoint and not common.is_file():
+            raise FileNotFoundError(f"selected warmup checkpoint does not exist: {common}")
         if not common.exists():
             self.update("common_frontend")
             self.start("common", self.command("common", common.parent, distributed=True), self.gpus)
@@ -88,9 +95,12 @@ class SingleCRun(PairedRun):
         shared = self.root/"backend_init.pt"
         if not shared.exists():
             self.update("shared_initialization")
-            self.start("prepare", [self.python, "train_bt_self_flow.py", "--config",
-                                   str(self.root/"configs/c_joint.yaml"), "--prepare-backend", str(common),
-                                   "--output", str(shared)], [self.gpus[0]])
+            command = [self.python, "train_bt_self_flow.py", "--config",
+                       str(self.root/"configs/c_joint.yaml"), "--prepare-backend", str(common),
+                       "--output", str(shared)]
+            if self.warmup_checkpoint:
+                command.append("--allow-incomplete-codec")
+            self.start("prepare", command, [self.gpus[0]])
             self.wait("prepare")
         directory = self.root/"C/joint"
         if not (directory/"complete.pt").exists():
@@ -107,6 +117,8 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--gpus", default="0,1", help="two physical indices or GPU UUIDs")
     parser.add_argument("--python", default=sys.executable)
+    parser.add_argument("--warmup-checkpoint", type=Path,
+                        help="calibrate a selected codec checkpoint and start C without further warmup")
     args = parser.parse_args()
     gpus = args.gpus.split(",")
     if len(gpus) != 2 or len(set(gpus)) != 2:
@@ -122,6 +134,9 @@ def main():
         configs = resolved_configs(root)
         manifest = dict(repository=str(REPO), commit=commit, python=args.python, gpus=gpus,
                         experiment="lowrate_c_no_aux_two_gpu", configs=configs)
+        if args.warmup_checkpoint:
+            source = args.warmup_checkpoint.resolve()
+            manifest["warmup_checkpoint"] = dict(path=str(source), sha256=sha256_file(source))
         path = root/"manifest.json"
         if path.exists() and json.loads(path.read_text()) != manifest:
             raise RuntimeError("run manifest differs; use a new run root")
@@ -134,7 +149,7 @@ def main():
             if path.exists() and path.read_text() != text:
                 raise RuntimeError(f"frozen config changed: {path}")
             path.write_text(text)
-        run = SingleCRun(root, gpus, args.python)
+        run = SingleCRun(root, gpus, args.python, warmup_checkpoint=args.warmup_checkpoint)
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, run.stop)
         try:
