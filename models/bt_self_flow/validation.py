@@ -34,10 +34,11 @@ def calibrate_interface(model, dataset, output, samples=512, seed=903, packet_sa
         for index in range(samples):
             image = dataset[(index % len(dataset), counter_seed(seed, index, 702))].unsqueeze(0).to(device)
             clean = model.encode_clean_latent(image)
-            analysis = model.codec.analyze(clean)
+            analysis = None if model.codec.precision_conditioning else model.codec.analyze(clean)
             for quality in (0., .2, .4, .6, .8, 1.):
                 control = RateControl(quality)
-                view = model.codec.quantize_analysis(analysis, control)
+                source = model.codec.analyze(clean, control) if analysis is None else analysis
+                view = model.codec.quantize_analysis(source, control)
                 distortion[str(quality)] += (view["mean"]-clean).square().mean()/model.distortion_scale.s_data.square()
                 scales.append(model.distortion_scale.measure(clean, view["mean"]).cpu())
                 if index < packet_samples:
@@ -64,7 +65,7 @@ def calibrate_interface(model, dataset, output, samples=512, seed=903, packet_sa
 
 @torch.no_grad()
 def validate(model, dataset, image_loss=None, state=None, transition=1., packet_samples=0, qualities=None,
-             actual_rate=False):
+             actual_rate=False, objective=None, quality=None):
     device = next(model.parameters()).device
     qualities = qualities or (0., .2, .4, .6, .8, 1.)
     sums_by_quality = {str(quality): {} for quality in qualities}
@@ -72,15 +73,20 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
         for index in range(len(dataset)):
             image = dataset[index].unsqueeze(0).to(device)
             height, width = image.shape[-2:]
-            # All quality points share the frozen clean encoder and pre-quant
-            # analysis. Quantization, context and repair still run per quality.
-            source = model.codec.analyze(model.encode_clean_latent(pad_image(image)))
-            for quality in qualities:
-                control, sums = RateControl(quality), sums_by_quality[str(quality)]
+            clean = model.encode_clean_latent(pad_image(image))
+            # Only the frozen AE is shared across q in precision v2.
+            shared = None if model.codec.precision_conditioning else model.codec.analyze(clean)
+            for q in qualities:
+                control, sums = RateControl(q), sums_by_quality[str(q)]
+                source = model.codec.analyze(clean, control) if shared is None else shared
                 result = model.forward_analysis(source, rate_control=control, transition=transition)
                 if result.image is not None:
                     result.image = result.image[..., :height, :width]
-                loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data, image_loss)
+                loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
+                                                         image_loss, objective=objective, quality=quality)
+                if result.image is not None and min(height, width) > 160:
+                    from pytorch_msssim import ms_ssim
+                    metrics["ms_ssim"] = ms_ssim((result.image+1)/2, (image+1)/2, data_range=1., size_average=True)
                 packet = None
                 if actual_rate:
                     # Encode the frontend without a second SANA forward. D's
@@ -94,7 +100,8 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                                            control.low_code, control.high_code, encoded["hyper_stream"],
                                            encoded["main_stream"], encoded["allocation"], scales)
                     actual_bpp = loss.new_tensor(8*len(packet.to_bytes())/(height*width))
-                    loss = loss+rate_beta(control)*(actual_bpp-metrics["rate_est"])
+                    loss = loss+rate_beta(control, quality)*(actual_bpp-metrics["rate_est"])
+                    metrics["weighted_rate"] = rate_beta(control, quality)*actual_bpp
                     metrics["rate_actual"] = actual_bpp
                 metrics["loss"] = loss
                 if result.scale_info:
@@ -103,7 +110,7 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                     sums[name] = sums.get(name, 0.)+value.detach()
                 if index < packet_samples and hasattr(model, "DiT") and transition == 1:
                     packet = packet if packet is not None else model.compress(image, control)
-                    decoded = model.decompress(packet)
+                    decoded = model.decompress(BTImagePacket.from_bytes(packet.to_bytes()))
                     hard_error = (decoded-result.image).abs().max().item()
                     if not math.isfinite(hard_error) or hard_error > 2e-4:
                         raise RuntimeError(f"packet and hard eval reconstruction differ: {hard_error}")

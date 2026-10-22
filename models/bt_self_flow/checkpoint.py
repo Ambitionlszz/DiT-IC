@@ -39,7 +39,11 @@ class DeploymentEMA:
             components.update(vae=model.vae, dit=model.DiT, text=model.text_proj,
                               conditioner=model.quality_conditioner, projector=model.representation_projector)
         self.averaged = {(part, name) for part, module in components.items() if module is not None
-                         for name, param in module.named_parameters() if param.requires_grad}
+                         # state_dict includes legacy aliases (down/branch1,
+                         # up/branch1). Every exported name must receive the
+                         # same EMA; otherwise load_state_dict's later alias
+                         # silently overwrites the averaged weight with raw.
+                         for name, param in module.named_parameters(remove_duplicate=False) if param.requires_grad}
 
     @torch.no_grad()
     def update(self, model):

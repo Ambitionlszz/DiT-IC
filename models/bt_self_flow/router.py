@@ -25,29 +25,60 @@ def position_encoding(height, width, channels, device):
 
 
 class RateRouter(nn.Module):
-    def __init__(self, source_channels=32, feature_channels=320, width=128):
+    def __init__(self, source_channels=32, feature_channels=320, width=128, precision_conditioning=False):
         super().__init__()
         self.width = width
+        self.precision_conditioning = bool(precision_conditioning)
         self.source = nn.Conv2d(4 * source_channels, width, 1)
         self.feature = nn.Conv2d(feature_channels, width, 1)
-        self.cost = nn.Sequential(nn.Linear(1, width), nn.SiLU(), nn.Linear(width, width))
         layer = nn.TransformerEncoderLayer(width, 4, 4*width, dropout=0,
                                            activation="gelu", batch_first=True,
                                            norm_first=True)
         self.transformer = nn.TransformerEncoder(layer, 2, enable_nested_tensor=False)
-        self.head = nn.Sequential(nn.LayerNorm(width), nn.Linear(width, 1))
-        nn.init.zeros_(self.head[-1].weight)
-        nn.init.zeros_(self.head[-1].bias)
+        if self.precision_conditioning:
+            self.source_norm, self.feature_norm = nn.LayerNorm(width), nn.LayerNorm(width)
+            self.fusion = nn.Sequential(nn.Linear(2*width, 2*width), nn.SiLU(), nn.Linear(2*width, width))
+            self.precision_projections = nn.ModuleList(nn.Linear(width, 4*width) for _ in range(2))
+            for projection in self.precision_projections:
+                nn.init.zeros_(projection.weight)
+                nn.init.zeros_(projection.bias)
+            self.head = nn.Sequential(nn.Linear(width+1, 64), nn.SiLU(), nn.Linear(64, 1))
+            nn.init.normal_(self.head[-1].weight, std=.001)
+            # s=4 is a bin centre. s=3.5 would start on the 3/4 boundary.
+            nn.init.constant_(self.head[-1].bias, math.atanh(1/7))
+        else:
+            self.cost = nn.Sequential(nn.Linear(1, width), nn.SiLU(), nn.Linear(width, width))
+            self.head = nn.Sequential(nn.LayerNorm(width), nn.Linear(width, 1))
+            nn.init.zeros_(self.head[-1].weight)
+            nn.init.zeros_(self.head[-1].bias)
 
-    def forward(self, clean, feature, reference_cost):
+    def forward(self, clean, feature, reference_cost, precision=None):
         b, _, h, w = feature.shape
         source = F.pixel_unshuffle(clean, 2)
         if source.shape[-2:] != (h, w):
             raise ValueError("Router source and feature grids disagree")
-        hidden = (self.source(source) + self.feature(feature)).flatten(2).transpose(1, 2)
         cost = torch.log1p(reference_cost.detach().clamp_min(0)).flatten(2).transpose(1, 2)
-        hidden = hidden + self.cost(cost) + position_encoding(h, w, self.width, feature.device)
-        raw = self.head(self.transformer(hidden)).transpose(1, 2).reshape(b, 1, h, w).tanh()
+        source = self.source(source).flatten(2).transpose(1, 2)
+        feature = self.feature(feature).flatten(2).transpose(1, 2)
+        if self.precision_conditioning:
+            if precision is None or precision.shape != (b, self.width, 1, 1):
+                raise ValueError("precision-conditioned Router requires a global precision embedding")
+            source, feature = self.source_norm(source), self.feature_norm(feature)
+            hidden = feature + self.fusion(torch.cat([feature, source], -1))
+            hidden = hidden + position_encoding(h, w, self.width, feature.device)
+            condition = precision.flatten(2).transpose(1, 2)
+            for layer, projection in zip(self.transformer.layers, self.precision_projections):
+                gamma_a, beta_a, gamma_f, beta_f = projection(condition).chunk(4, -1)
+                normalized = (1+gamma_a)*layer.norm1(hidden)+beta_a
+                attended = layer.self_attn(normalized, normalized, normalized, need_weights=False)[0]
+                hidden = hidden + layer.dropout1(attended)
+                normalized = (1+gamma_f)*layer.norm2(hidden)+beta_f
+                hidden = hidden + layer.dropout2(layer.linear2(layer.dropout(layer.activation(layer.linear1(normalized)))))
+            raw = self.head(torch.cat([hidden, cost], -1))
+        else:
+            hidden = source + feature + self.cost(cost) + position_encoding(h, w, self.width, feature.device)
+            raw = self.head(self.transformer(hidden))
+        raw = raw.transpose(1, 2).reshape(b, 1, h, w).tanh()
         continuous_codes = (raw + 1) * 3.5
         codes = ste_round(continuous_codes)
         allocation = codes * (2.0 / 7) - 1

@@ -48,8 +48,11 @@ def run_smoke(args, report, visible):
 
     def config(name, phase, backend, steps, accumulation):
         value = load_config(args.config)
+        v2 = value["model"].get("codec", {}).get("precision_conditioning", False)
+        if v2 and phase == "joint":
+            value = load_config(Path(args.config).parent/"c_joint.yaml")
         value["model"]["backend"] = backend
-        if phase == "joint":
+        if phase == "joint" and not v2:
             value["model"]["checkpoint_blocks"] = False
         value["train"].update(phase=phase, steps=steps, accumulation_steps=accumulation,
                               batch_size=2, effective_batch=8, output=str(root/name), log_every=1,
@@ -58,7 +61,13 @@ def run_smoke(args, report, visible):
                               data_scale_samples=2, calibration_samples=4, packet_samples=1,
                               require_quality_span=False)
         value["data"].update(valid_limit=1, workers=0)
-        value["optimizer"]["warmup"] = 2
+        if v2:
+            value["train"].update(router_uniform_steps=0, router_ramp_steps=0)
+            if phase == "codec":
+                value["train"].update(batch_size=8, accumulation_steps=1, effective_batch=8*world)
+            value["optimizer"]["warmup"] = 0
+        else:
+            value["optimizer"]["warmup"] = 2
         path = root/f"{name}.yaml"
         path.write_text(yaml.safe_dump(value, sort_keys=False))
         return str(path)

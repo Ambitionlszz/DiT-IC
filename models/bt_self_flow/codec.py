@@ -9,6 +9,7 @@ from compressai.ans import BufferedRansEncoder, RansDecoder
 
 from models.latent_codec import LatentCodec, update_registered_buffers
 from .packet import RateControl, pack_codes
+from .precision_conditioning import PrecisionAffine, PrecisionEmbedding
 from .router import RateRouter, allocation_from_codes, ste_round
 
 
@@ -21,13 +22,15 @@ class SourceAnalysis:
     base: torch.Tensor
     allocation: torch.Tensor
     allocation_codes: torch.Tensor
+    quality_code: int | None = None
 
 
 class BTLatentCodec(LatentCodec):
     mechanism = "bt_explicit_local_step_v1"
 
     def __init__(self, ch_emd=32, channel=320, channel_out=32,
-                 delta_coarse=4.0, delta_fine=0.5, kappa=math.log(2), **kwargs):
+                 delta_coarse=4.0, delta_fine=0.5, kappa=math.log(2),
+                 precision_conditioning=False, rate_likelihood="hard", **kwargs):
         kwargs.pop("variable_rate", None)
         super().__init__(ch_emd=ch_emd, channel=channel, channel_out=channel_out,
                          variable_rate=False, **kwargs)
@@ -37,7 +40,16 @@ class BTLatentCodec(LatentCodec):
         self.register_buffer("log_delta_fine", torch.tensor(math.log(delta_fine)))
         self.register_buffer("kappa", torch.tensor(float(kappa)))
         self.register_buffer("router_strength", torch.tensor(1.0))
-        self.router = RateRouter(ch_emd, channel)
+        if rate_likelihood not in ("hard", "noise"):
+            raise ValueError("rate_likelihood must be hard or noise")
+        self.precision_conditioning = bool(precision_conditioning)
+        self.rate_likelihood = rate_likelihood
+        self.mechanism = "bt_explicit_local_step_precision_v2" if self.precision_conditioning else type(self).mechanism
+        self.router = RateRouter(ch_emd, channel, precision_conditioning=self.precision_conditioning)
+        if self.precision_conditioning:
+            self.precision_embedding = PrecisionEmbedding()
+            self.analysis_precision = PrecisionAffine(192)
+            self.synthesis_precision = PrecisionAffine(320)
 
     def load_state_dict(self, state_dict, strict=True, assign=False):
         # CDF lengths change after quantile updates and EMA evaluation.
@@ -57,7 +69,10 @@ class BTLatentCodec(LatentCodec):
         # in the hard simulation too: channels-last convolutions can differ by
         # a few FP32 ulps and a pretrained one-step backend can amplify them.
         hyper_hat = (median + ste_round(hyper - median)).contiguous()
-        values = hyper_hat.permute(1, 0, 2, 3).reshape(hyper.shape[1], 1, -1)
+        rate_values = hyper_hat
+        if self.training and self.rate_likelihood == "noise":
+            rate_values = hyper + torch.empty_like(hyper).uniform_(-.5, .5)
+        values = rate_values.permute(1, 0, 2, 3).reshape(hyper.shape[1], 1, -1)
         likelihood, _, _ = self.entropy_bottleneck._likelihood(values)
         likelihood = self.entropy_bottleneck.likelihood_lower_bound(likelihood)
         likelihood = likelihood.reshape(hyper.shape[1], hyper.shape[0], *hyper.shape[2:])
@@ -71,11 +86,24 @@ class BTLatentCodec(LatentCodec):
         gc = self.gaussian_conditional
         return gc.likelihood_lower_bound(gc._likelihood(symbols, normalized_scale))
 
-    def analyze(self, clean):
+    def global_log_step(self, control, batch, device):
+        if self.precision_conditioning and control.mixed:
+            raise ValueError("precision v2 uses one whole-image quality, not mixed quality maps")
+        quality = control.tensor(batch, 1, 1, device)
+        return (1-quality)*self.log_delta_coarse + quality*self.log_delta_fine
+
+    def analyze(self, clean, rate_control=None):
         # The entire entropy/codec path has FP32 semantics, even inside AMP.
         with torch.autocast(device_type=clean.device.type, enabled=False):
             clean = clean.float()
-            y = self.g_a(clean)
+            control = rate_control or RateControl()
+            precision = None
+            if self.precision_conditioning:
+                log_step = self.global_log_step(control, clean.shape[0], clean.device)
+                precision = self.precision_embedding(log_step)
+                y = self.g_a.analysis_transform(self.analysis_precision(self.g_a.pre1(clean), precision))
+            else:
+                y = self.g_a(clean)
             if y.shape[-2] % 4 or y.shape[-1] % 4:
                 raise ValueError("BT requires padded image dimensions divisible by 256")
             hyper_hat, hyper_likelihood = self._hyper_forward(y)
@@ -84,13 +112,17 @@ class BTLatentCodec(LatentCodec):
             # otherwise unused prior/probability graph for every microbatch.
             with torch.no_grad():
                 mean, scale = self._prior(base, 0)
-                reference_step = ((self.log_delta_coarse + self.log_delta_fine) / 2).exp()
+                reference_step = (log_step.exp() if self.precision_conditioning else
+                                  ((self.log_delta_coarse + self.log_delta_fine) / 2).exp())
                 reference_symbols = ((y - mean) / reference_step).round()
                 cost = -self._mass(reference_symbols, scale / reference_step).log2().sum(1, keepdim=True)
-            allocation, codes = self.router(clean, y, cost)
-            return SourceAnalysis(clean, y, hyper_hat, hyper_likelihood, base, allocation, codes)
+            allocation, codes = self.router(clean, y, cost, precision=precision)
+            return SourceAnalysis(clean, y, hyper_hat, hyper_likelihood, base, allocation, codes,
+                                  control.low_code if self.precision_conditioning else None)
 
     def steps(self, control, allocation):
+        if self.precision_conditioning and control.mixed:
+            raise ValueError("precision v2 uses one whole-image quality, not mixed quality maps")
         b, _, h, w = allocation.shape
         quality = control.tensor(b, h, w, allocation.device)
         log_step = ((1-quality) * self.log_delta_coarse + quality * self.log_delta_fine
@@ -137,7 +169,10 @@ class BTLatentCodec(LatentCodec):
             group_hat = group_hat + delta * correction
             restored = restored + group_hat
             if mode == "forward":
-                mass = self._mass(symbols, scale_s)
+                rate_symbols = symbols
+                if self.training and self.rate_likelihood == "noise":
+                    rate_symbols = values + torch.empty_like(values).uniform_(-.5, .5)
+                mass = self._mass(rate_symbols, scale_s)
                 likelihoods = likelihoods + self.unsequeeze_with_mask(mass, mask)
             if trace:
                 audit.append({"symbols": symbols.detach().to(torch.int32).cpu(),
@@ -149,9 +184,22 @@ class BTLatentCodec(LatentCodec):
             encoder = BufferedRansEncoder()
             encoder.encode_with_indexes(all_symbols, all_indexes, cdf, lengths, offsets)
             encoded = encoder.flush()
-        return self.g_s(restored), likelihoods, encoded, audit
+        if self.precision_conditioning:
+            # Precision belongs to a coding cell; each becomes 2x2 AE cells.
+            local = self.precision_embedding(delta.log())
+            for index, layer in enumerate(self.g_s.synthesis_transform):
+                restored = layer(restored)
+                if index == 3:
+                    condition = F.interpolate(local, size=restored.shape[-2:], mode="nearest")
+                    restored = self.synthesis_precision(restored, condition)
+            mean = restored
+        else:
+            mean = self.g_s(restored)
+        return mean, likelihoods, encoded, audit
 
     def quantize_analysis(self, analysis, control, trace=False):
+        if self.precision_conditioning and (control.mixed or analysis.quality_code != control.low_code):
+            raise ValueError("precision-conditioned analysis cannot be reused across qualities; call analyze(clean, control)")
         with torch.autocast(device_type=analysis.y.device.type, enabled=False):
             delta = self.steps(control, analysis.allocation)
             mean, likelihood, _, audit = self._groups(analysis.base, delta, analysis.y, trace=trace)
@@ -160,7 +208,7 @@ class BTLatentCodec(LatentCodec):
 
     def forward(self, clean, rate_control=None, trace=False):
         control = rate_control or RateControl()
-        return self.quantize_analysis(self.analyze(clean), control, trace=trace)
+        return self.quantize_analysis(self.analyze(clean, control), control, trace=trace)
 
     @torch.no_grad()
     def compress(self, clean, rate_control=None, trace=False):
@@ -170,7 +218,7 @@ class BTLatentCodec(LatentCodec):
             raise ValueError("cannot deploy an unfinished Router warmup")
         control = rate_control or RateControl()
         with torch.autocast(device_type=clean.device.type, enabled=False):
-            source = self.analyze(clean)
+            source = self.analyze(clean, control)
             # Always reconstruct the actual transmitted hyperprior first.
             hyper_stream = self.entropy_bottleneck.compress(self.h_a(source.y))[0]
             hyper_hat = self.entropy_bottleneck.decompress([hyper_stream], source.hyper_hat.shape[-2:]).contiguous()

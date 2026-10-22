@@ -65,7 +65,7 @@ class BTCodecStage(nn.Module):
 
     def forward(self, image, rate_control=None, **kwargs):
         clean = self.encode_clean_latent(image)
-        source = self.codec.analyze(clean)
+        source = self.codec.analyze(clean, rate_control or RateControl())
         return self.forward_analysis(source, rate_control, **kwargs)
 
     def forward_analysis(self, source, rate_control=None, **kwargs):
@@ -165,7 +165,7 @@ class BTCodec(Codec):
 
     def forward(self, image, rate_control=None, transition=1.0, capture=False, **kwargs):
         clean = self.encode_clean_latent(image)
-        source = self.codec.analyze(clean)
+        source = self.codec.analyze(clean, rate_control or RateControl())
         return self.forward_analysis(source, rate_control, transition, capture)
 
     def forward_analysis(self, source, rate_control=None, transition=1.0, capture=False):

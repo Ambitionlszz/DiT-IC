@@ -21,13 +21,13 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
 from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, DeploymentEMA, capture_rng, clone_state,
-                                            prune_checkpoints, publish_checkpoint_alias, read_checkpoint,
+                                            evaluation_state, prune_checkpoints, publish_checkpoint_alias, read_checkpoint,
                                             restore_rng, save_atomic, sha256_file)
 from models.bt_self_flow.data import CounterSampler, ImageDataset, counter_seed
 from models.bt_self_flow.distributed import make_control_group, rank_zero_section
-from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config, lr_factor, make_model,
+from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config, make_model, schedule_factor,
                                             optimization_contract, optimizer_groups, training_contract)
-from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
+from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
@@ -62,6 +62,8 @@ def sample_control(config, step, rank, shape, device):
     phase = config["train"]["phase"]
     stream = {"codec": 11, "backend": 12, "joint": 13, "self_flow": 14}[phase]
     rng = random.Random(counter_seed(config["train"]["seed"], step, stream))
+    if config.get("quality"):
+        return RateControl(rng.choice(config["quality"]["values"]))
     quality = rng.random()
     if phase == "codec":
         ramp = max(0., min(1., (step-config["train"].get("router_uniform_steps", 2000))
@@ -125,13 +127,14 @@ def prepare_backend(config, source, output, device):
     target["model"]["backend"] = "C"
     target["self_flow"] = {"enabled": False, "mixed_sampling": False}
     model = make_model(target, device)
-    model.load_bt_state(checkpoint["raw"], codec_only=True)
+    source_weights = "ema" if model.codec.precision_conditioning else "raw"
+    model.load_bt_state(checkpoint[source_weights], codec_only=True)
     state = clone_state(model.export_state(), cpu=True)
     source_hash = sha256_file(source)
     save_atomic(output, {"method": METHOD, "schema": SCHEMA, "phase": "backend_init", "backend": "shared",
                          "step": 0, "raw": state, "ema": state, "config": target,
                          "assets": asset_identity(config), "source_sha256": source_hash,
-                         "calibration": checkpoint["calibration"]})
+                         "calibration": checkpoint["calibration"], "codec_weights": source_weights})
     print(json.dumps({"backend_init": str(output), "source_sha256": source_hash}), flush=True)
 
 
@@ -150,6 +153,20 @@ def auxiliary_update(codec, optimizer, world):
                     dist.all_reduce(parameter.grad)
                     parameter.grad.div_(world)
     optimizer.step()
+
+
+def gradient_diagnostics(model):
+    """Sampled after unscale/clip; zero is distinct from a missing gradient."""
+    buckets = {}
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad or parameter.grad is None:
+            continue
+        if name.startswith("codec."):
+            part = name.split(".")[1]
+        else:
+            part = name.split(".")[0]
+        buckets.setdefault(part, []).append(parameter.grad.detach().float().norm())
+    return {name: torch.stack(norms).norm().item() for name, norms in buckets.items()}
 
 
 def train(config, args, rank, world, device):
@@ -209,7 +226,7 @@ def train(config, args, rank, world, device):
     optimizer = torch.optim.AdamW(groups, betas=(.9, .999), weight_decay=0)
     aux_optimizer = torch.optim.AdamW(auxiliary, lr=config["optimizer"]["aux_lr"], weight_decay=0) if auxiliary else None
     scheduler = torch.optim.lr_scheduler.LambdaLR(
-        optimizer, lambda s: lr_factor(s, settings["steps"], config["optimizer"].get("warmup", 500)))
+        optimizer, lambda s: schedule_factor(s, settings["steps"], config["optimizer"]))
     # Recent PyTorch reports BF16 emulation as supported even on V100. Select
     # native BF16 only on Ampere or later; V100 uses FP16 with GradScaler.
     native_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8
@@ -242,9 +259,12 @@ def train(config, args, rank, world, device):
 
     def validation_report(transition):
         started_validation = time.monotonic()
+        full_decode = settings.get("full_decode_every", 0)
+        samples = len(validation) if full_decode and step % full_decode == 0 else settings.get("packet_samples", 2)
         report = validate(model, validation, image_loss, ema.state, transition,
-                          packet_samples=0 if phase == "codec" else settings.get("packet_samples", 2),
-                          actual_rate=settings.get("validation_actual_bpp", False))
+                          packet_samples=0 if phase == "codec" else samples,
+                          actual_rate=settings.get("validation_actual_bpp", False),
+                          objective=config.get("objective"), quality=config.get("quality"))
         report["_validation_identity"] = validation_identity
         (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
         print(json.dumps(dict(validation_completed=step, seconds=time.monotonic()-started_validation,
@@ -324,6 +344,10 @@ def train(config, args, rank, world, device):
                           "effective_batch": world*settings["batch_size"]*settings["accumulation_steps"],
                           "trainable": sum(p.numel() for p in model.parameters() if p.requires_grad)}), flush=True)
     model.train()
+    writer = None
+    if rank == 0 and settings.get("tensorboard", False):
+        from torch.utils.tensorboard import SummaryWriter
+        writer = SummaryWriter(str(output/"tensorboard"))
     last_log = time.monotonic()
     accumulated_time, accumulated_updates = 0., 0
     pending_images = []
@@ -347,7 +371,7 @@ def train(config, args, rank, world, device):
             optimizer.zero_grad(set_to_none=True)
             if aux_optimizer:
                 aux_optimizer.zero_grad(set_to_none=True)
-            if phase == "codec":
+            if phase == "codec" and not model.codec.precision_conditioning:
                 model.codec.router_strength.fill_(max(0., min(1., (step-settings.get("router_uniform_steps", 2000))
                                                                /settings.get("router_ramp_steps", 3000))))
             transition = min(1., step/max(settings["steps"]-1, 1)) if phase == "backend" else 1.
@@ -368,7 +392,9 @@ def train(config, args, rank, world, device):
                     with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                         enabled=device.type == "cuda" and not full_precision_retry):
                         result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
-                        loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data, image_loss)
+                        loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
+                                                                 image_loss, objective=config.get("objective"),
+                                                                 quality=config.get("quality"))
                         if teacher is not None:
                             with torch.no_grad():
                                 high = model.codec.quantize_analysis(result.source, RateControl(1.))
@@ -487,16 +513,40 @@ def train(config, args, rank, world, device):
                                   data_wait_seconds=data_wait,
                                   steady_seconds_per_update=accumulated_time/max(accumulated_updates, 1),
                                   max_memory_bytes=torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0,
+                                  q=control.value, rate_coefficient=rate_beta(control, config.get("quality")),
+                                  learning_rates={group["name"]: group["lr"] for group in optimizer.param_groups},
                                   **metrics_sum)
+                    if model.codec.precision_conditioning:
+                        with torch.no_grad():
+                            delta = model.codec.steps(control, result.source.allocation)
+                            record["precision"] = dict(min_step=delta.min().item(), max_step=delta.max().item(),
+                                                       geometric_mean_step=delta.log().mean().exp().item(),
+                                                       last_micro_allocation_histogram=torch.bincount(
+                                                           result.allocation_codes.flatten().long(), minlength=8).tolist())
+                        record["gradient_norms_after_clip"] = gradient_diagnostics(model)
                     with (output/"train.jsonl").open("a") as fd:
                         fd.write(json.dumps(record)+"\n")
                     print(json.dumps(record), flush=True)
+                    if writer is not None:
+                        for name, value in record.items():
+                            if isinstance(value, (int, float)):
+                                writer.add_scalar(f"train/{name}", value, step)
+                        for name, value in record["learning_rates"].items():
+                            writer.add_scalar(f"lr/{name}", value, step)
+                        for name, value in record.get("gradient_norms_after_clip", {}).items():
+                            writer.add_scalar(f"grad_after_clip/{name}", value, step)
             improved = False
             if step % settings["eval_every"] == 0 or step == settings["steps"]:
                 with rank_zero_section(rank, control_group):
                     if rank == 0:
                         report = validation_report(transition)
                         improved = best.consider(report, step)
+                        if writer is not None:
+                            for q, values in report.items():
+                                if not q.startswith("_"):
+                                    for name, value in values.items():
+                                        writer.add_scalar(f"validation/q{q}/{name}", value, step)
+                            writer.flush()
                 if world > 1:
                     selected = [improved]
                     dist.broadcast_object_list(selected, src=0, group=control_group)
@@ -513,6 +563,8 @@ def train(config, args, rank, world, device):
                 dist.all_reduce(request, op=dist.ReduceOp.MAX)
             stop = stop or bool(request.item())
     except BaseException:
+        if writer is not None:
+            writer.close()
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
         raise
@@ -520,8 +572,18 @@ def train(config, args, rank, world, device):
     if completed and phase == "codec":
         with rank_zero_section(rank, control_group):
             if rank == 0:
-                calibration = calibrate_interface(model, dataset, output/"calibration.json",
-                                                  settings.get("calibration_samples", 512), settings["seed"])
+                if model.codec.precision_conditioning:
+                    # Calibrate the exact EMA frontend used for both e2e arms.
+                    with evaluation_state(model, ema.state):
+                        calibration = calibrate_interface(model, dataset, output/"calibration.json",
+                                                          settings.get("calibration_samples", 512), settings["seed"])
+                        calibrated = clone_state({"scale": model.distortion_scale.state_dict()}, cpu=True)["scale"]
+                    model.distortion_scale.load_state_dict(calibrated)
+                    calibration["weights"] = "deployment_ema"
+                    (output/"calibration.json").write_text(json.dumps(calibration, indent=2)+"\n")
+                else:
+                    calibration = calibrate_interface(model, dataset, output/"calibration.json",
+                                                      settings.get("calibration_samples", 512), settings["seed"])
         if world > 1:
             values = [calibration]
             dist.broadcast_object_list(values, src=0, group=control_group)
@@ -537,6 +599,8 @@ def train(config, args, rank, world, device):
                           "calibration": calibration}), flush=True)
     for sig, handler in old_handlers.items():
         signal.signal(sig, handler)
+    if writer is not None:
+        writer.close()
 
 
 def main():

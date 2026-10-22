@@ -1,10 +1,18 @@
+import bisect
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 
-def rate_beta(control):
-    return 8 * 32**(-control.value)
+def rate_beta(control, quality=None):
+    if quality is None:
+        return 8 * 32**(-control.value)
+    values, weights = quality["values"], quality["rate_coefficients"]
+    index = min(max(bisect.bisect_right(values, control.value)-1, 0), len(values)-2)
+    fraction = (control.value-values[index])/(values[index+1]-values[index])
+    return math.exp((1-fraction)*math.log(weights[index])+fraction*math.log(weights[index+1]))
 
 
 def estimated_bpp(result, image):
@@ -43,12 +51,23 @@ class ImageLoss(nn.Module):
             }
 
 
-def reconstruction_objective(result, image, control, s_data, image_loss=None):
+def reconstruction_objective(result, image, control, s_data, image_loss=None, objective=None, quality=None):
+    objective = objective or {}
     base = F.mse_loss(result.coarse.float(), result.clean.float())/s_data.square()
     rate = estimated_bpp(result, image)
+    weighted_rate = rate_beta(control, quality)*rate
+    weighted_base = objective.get("base_weight", 1. if image_loss is None else .1)*base
     if image_loss is None:
-        return base + rate_beta(control)*rate, {"base": base, "rate_est": rate}
-    latent = F.mse_loss(result.latent.float(), result.clean.float())/s_data.square()
+        return weighted_base+weighted_rate, {"base": base, "rate_est": rate,
+                                            "weighted_base": weighted_base, "weighted_rate": weighted_rate}
+    repaired_weight = objective.get("repaired_weight", .1)
+    repaired = result.latent.float() if repaired_weight else result.latent.detach().float()
+    latent = F.mse_loss(repaired, result.clean.float())/s_data.square()
     distortion, metrics = image_loss(result.image, image)
-    loss = distortion + .1*latent + .1*base + rate_beta(control)*rate
-    return loss, dict(metrics, base=base, latent=latent, rate_est=rate)
+    weighted_latent = repaired_weight*latent
+    loss = distortion+weighted_latent+weighted_base+weighted_rate
+    return loss, dict(metrics, base=base, latent=latent, rate_est=rate, weighted_base=weighted_base,
+                      weighted_repaired=weighted_latent, weighted_rate=weighted_rate,
+                      weighted_mse=image_loss.mse_weight*metrics["mse"],
+                      weighted_lpips=image_loss.lpips_weight*metrics["lpips"],
+                      weighted_dists=image_loss.dists_weight*metrics["dists"])

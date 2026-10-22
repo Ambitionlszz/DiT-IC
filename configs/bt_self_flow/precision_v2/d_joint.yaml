@@ -1,0 +1,5 @@
+base: c_joint.yaml
+model:
+  backend: D
+train:
+  output: ${BT_RUN_ROOT:-checkpoints/c_precision_v2}/D/joint

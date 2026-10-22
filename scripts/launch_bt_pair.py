@@ -188,6 +188,8 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--gpus", default="0,1")
     parser.add_argument("--python", default=sys.executable)
+    parser.add_argument("--config-dir", type=Path, default=REPO/"configs/bt_self_flow",
+                        help="common.yaml, c_joint.yaml and d_joint.yaml recipe directory")
     args = parser.parse_args()
     gpus = args.gpus.split(",")
     if len(gpus) != 2 or len(set(gpus)) != 2 or not all(g.isdecimal() for g in gpus):
@@ -204,10 +206,22 @@ def main():
         manifest_path = root/"manifest.json"
         configs = {}
         for name in ("common", "c_joint", "d_joint"):
-            config = load_config(REPO/"configs/bt_self_flow"/f"{name}.yaml")
+            config = load_config(args.config_dir/f"{name}.yaml")
             phase, backend = config["train"]["phase"], config["model"]["backend"]
             config["train"]["output"] = str(root/("common" if phase == "codec" else f"{backend}/{phase}"))
             configs[name] = config
+        if configs["common"]["model"].get("codec", {}).get("precision_conditioning"):
+            from copy import deepcopy
+            c, d = deepcopy(configs["c_joint"]), deepcopy(configs["d_joint"])
+            d["model"]["backend"] = c["model"]["backend"]
+            d["train"]["output"] = c["train"]["output"]
+            if c != d:
+                raise ValueError("paired C/D configs differ beyond backend and output")
+            if configs["common"]["train"]["effective_batch"] != 2*configs["common"]["train"]["batch_size"]*configs["common"]["train"]["accumulation_steps"]:
+                raise ValueError("warmup effective batch differs from two-card launch")
+            for config in (c, d):
+                if config["train"]["effective_batch"] != config["train"]["batch_size"]*config["train"]["accumulation_steps"]:
+                    raise ValueError("e2e effective batch differs from single-card launch")
         manifest["configs"] = configs
         if manifest_path.exists():
             if json.loads(manifest_path.read_text()) != manifest:

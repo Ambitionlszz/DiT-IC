@@ -43,6 +43,11 @@ def evaluate(args):
     if checkpoint["phase"] == "backend" and checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
         raise ValueError("a partially transitioned backend is not a deployment model")
     config = checkpoint["config"]
+    # Asset hashes still have to match when evaluating on another machine.
+    if getattr(args, "sana_path", None):
+        config["model"]["sana_path"] = args.sana_path
+    if getattr(args, "text_path", None):
+        config["model"]["text_path"] = args.text_path
     if checkpoint["assets"] != asset_identity(config):
         raise ValueError("pretrained asset identity differs from checkpoint")
     model = make_model(config, device)
@@ -91,6 +96,9 @@ def evaluate(args):
             if nfe != 1:
                 raise RuntimeError(f"expected 1 NFE, got {nfe}")
             _, values = metric(reconstructed, image)
+            if min(image.shape[-2:]) > 160:
+                from pytorch_msssim import ms_ssim
+                values["ms_ssim"] = ms_ssim((reconstructed+1)/2, (image+1)/2, data_range=1., size_average=True)
             h, w = image.shape[-2:]
             yh, yw = packet.y_shape
             allocation = torch.tensor(unpack_codes(packet.allocation, 3, yh*yw), device=device).reshape(1, 1, yh, yw)
@@ -131,6 +139,8 @@ def evaluate(args):
         code = RateControl(quality).low_code
         subset = [row for row in rows if row["lambda_code"] == code]
         keys = ("bpp", "psnr", "lpips", "dists", "encode_seconds", "decode_seconds", "peak_memory_bytes")
+        if "ms_ssim" in subset[0]:
+            keys += ("ms_ssim",)
         keys += ("base_latent_mse", "repair_latent_rms", "high_precision_psnr", "high_precision_area_fraction")
         if "scale_saturation" in subset[0]:
             keys += ("scale_saturation",)
@@ -162,6 +172,8 @@ def main():
     parser.add_argument("--limit", type=int)
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--save-images", action="store_true")
+    parser.add_argument("--sana-path", help="map pretrained assets to this host, retaining hash verification")
+    parser.add_argument("--text-path", help="map the fixed text embedding to this host")
     parser.add_argument("--check-forward", action="store_true")
     args = parser.parse_args()
     if not args.decode_packet and Path(args.output, "images.jsonl").exists():

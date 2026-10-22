@@ -3,7 +3,9 @@
 from copy import deepcopy
 from functools import lru_cache
 import math
+import os
 from pathlib import Path
+import re
 
 import torch
 import yaml
@@ -33,7 +35,38 @@ def load_config(path):
     for key in ("batch_size", "accumulation_steps", "steps", "eval_every", "save_every"):
         if int(config["train"][key]) < 1:
             raise ValueError(f"train.{key} must be positive")
+    config = expand_environment(config)
+    if config["model"].get("codec", {}).get("precision_conditioning"):
+        if phase not in ("codec", "joint") or sf.get("enabled") or sf.get("mixed_sampling"):
+            raise ValueError("precision v2 has exactly codec warmup and joint C/D training")
+        if config["train"].get("router_uniform_steps", 0) or config["train"].get("router_ramp_steps", 0):
+            raise ValueError("precision v2 must use the same full Router throughout both stages")
+        values = config.get("quality", {}).get("values", [])
+        weights = config.get("quality", {}).get("rate_coefficients", [])
+        if values != [0., .2, .4, .6, .8, 1.] or len(weights) != 6:
+            raise ValueError("precision v2 requires six shared quality/rate pairs")
+        if any(not math.isfinite(w) or w <= 0 for w in weights) or any(a <= b for a, b in zip(weights, weights[1:])):
+            raise ValueError("rate coefficients must be positive, finite and descending")
+        if config.get("objective", {}).get("repaired_weight", 0) != 0:
+            raise ValueError("precision v2 reports repaired NMSE but does not optimize it")
     return config
+
+
+def expand_environment(value):
+    """Portable asset/data paths, including ${NAME:-default}, without a shell."""
+    if isinstance(value, dict):
+        return {key: expand_environment(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [expand_environment(item) for item in value]
+    if isinstance(value, str):
+        def replace(match):
+            name, default = match.group(1), match.group(2)
+            result = os.environ.get(name) or default
+            if result is None:
+                raise ValueError(f"set environment variable {name} for this config")
+            return result
+        return re.sub(r"\$\{([A-Za-z_][A-Za-z_0-9]*)(?::-([^}]*))?\}", replace, value)
+    return value
 
 
 def merge(base, override):
@@ -104,6 +137,21 @@ def lr_factor(step, total, warmup=500):
     return .1+.9*.5*(1+math.cos(math.pi*progress))
 
 
+def schedule_factor(step, total, optimizer):
+    schedule = optimizer.get("schedule", "cosine")
+    if schedule == "constant":
+        return 1.
+    if schedule == "milestone":
+        milestones = optimizer.get("milestones", [100000, 160000, 190000])
+        factors = optimizer.get("factors", [.5, .2, .1])
+        if len(milestones) != len(factors) or milestones != sorted(set(milestones)):
+            raise ValueError("LR milestones and multiplicative factors do not match")
+        return math.prod(factor for boundary, factor in zip(milestones, factors) if step >= boundary)
+    if schedule != "cosine":
+        raise ValueError("unknown LR schedule")
+    return lr_factor(step, total, optimizer.get("warmup", 500))
+
+
 def training_contract(config, dataset, world_size):
     value = deepcopy(config)
     # Storage locations and log cadence do not change the experiment.
@@ -150,3 +198,5 @@ def check_stage_model(config, source):
     for key in ("sana_path", "text_path", "codec", "dit_rank", "vae_rank"):
         if config["model"].get(key) != source["model"].get(key):
             raise ValueError(f"stage handoff model.{key} differs; start a separate experiment")
+    if config["model"].get("codec", {}).get("precision_conditioning") and config.get("quality") != source.get("quality"):
+        raise ValueError("precision v2 quality sampling and rate coefficients must match across stages")
