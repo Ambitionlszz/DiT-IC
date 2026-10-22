@@ -23,6 +23,7 @@ def test_two_rank_recipe_preserves_update_budget_and_effective_batch(tmp_path):
     assert joint["train"]["effective_batch"] == 8
     assert joint["objective"] == dict(base_weight=.1, repaired_weight=0.)
     assert common["quality"] == joint["quality"]
+    assert common["quality"]["rate_coefficients"] == [16., 8., 4., 2., 1., .5]
     assert common["model"]["codec"] == joint["model"]["codec"]
     assert joint["train"]["require_quality_span"]
 

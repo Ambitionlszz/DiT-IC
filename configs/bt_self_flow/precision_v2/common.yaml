@@ -23,7 +23,7 @@ model:
     delta_fine: 0.5
 quality:
   values: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-  rate_coefficients: [32.0, 16.0, 8.0, 4.0, 2.0, 1.0]
+  rate_coefficients: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
 objective:
   base_weight: 1.0
   repaired_weight: 0.0

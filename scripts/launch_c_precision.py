@@ -64,37 +64,58 @@ def check_handoff(common, shared, config):
 
 
 class PrecisionCRun(PairedRun):
-    def __init__(self, root, gpus, python, configs, reserve_gib=18., smoke=False):
+    def __init__(self, root, gpus, python, configs, reserve_gib=18., smoke=False, replace_run=None):
         super().__init__(root, gpus, python)
         self.configs, self.reserve_gib, self.smoke = configs, reserve_gib, smoke
         self.reservations = {}
+        self.replace_run = replace_run
 
     def start_reservations(self):
         if self.reservations or self.reserve_gib == 0:
             return
+        handover = self.root/"handover.json"
+        if self.replace_run and not (handover.exists() and json.loads(handover.read_text())["status"] == "completed"):
+            from scripts.c_precision_handover import take_over
+            take_over(self, self.replace_run)
+        else:
+            self.spawn_reservations()
+        self.wait_reservations(lambda: all(status.exists() for _, status in self.reservations.values()))
+        self.state["reservations"] = {gpu: json.loads(status.read_text())
+                                      for gpu, (_, status) in self.reservations.items()}
+        self.update("latent_warmup_ddp")
+
+    def spawn_reservations(self, gated=False):
         for index, gpu in enumerate(self.gpus):
             status = self.root/f"reserve_gpu{index}.json"
             status.unlink(missing_ok=True)
             command = [self.python, str(REPO/"scripts/reserve_gpu_memory.py"),
                        "--gib", str(self.reserve_gib), "--status", str(status),
                        "--parent-pid", str(os.getpid())]
+            if gated:
+                gate = self.root/f"reserve_gpu{index}.allocate.json"
+                standby = self.root/f"reserve_gpu{index}.standby.json"
+                gate.unlink(missing_ok=True)
+                standby.unlink(missing_ok=True)
+                command += ["--allocation-gate", str(gate), "--standby-status", str(standby),
+                            "--minimum-free-gib", "2"]
             with (self.root/"logs"/f"reserve_gpu{index}.log").open("a") as log:
                 process = subprocess.Popen(command, cwd=REPO,
                                            env=dict(self.env, CUDA_VISIBLE_DEVICES=gpu),
                                            stdout=log, stderr=subprocess.STDOUT)
             self.reservations[gpu] = (process, status)
-        deadline = time.monotonic()+60
+
+    def wait_reservations(self, predicate, timeout=60):
+        deadline = time.monotonic()+timeout
         while True:
+            if self.stop_requested:
+                raise InterruptedError("stop requested during reservation handover")
             if any(process.poll() is not None for process, _ in self.reservations.values()):
                 raise RuntimeError("memory reservation failed; inspect reservation logs")
-            if all(status.exists() for _, status in self.reservations.values()):
+            if predicate():
                 break
             if time.monotonic() >= deadline:
                 raise TimeoutError("memory reservation readiness timed out")
             time.sleep(.5)
-        self.state["reservations"] = {gpu: json.loads(status.read_text())
-                                      for gpu, (_, status) in self.reservations.items()}
-        self.update()
 
     def stop_reservations(self):
         for process, _ in self.reservations.values():
@@ -178,6 +199,8 @@ def main():
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--reserve-gib", type=float, default=18.)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--replace-run", type=Path,
+                        help="replace an active warmup with preinitialized memory reservations")
     args = parser.parse_args()
     gpus = args.gpus.split(",")
     if len(gpus) != 2 or len(set(gpus)) != 2 or args.reserve_gib < 0:
@@ -192,6 +215,11 @@ def main():
         configs = resolved_configs(root, args.smoke)
         manifest = dict(repository=str(REPO), commit=commit, python=args.python, gpus=gpus,
                         reserve_gib=args.reserve_gib, smoke=args.smoke, configs=configs)
+        replacement = args.replace_run.resolve() if args.replace_run else None
+        if replacement:
+            if replacement == root or not args.reserve_gib:
+                raise ValueError("replacement requires a different run root and memory reservations")
+            manifest["replace_run"] = str(replacement)
         path = root/"manifest.json"
         if path.exists() and json.loads(path.read_text()) != manifest:
             raise RuntimeError("run manifest differs; choose a new root")
@@ -200,7 +228,7 @@ def main():
             (root/directory).mkdir(exist_ok=True)
         for name, config in configs.items():
             write_json(root/"configs"/f"{name}.yaml", config)
-        run = PrecisionCRun(root, gpus, args.python, configs, args.reserve_gib, args.smoke)
+        run = PrecisionCRun(root, gpus, args.python, configs, args.reserve_gib, args.smoke, replacement)
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, run.stop)
         try:

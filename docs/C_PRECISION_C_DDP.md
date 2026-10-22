@@ -30,3 +30,14 @@ Send SIGTERM to the supervisor PID in pipeline.json to pause at a completed
 update boundary. It signals the two trainers and lets their data workers and
 torchrun launcher remain alive until checkpoint saving completes. Reservation
 processes exit on supervisor shutdown and also check their parent's lifetime.
+
+This recipe uses rate coefficients [16, 8, 4, 2, 1, 0.5], from low to high q,
+in both warmup and joint C. A fresh output root starts both phases from zero.
+
+To replace a running precision warmup, use --replace-run /path/to/previous/run.
+The new reservation processes initialize CUDA before the old holders stop.
+Each GPU's holder is replaced while the previous trainer still owns its CUDA
+memory. Once both new 18 GiB reservations are ready, the previous supervisor
+is asked to save and stop. The new training starts only after the previous
+trainers exit. handover.json records the checked process identities and status.
+Repeating the same new-run command after a completed handover resumes normally.

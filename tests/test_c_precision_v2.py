@@ -33,7 +33,7 @@ from test_bt_training import make_tiny_stage, small_config
 torch.set_num_threads(1)
 RECIPE = Path(__file__).resolve().parents[1]/"configs/bt_self_flow/precision_v2"
 CODEC = dict(ch_emd=4, channel=16, channel_out=4, precision_conditioning=True, rate_likelihood="noise")
-QUALITY = dict(values=[0., .2, .4, .6, .8, 1.], rate_coefficients=[32., 16., 8., 4., 2., 1.])
+QUALITY = dict(values=[0., .2, .4, .6, .8, 1.], rate_coefficients=[16., 8., 4., 2., 1., .5])
 
 
 def new_codec():
