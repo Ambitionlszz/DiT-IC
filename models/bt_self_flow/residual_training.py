@@ -76,13 +76,14 @@ def calibrate_residual(model, teacher, dataset, image_loss, config, rank, world,
                     mean, variance = captured.pop()
                     distortion, _ = image_loss(prediction, image)
                     nll = .5*((target-mean.float()).square()/variance.float()+variance.float().log()).mean()
-                    rd_gradient = torch.autograd.grad(distortion, mean, retain_graph=True)[0].float().norm()
-                    sf_gradient = torch.autograd.grad(nll, mean)[0].float().norm()
-                    base_d = float(distortion.detach())
-                    del prediction, distortion, nll, mean, variance, captured
-                    with torch.no_grad():
-                        _, oracle_image, _ = model.repair_received(received["mean"], received["delta"], residual_override=target)
-                        oracle_d = float(image_loss(oracle_image, image)[0])
+                # Preserve the forward FP32 islands in both backwards too.
+                rd_gradient = torch.autograd.grad(distortion, mean, retain_graph=True)[0].float().norm()
+                sf_gradient = torch.autograd.grad(nll, mean)[0].float().norm()
+                base_d = float(distortion.detach())
+                del prediction, distortion, nll, mean, variance, captured
+                with amp, torch.no_grad():
+                    _, oracle_image, _ = model.repair_received(received["mean"], received["delta"], residual_override=target)
+                    oracle_d = float(image_loss(oracle_image, image)[0])
                 values = [float(rd_gradient.square()), float(sf_gradient.square()), 1., base_d,
                           oracle_d, float(oracle_d < base_d), float(target.square().mean().sqrt())]
                 if not all(math.isfinite(v) for v in values) or min(values[:2]) <= 1e-24:

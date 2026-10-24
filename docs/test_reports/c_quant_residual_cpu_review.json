@@ -12,13 +12,15 @@
     "full production checkpoint strict initialization"
   ],
   "regression": {
-    "passed": 50,
+    "passed": 39,
     "skipped": 2,
-    "initial_test_issue": "DDP test omitted the rate objective; corrected to exercise full RD and passed separately"
+    "note": "Existing precision-v2, trainer, backend, codec, loss and evaluation cases; new SF cases reported separately."
   },
   "new_tests": {
-    "passed": 15,
-    "note": "Final related rerun recorded at launch"
+    "passed": 14,
+    "related_suite_passed": 15,
+    "note": "Fourteen SF cases plus one evaluation case passed in the final related run."
   },
-  "gpu_probe": "pending; no GPU result or research improvement claimed"
+  "gpu_probe": "passed: real two-rank native\u2192SF, calibration, Adam states and exact packet parity; b8a1 SF OOM, selected b4a2",
+  "initial_one_step_task_gate": "failed at both endpoints; capacity-only result, not reused for research; recheck at 10K"
 }

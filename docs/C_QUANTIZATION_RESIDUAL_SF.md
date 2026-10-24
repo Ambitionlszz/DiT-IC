@@ -72,7 +72,8 @@ Research training always starts fresh from the downloaded `backend_init.pt`.
 python -m torch.distributed.run --standalone --nproc_per_node=2 \
   scripts/check_quantization_residual_gpu.py \
   --config configs/bt_self_flow/quantization_residual/c_sf.json \
-  --init-checkpoint /path/to/backend_init.pt --output /path/to/probe.json
+  --init-checkpoint /path/to/backend_init.pt --output /path/to/probe.json \
+  --check-calibration
 
 python scripts/launch_quantization_residual.py \
   --root /path/to/new/run --gpus 0,1 \
@@ -98,3 +99,10 @@ image influence of the head, rate/packet parity at all six q values, teacher
 RNG isolation, SF versus RD gradient routing, deployment/teacher state, two
 DDP ranks (including a zero-valid rank), real calibration and exact resume.
 Existing precision-v2/trainer/codec/backend/loss/evaluation tests are retained.
+
+Full V100S preflight: b8a1 completed native RD but OOMed when SF became active.
+b4a2 completed native RD, real two-rank calibration, two active-SF Adam
+updates and exact packet reconstruction (max error0), peak allocated22.14GiB
+per GPU. The capacity probe after just one RD update failed the privileged
+task gate at q0/q1; it is discarded, including its alpha10. Research runs the
+agreed10K RD prefix and repeats this diagnostic before enabling SF.

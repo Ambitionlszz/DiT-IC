@@ -23,7 +23,7 @@ from models.bt_self_flow.experiment import asset_identity, check_stage_model, lo
 from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.quantization_residual import CResidualTeacher
-from models.bt_self_flow.residual_training import training_mask
+from models.bt_self_flow.residual_training import calibrate_residual, training_mask
 from train_bt_self_flow import auxiliary_update, distributed_setup, initialize_from, seed_all
 
 
@@ -54,6 +54,7 @@ def probe(args):
     scaler = torch.amp.GradScaler("cuda", init_scale=64.)
     torch.cuda.reset_peak_memory_stats(device)
     records = []
+    calibration_report = None
     updates = attempts = 0
     while updates < args.updates:
         optimizer.zero_grad(set_to_none=True)
@@ -66,23 +67,32 @@ def probe(args):
             mask, _ = training_mask(config, config["self_flow"]["warmup"]+config["self_flow"]["ramp"],
                                      micro, rank, batch, device)
             control = RateControl(config["quality"]["values"][updates % 6])
-            with context, torch.autocast("cuda", dtype=torch.float16):
-                active = model.residual_head.active.item()
-                result = wrapped(images, control, sf_teacher=teacher if active else None,
-                                 sf_mask=mask if active else None)
-                rd, metrics = reconstruction_objective(result, images, control, model.distortion_scale.s_data,
-                                                        losses, config["objective"], config["quality"])
-                loss = rd+.001*result.auxiliary["sf_loss"]/.5 if active else rd
-                if not torch.isfinite(loss).item():
-                    raise FloatingPointError("nonfinite probe forward")
+            with context:
+                with torch.autocast("cuda", dtype=torch.float16):
+                    active = model.residual_head.active.item()
+                    result = wrapped(images, control, sf_teacher=teacher if active else None,
+                                     sf_mask=mask if active else None)
+                    rd, metrics = reconstruction_objective(result, images, control, model.distortion_scale.s_data,
+                                                            losses, config["objective"], config["quality"])
+                    loss = rd+.001*result.auxiliary["sf_loss"]/.5 if active else rd
+                    if not torch.isfinite(loss).item():
+                        raise FloatingPointError("nonfinite probe forward")
+                # Match the research trainer: backward must leave autocast so
+                # the FP32 codec's gradient matmuls retain FP32 semantics.
                 scaler.scale(loss/accumulation).backward()
         scaler.unscale_(optimizer)
+        if attempts == 0:
+            names_and_gradients = [(n, p.grad) for n, p in model.named_parameters() if p.grad is not None]
+            flags = torch.stack([torch.isfinite(g).all() for _, g in names_and_gradients]).tolist()
+            bad = [n for (n, _), finite in zip(names_and_gradients, flags) if not finite]
+            print(json.dumps(dict(rank=rank, first_backward_nonfinite=bad[:20], total_nonfinite=len(bad))), flush=True)
         norm = torch.nn.utils.clip_grad_norm_([p for group in groups for p in group["params"]], 4.)
         previous_scale = scaler.get_scale()
         scaler.step(optimizer)
         scaler.update()
         attempts += 1
         if scaler.get_scale() < previous_scale:
+            print(json.dumps(dict(rank=rank, amp_skip=attempts, loss_scale=scaler.get_scale())), flush=True)
             if attempts > args.updates+20:
                 raise FloatingPointError("capacity probe could not obtain finite optimizer updates")
             continue
@@ -101,7 +111,16 @@ def probe(args):
         if updates == 1:
             model.activate_residual()
             teacher.update_from_student(model.DiT, model.text_proj, decay=0.)
+            if args.check_calibration:
+                optimizer.zero_grad(set_to_none=True)
+                aux_optimizer.zero_grad(set_to_none=True)
+                calibration_report = calibrate_residual(model, teacher, dataset, losses, config,
+                                                         rank, world, torch.float16)
+                if any(p.grad is not None for p in model.parameters()):
+                    raise RuntimeError("transition calibration changed parameter gradients")
+                print(json.dumps(dict(rank=rank, calibration_completed=calibration_report)), flush=True)
     model.eval()
+    model.codec.update(force=True)
     with torch.no_grad():
         image = images[:1]
         packet = model.compress(image, RateControl(.4))
@@ -113,6 +132,7 @@ def probe(args):
     state = dict(rank=rank, passed=True, batch_size=batch, accumulation_steps=accumulation,
                  effective_batch=world*batch*accumulation, records=records,
                  packet_forward_max_error=error,
+                 calibration=calibration_report,
                  peak_allocated_bytes=torch.cuda.max_memory_allocated(device),
                  peak_reserved_bytes=torch.cuda.max_memory_reserved(device))
     gathered = [None]*world
@@ -127,6 +147,8 @@ def main():
     parser.add_argument("--init-checkpoint", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--updates", type=int, default=3)
+    parser.add_argument("--check-calibration", action="store_true",
+                        help="also test the actual two-rank transition calibration before SF")
     args = parser.parse_args()
     if args.updates < 3:
         parser.error("probe requires one native and at least two active-SF updates")
