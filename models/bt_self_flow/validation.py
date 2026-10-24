@@ -103,6 +103,13 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                     loss = loss+rate_beta(control, quality)*(actual_bpp-metrics["rate_est"])
                     metrics["weighted_rate"] = rate_beta(control, quality)*actual_bpp
                     metrics["rate_actual"] = actual_bpp
+                    for label, payload in (("main", packet.main_stream), ("hyper", packet.hyper_stream),
+                                           ("allocation", packet.allocation), ("scales", packet.scales),
+                                           ("mask", packet.mask)):
+                        metrics[f"rate_{label}"] = loss.new_tensor(8*len(payload)/(height*width))
+                    payload_bytes = sum(len(payload) for payload in (packet.main_stream, packet.hyper_stream,
+                                        packet.allocation, packet.scales, packet.mask))
+                    metrics["rate_header"] = loss.new_tensor(8*(len(packet.to_bytes())-payload_bytes)/(height*width))
                 metrics["loss"] = loss
                 if result.scale_info:
                     metrics["scale_saturation"] = result.scale_info["saturation"]

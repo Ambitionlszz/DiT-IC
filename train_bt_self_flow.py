@@ -30,6 +30,8 @@ from models.bt_self_flow.experiment import (asset_identity, check_stage_model, l
 from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
+from models.bt_self_flow.quantization_residual import CResidualTeacher
+from models.bt_self_flow.residual_training import balanced_quality, calibrate_residual, training_mask
 from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
 from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
 
@@ -59,6 +61,8 @@ def seed_all(seed):
 
 
 def sample_control(config, step, rank, shape, device):
+    if config["self_flow"].get("method") == "quantization_residual_v1":
+        return RateControl(balanced_quality(config, step))
     phase = config["train"]["phase"]
     stream = {"codec": 11, "backend": 12, "joint": 13, "self_flow": 14}[phase]
     rng = random.Random(counter_seed(config["train"]["seed"], step, stream))
@@ -173,6 +177,8 @@ def train(config, args, rank, world, device):
     control_group = make_control_group(world)
     settings = config["train"]
     phase = settings["phase"]
+    residual_sf = config["self_flow"].get("method") == "quantization_residual_v1"
+    sf_state = {}
     seed_all(settings["seed"]+rank)
     output = Path(settings["output"])
     error = [None]
@@ -211,7 +217,7 @@ def train(config, args, rank, world, device):
         source = read_checkpoint(args.init_checkpoint)
         if source["assets"] != assets:
             raise ValueError("stage handoff pretrained assets differ")
-        check_stage_model(config, source["config"])
+        check_stage_model(config, source["config"], asset_verified=True)
         initialize_from(model, source, phase)
         source_hash, calibration = sha256_file(args.init_checkpoint), source.get("calibration")
     elif phase != "codec":
@@ -236,8 +242,10 @@ def train(config, args, rank, world, device):
     scaler = torch.amp.GradScaler("cuda", enabled=fp16)
     image_loss = None if phase == "codec" else ImageLoss(**config.get("image_loss", {})).to(device).eval()
     teacher = None
-    if config["self_flow"].get("enabled"):
+    if config["self_flow"].get("enabled") and not residual_sf:
         teacher = BTCrossRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
+    if residual_sf and resume and model.residual_head.active.item() and config["self_flow"].get("enabled"):
+        teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
     ema = DeploymentEMA(model)
     step = micro_seen = attempts = 0
     rep_weight = 0.
@@ -250,6 +258,10 @@ def train(config, args, rank, world, device):
         ema.state = {part: {key: value.to(device) for key, value in values.items()} for part, values in resume["ema"].items()}
         step, micro_seen, attempts = resume["step"], resume["micro_seen"], resume["attempts"]
         rep_weight = resume.get("rep_weight", 0.)
+        sf_state = resume.get("residual_sf", {})
+        if (residual_sf and config["self_flow"].get("enabled") and model.residual_head.active.item()
+                and not sf_state.get("privileged_gate_passed", False)):
+            raise ValueError("residual SF resume has no passed transition/calibration")
         if teacher is not None:
             teacher.load_ema_state_dict(resume["teacher"])
         restore_rng(resume["rng_by_rank"][rank])
@@ -286,7 +298,7 @@ def train(config, args, rank, world, device):
                         persistent_workers=config["data"].get("workers", 4) > 0)
     iterator = iter(loader)
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
-                                      broadcast_buffers=False) if world > 1 else model
+                                      broadcast_buffers=False, find_unused_parameters=residual_sf) if world > 1 else model
 
     last_saved = {}
 
@@ -324,6 +336,8 @@ def train(config, args, rank, world, device):
                               "contract": contract, "config": config, "assets": assets, "source_sha256": source_hash,
                               "calibration": calibration, "rep_weight": rep_weight, "validation_best": best.state,
                               "full_precision_retry": full_precision_retry}
+                if residual_sf:
+                    checkpoint["residual_sf"] = sf_state
                 if teacher is not None:
                     checkpoint["teacher"] = teacher.get_ema_state_dict()
                 save_atomic(output/name, checkpoint)
@@ -363,6 +377,27 @@ def train(config, args, rank, world, device):
         old_handlers[sig] = signal.signal(sig, lambda signum, frame: stop_requested.__setitem__(0, True))
     try:
         while step < settings["steps"] and not stop:
+            if residual_sf and step >= config["self_flow"]["warmup"] and not model.residual_head.active.item():
+                # The pure-RD state is durable before activation/teacher setup.
+                save("pre_sf.pt", reuse_last=True)
+                optimizer.zero_grad(set_to_none=True)
+                if aux_optimizer:
+                    aux_optimizer.zero_grad(set_to_none=True)
+                model.activate_residual()
+                teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
+                sf_state = calibrate_residual(model, teacher, dataset, image_loss, config, rank, world, amp_dtype)
+                rep_weight = sf_state["alpha"]
+                if rank == 0:
+                    (output/"sf_transition.json").write_text(json.dumps(sf_state, indent=2)+"\n")
+                    print(json.dumps(dict(residual_sf_transition=step, **sf_state)), flush=True)
+                if config["self_flow"].get("enabled") and not sf_state["privileged_gate_passed"]:
+                    raise RuntimeError("privileged residual systematically harms low/high-rate reconstruction; pre_sf.pt retained")
+                if not config["self_flow"].get("enabled"):
+                    teacher = None
+                # Activation is deployment state; avoid averaging/copying it
+                # only after the first SF update (exact transition resumes).
+                ema.state["residual"]["active"].copy_(model.residual_head.active)
+                save("sf_start.pt")
             started = time.monotonic()
             data_wait = 0.
             if not pending_images:
@@ -391,11 +426,25 @@ def train(config, args, rank, world, device):
                 with context, full_precision_recompute(model, full_precision_retry):
                     with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                         enabled=device.type == "cuda" and not full_precision_retry):
-                        result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
+                        residual_kwargs = {}
+                        sf_ramp = 0.
+                        if residual_sf and model.residual_head.active.item():
+                            mask, sf_ramp = training_mask(config, step, micro, rank, image.shape[0], device)
+                            residual_kwargs = dict(sf_mask=mask, sf_teacher=teacher)
+                        result = wrapped(image, rate_control=control, transition=transition,
+                                         capture=teacher is not None, **residual_kwargs)
                         loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
                                                                  image_loss, objective=config.get("objective"),
                                                                  quality=config.get("quality"))
-                        if teacher is not None:
+                        if residual_sf and teacher is not None:
+                            sf_loss = result.auxiliary["sf_loss"]
+                            # The auxiliary mean includes zero native samples.
+                            # Divide by steady-state p=.5, preserving the 2K
+                            # perturbation ramp without cancelling it out.
+                            loss = loss + sf_ramp*rep_weight*sf_loss/.5
+                            metrics.update(result.auxiliary)
+                            metrics["sf_weight"] = loss.new_tensor(sf_ramp*rep_weight)
+                        elif teacher is not None:
                             with torch.no_grad():
                                 high = model.codec.quantize_analysis(result.source, RateControl(1.))
                                 high_scale = model.distortion_scale(result.clean, high["mean"])
@@ -492,7 +541,8 @@ def train(config, args, rank, world, device):
             scheduler.step()
             ema.update(model)
             if teacher is not None:
-                teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner, .9999)
+                teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner,
+                                            config["self_flow"].get("teacher_decay", .999) if residual_sf else .9999)
             step += 1
             if replayed_in_fp32 and rank == 0:
                 print(json.dumps({"fp32_replay_completed": True, "step": step, "attempts": attempts}), flush=True)

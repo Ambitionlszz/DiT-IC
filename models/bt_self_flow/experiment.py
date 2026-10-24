@@ -28,7 +28,15 @@ def load_config(path):
     if config["model"]["backend"] not in ("C", "D"):
         raise ValueError("unknown BT backend")
     sf = config["self_flow"]
-    if sf.get("enabled") and (phase != "self_flow" or config["model"]["backend"] != "D"):
+    residual_sf = sf.get("method") == "quantization_residual_v1"
+    if residual_sf and (phase != "joint" or config["model"]["backend"] != "C" or not config["model"].get("codec", {}).get("precision_conditioning")):
+        raise ValueError("quantization residual SF requires precision-v2 joint C")
+    if residual_sf:
+        if not 0 <= sf.get("warmup", -1) < config["train"]["steps"] or sf.get("ramp", 0) <= 0:
+            raise ValueError("residual SF requires a valid RD prefix and positive ramp")
+        if not 0 < sf.get("cell_fraction", 0) < 1 or not 0 < sf.get("teacher_decay", .999) < 1:
+            raise ValueError("invalid residual SF erasure fraction or EMA decay")
+    if sf.get("enabled") and not residual_sf and (phase != "self_flow" or config["model"]["backend"] != "D"):
         raise ValueError("BT Self-Flow is a separate D-backend phase")
     if phase != "self_flow" and sf.get("mixed_sampling"):
         raise ValueError("initial C/D experiments must not add binary mixtures")
@@ -37,7 +45,7 @@ def load_config(path):
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
     if config["model"].get("codec", {}).get("precision_conditioning"):
-        if phase not in ("codec", "joint") or sf.get("enabled") or sf.get("mixed_sampling"):
+        if phase not in ("codec", "joint") or (sf.get("enabled") and not residual_sf) or sf.get("mixed_sampling"):
             raise ValueError("precision v2 has exactly codec warmup and joint C/D training")
         if config["train"].get("router_uniform_steps", 0) or config["train"].get("router_ramp_steps", 0):
             raise ValueError("precision v2 must use the same full Router throughout both stages")
@@ -86,10 +94,14 @@ def make_model(config, device):
     if phase == "codec":
         result = BTCodecStage(model["sana_path"], model.get("codec"))
     else:
-        result = BTCodec(model["sana_path"], model["text_path"], backend=model["backend"],
+        residual_sf = config["self_flow"].get("method") == "quantization_residual_v1"
+        if residual_sf:
+            from .quantization_model import CQuantizationResidualCodec
+        factory = CQuantizationResidualCodec if residual_sf else BTCodec
+        result = factory(model["sana_path"], model["text_path"], backend=model["backend"],
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
                          vae_rank=model.get("vae_rank", 32), checkpoint_blocks=model.get("checkpoint_blocks", True),
-                         representation=config["self_flow"].get("enabled", False),
+                         representation=config["self_flow"].get("enabled", False) and not residual_sf,
                          student_layer=config["self_flow"].get("student_layer", 8),
                          teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device))
         result.set_codec_frozen(phase == "backend")
@@ -108,6 +120,8 @@ def optimizer_groups(model, config):
             continue
         if name.startswith("codec."):
             label, lr = "codec", opt["codec_lr"] if phase == "codec" else opt["joint_codec_lr"]
+        elif name.startswith("residual_head."):
+            label, lr = "residual", opt["backend_lr"]
         elif name.startswith("vae."):
             if "lora_" not in name or "decoder." not in name:
                 raise ValueError(f"unexpected trainable DC-AE parameter: {name}")
@@ -193,9 +207,11 @@ def _asset_hash(path, size, modified_ns):
     return sha256_file(path)
 
 
-def check_stage_model(config, source):
+def check_stage_model(config, source, asset_verified=False):
     """Stage changes may add D conditioning/projectors, not change the codec."""
     for key in ("sana_path", "text_path", "codec", "dit_rank", "vae_rank"):
+        if asset_verified and key in ("sana_path", "text_path"):
+            continue
         if config["model"].get(key) != source["model"].get(key):
             raise ValueError(f"stage handoff model.{key} differs; start a separate experiment")
     if config["model"].get("codec", {}).get("precision_conditioning") and config.get("quality") != source.get("quality"):

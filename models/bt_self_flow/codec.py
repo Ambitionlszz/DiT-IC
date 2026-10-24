@@ -23,6 +23,7 @@ class SourceAnalysis:
     allocation: torch.Tensor
     allocation_codes: torch.Tensor
     quality_code: int | None = None
+    ste_codes: torch.Tensor | None = None
 
 
 class BTLatentCodec(LatentCodec):
@@ -116,9 +117,9 @@ class BTLatentCodec(LatentCodec):
                                   ((self.log_delta_coarse + self.log_delta_fine) / 2).exp())
                 reference_symbols = ((y - mean) / reference_step).round()
                 cost = -self._mass(reference_symbols, scale / reference_step).log2().sum(1, keepdim=True)
-            allocation, codes = self.router(clean, y, cost, precision=precision)
+            allocation, codes, ste_codes = self.router(clean, y, cost, precision=precision, return_ste_codes=True)
             return SourceAnalysis(clean, y, hyper_hat, hyper_likelihood, base, allocation, codes,
-                                  control.low_code if self.precision_conditioning else None)
+                                  control.low_code if self.precision_conditioning else None, ste_codes)
 
     def steps(self, control, allocation):
         if self.precision_conditioning and control.mixed:
@@ -134,7 +135,8 @@ class BTLatentCodec(LatentCodec):
         return (gc.quantized_cdf.tolist(), gc.cdf_length.reshape(-1).int().tolist(),
                 gc.offset.reshape(-1).int().tolist())
 
-    def _groups(self, base, delta, y=None, mode="forward", stream=None, trace=False):
+    def _groups(self, base, delta, y=None, mode="forward", stream=None, trace=False,
+                compute_likelihood=True):
         """The same group order, units and LRP context in all three modes."""
         base = base.contiguous()
         b, c, h, w = base.shape
@@ -168,7 +170,7 @@ class BTLatentCodec(LatentCodec):
             correction = 0.5 * torch.tanh(self.LRP[group](torch.cat([group_hat, base], 1))) * mask
             group_hat = group_hat + delta * correction
             restored = restored + group_hat
-            if mode == "forward":
+            if mode == "forward" and compute_likelihood:
                 rate_symbols = symbols
                 if self.training and self.rate_likelihood == "noise":
                     rate_symbols = values + torch.empty_like(values).uniform_(-.5, .5)
@@ -197,21 +199,47 @@ class BTLatentCodec(LatentCodec):
             mean = self.g_s(restored)
         return mean, likelihoods, encoded, audit
 
-    def quantize_analysis(self, analysis, control, trace=False):
+    def quantize_analysis(self, analysis, control, trace=False, allocation_codes=None,
+                          erase_mask=None, delta_override=None, compute_likelihood=True):
         if self.precision_conditioning and (control.mixed or analysis.quality_code != control.low_code):
             raise ValueError("precision-conditioned analysis cannot be reused across qualities; call analyze(clean, control)")
         with torch.autocast(device_type=analysis.y.device.type, enabled=False):
-            delta = self.steps(control, analysis.allocation)
-            mean, likelihood, _, audit = self._groups(analysis.base, delta, analysis.y, trace=trace)
+            allocation, codes = analysis.allocation, analysis.allocation_codes
+            if allocation_codes is not None or erase_mask is not None:
+                if allocation_codes is not None and erase_mask is not None:
+                    raise ValueError("provide codes or an erasure mask, not both")
+                if erase_mask is not None:
+                    if erase_mask.dtype != torch.bool or erase_mask.shape != codes.shape:
+                        raise ValueError("erasure mask must match the allocation grid")
+                    if analysis.ste_codes is None:
+                        raise ValueError("erasure requires the uncentered STE router codes")
+                    continuous = analysis.ste_codes.masked_fill(erase_mask, 0.)
+                    codes = codes.masked_fill(erase_mask, 0)
+                    allocation = allocation_from_codes(continuous)
+                else:
+                    codes = allocation_codes
+                    if (codes.is_floating_point() or codes.is_complex() or codes.dtype == torch.bool
+                            or codes.shape != analysis.allocation_codes.shape or torch.any((codes < 0) | (codes > 7))):
+                        raise ValueError("allocation codes must fit the native three-bit grid")
+                    allocation = allocation_from_codes(codes)
+            delta = self.steps(control, allocation)
+            if delta_override is not None:
+                if compute_likelihood or torch.is_grad_enabled():
+                    raise ValueError("privileged steps require no_grad and no rate likelihood")
+                if delta_override.shape != delta.shape or not torch.isfinite(delta_override).all() or not (delta_override > 0).all():
+                    raise ValueError("invalid privileged quantization step")
+                delta = delta_override.float()
+            mean, likelihood, _, audit = self._groups(analysis.base, delta, analysis.y, trace=trace,
+                                                       compute_likelihood=compute_likelihood)
             return {"mean": mean, "likelihoods": {"y": likelihood, "h": analysis.hyper_likelihood},
-                    "allocation_codes": analysis.allocation_codes, "delta": delta, "trace": audit}
+                    "allocation_codes": codes, "delta": delta, "trace": audit}
 
     def forward(self, clean, rate_control=None, trace=False):
         control = rate_control or RateControl()
         return self.quantize_analysis(self.analyze(clean, control), control, trace=trace)
 
     @torch.no_grad()
-    def compress(self, clean, rate_control=None, trace=False):
+    def compress(self, clean, rate_control=None, trace=False, allocation_codes=None):
         if self.training or clean.shape[0] != 1:
             raise ValueError("real BT encoding requires eval mode and one image")
         if self.router_strength.item() != 1:
@@ -219,6 +247,11 @@ class BTLatentCodec(LatentCodec):
         control = rate_control or RateControl()
         with torch.autocast(device_type=clean.device.type, enabled=False):
             source = self.analyze(clean, control)
+            if allocation_codes is not None:
+                if (allocation_codes.is_floating_point() or allocation_codes.is_complex() or allocation_codes.dtype == torch.bool
+                        or allocation_codes.shape != source.allocation_codes.shape or torch.any((allocation_codes < 0) | (allocation_codes > 7))):
+                    raise ValueError("allocation codes must fit the native three-bit grid")
+                source.allocation_codes = allocation_codes.to(device=clean.device, dtype=torch.uint8)
             # Always reconstruct the actual transmitted hyperprior first.
             hyper_stream = self.entropy_bottleneck.compress(self.h_a(source.y))[0]
             hyper_hat = self.entropy_bottleneck.decompress([hyper_stream], source.hyper_hat.shape[-2:]).contiguous()

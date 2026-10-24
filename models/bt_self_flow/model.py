@@ -30,6 +30,7 @@ class BTForwardResult:
     scale_info: dict = field(default_factory=dict)
     feature: torch.Tensor | None = None
     source: object = None
+    auxiliary: dict = field(default_factory=dict)
 
 
 def pad_image(image):

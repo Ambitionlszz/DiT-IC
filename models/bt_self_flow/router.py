@@ -52,7 +52,7 @@ class RateRouter(nn.Module):
             nn.init.zeros_(self.head[-1].weight)
             nn.init.zeros_(self.head[-1].bias)
 
-    def forward(self, clean, feature, reference_cost, precision=None):
+    def forward(self, clean, feature, reference_cost, precision=None, return_ste_codes=False):
         b, _, h, w = feature.shape
         source = F.pixel_unshuffle(clean, 2)
         if source.shape[-2:] != (h, w):
@@ -83,4 +83,5 @@ class RateRouter(nn.Module):
         codes = ste_round(continuous_codes)
         allocation = codes * (2.0 / 7) - 1
         allocation = allocation - allocation.mean(dim=(-2, -1), keepdim=True)
-        return allocation, codes.detach().to(torch.uint8)
+        result = (allocation, codes.detach().to(torch.uint8))
+        return (*result, codes) if return_ste_codes else result

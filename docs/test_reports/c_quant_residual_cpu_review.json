@@ -1,0 +1,24 @@
+{
+  "source_commit": "073f54eced8bff354f49f3233da9dca9aee8eccf",
+  "reviewed": true,
+  "checks": [
+    "native SANA zero-mean parity",
+    "real six-q perturbed rANS packet parity",
+    "SF codec gradient isolation and RD gradient reachability",
+    "teacher likelihood RNG isolation",
+    "DDP dormant/active and zero-valid rank",
+    "real mu calibration preserves RNG",
+    "active-SF resume raw/EMA/teacher tensor equality",
+    "full production checkpoint strict initialization"
+  ],
+  "regression": {
+    "passed": 50,
+    "skipped": 2,
+    "initial_test_issue": "DDP test omitted the rate objective; corrected to exercise full RD and passed separately"
+  },
+  "new_tests": {
+    "passed": 15,
+    "note": "Final related rerun recorded at launch"
+  },
+  "gpu_probe": "pending; no GPU result or research improvement claimed"
+}
