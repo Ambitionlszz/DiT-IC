@@ -1,12 +1,13 @@
-"""FP32 attention islands under AMP, without changing weights or topology.
+"""FP32 attention and MLP islands under AMP, retaining weights and topology.
 
 diffusers 0.35.2's SANA processors cast inputs to float, but outer autocast
 still casts their matmuls back to FP16. The 1e-15 normalization denominator
 can then underflow to zero. Keep self-attention projections under AMP and
 isolate their contractions/normalization. Cross-attention also needs FP32
 projections: late SANA residuals are finite in FP32, but their query projection
-can exceed FP16's range before scaled-dot-product attention. Used exclusively
-by the BT models.
+can exceed FP16's range before scaled-dot-product attention. SANA's MLP also
+needs FP32 through its point projection and the following gated residual.
+Used exclusively by the BT models.
 """
 
 import torch
@@ -15,7 +16,7 @@ from torch.nn import functional as F
 from diffusers.models.attention_processor import (
     SanaLinearAttnProcessor2_0, SanaMultiscaleAttnProcessor2_0, SanaMultiscaleLinearAttention,
 )
-from diffusers.models.transformers.sana_transformer import SanaAttnProcessor2_0
+from diffusers.models.transformers.sana_transformer import GLUMBConv, SanaAttnProcessor2_0
 from diffusers.models.embeddings import PixArtAlphaTextProjection
 
 
@@ -37,6 +38,29 @@ class StableSanaCaptionProjection(PixArtAlphaTextProjection):
     def forward(self, caption):
         with torch.autocast(device_type=caption.device.type, enabled=False):
             return super().forward(caption.float())
+
+
+class StableSanaFeedForward(GLUMBConv):
+    """Retain large finite MLP outputs through the following gated residual.
+
+    The SF 10973 recovery batch produces a finite FP32 point projection above
+    65504. AMP rounds it to infinity before the block's FP32 residual addition.
+    Preserve the native weights, module keys and operations in an FP32 island.
+    """
+
+    def __init__(self, feed_forward):
+        nn.Module.__init__(self)
+        self.norm_type = feed_forward.norm_type
+        self.residual_connection = feed_forward.residual_connection
+        for name, child in feed_forward.named_children():
+            self.add_module(name, child)
+        if feed_forward.norm is None:
+            self.norm = None
+        self.train(feed_forward.training)
+
+    def forward(self, hidden_states):
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            return super().forward(hidden_states.float())
 
 
 class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
@@ -103,6 +127,10 @@ def install_stable_attention(sana=None, vae=None):
         if not isinstance(sana.caption_projection, StableSanaCaptionProjection):
             sana.caption_projection = StableSanaCaptionProjection(sana.caption_projection)
         for block in sana.transformer_blocks:
+            if not isinstance(block.ff, GLUMBConv):
+                raise TypeError("BT expects the native SANA feed-forward module")
+            if not isinstance(block.ff, StableSanaFeedForward):
+                block.ff = StableSanaFeedForward(block.ff)
             if not isinstance(block.attn1.processor, SanaLinearAttnProcessor2_0):
                 raise TypeError("BT expects the native SANA linear self-attention processor")
             block.attn1.set_processor(StableSanaLinearAttention())

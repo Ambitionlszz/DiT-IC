@@ -113,3 +113,11 @@ agreed10K RD prefix and repeats this diagnostic before enabling SF. The first
 10K transition also failed this diagnostic and stopped under the original
 policy; the continuation preserves that pure-C checkpoint and treats the
 diagnostic as a warning, as requested by the user.
+
+After 973 active-SF updates, one rank's FP16 forward overflowed in SANA block27's
+MLP point projection. The checkpoint at step10973 has finite model state. The
+same saved crop and mask reproduce the NaN under AMP and remain finite in
+FP32. SANA feed-forward modules now reuse the original weights/keys with FP32
+arithmetic, preserving large finite outputs through the gated residual. This
+changes numerical precision only; the data, loss, ramp, optimizer and teacher
+state resume from the saved update.

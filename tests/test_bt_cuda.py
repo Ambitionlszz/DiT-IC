@@ -16,6 +16,7 @@ from PIL import Image
 import torch
 from diffusers import AutoencoderDC
 from diffusers.models.attention_processor import SanaMultiscaleLinearAttention
+from diffusers.models.transformers.sana_transformer import GLUMBConv
 
 import train_bt_self_flow as trainer
 from models.bt_self_flow.checkpoint import METHOD, SCHEMA, read_checkpoint, save_atomic
@@ -23,13 +24,41 @@ from models.bt_self_flow.decoder import decode_latent
 from models.bt_self_flow.codec import BTLatentCodec
 from models.bt_self_flow.losses import ImageLoss
 from models.bt_self_flow.packet import BTImagePacket, RateControl
-from models.bt_self_flow.precision import StableSanaCrossAttention, install_stable_attention
+from models.bt_self_flow.precision import StableSanaCrossAttention, StableSanaFeedForward, install_stable_attention
 from test_bt_backend import tiny_model, tiny_sana
 from test_bt_training import small_config
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is inaccessible")
 class GPUPrecisionTest(unittest.TestCase):
+    def test_large_feed_forward_output_retains_fp32_values_and_gradients(self):
+        torch.manual_seed(907)
+        native = GLUMBConv(4, 4, expand_ratio=1, residual_connection=False).cuda()
+        with torch.no_grad():
+            native.conv_point.weight.zero_()
+            native.conv_inverted.weight.zero_()
+            native.conv_inverted.bias.fill_(1.)
+            native.conv_depth.weight.zero_()
+            native.conv_depth.bias.fill_(1.)
+            native.conv_point.weight.fill_(50000.)
+        states = torch.ones(1, 4, 2, 2, device="cuda", requires_grad=True)
+        expected = native(states)
+        with torch.autocast("cuda", dtype=torch.float16):
+            overflowing = native(states)
+        self.assertTrue(torch.isfinite(expected).all())
+        self.assertFalse(torch.isfinite(overflowing).all())
+        before = native.state_dict()
+        stable = StableSanaFeedForward(native)
+        self.assertEqual(before.keys(), stable.state_dict().keys())
+        with torch.autocast("cuda", dtype=torch.float16):
+            output = stable(states)
+        torch.testing.assert_close(output, expected, rtol=0, atol=0)
+        output.mean().backward()
+        self.assertTrue(torch.isfinite(states.grad).all())
+        for parameter in stable.parameters():
+            if parameter.grad is not None:
+                self.assertTrue(torch.isfinite(parameter.grad).all())
+
     def test_batched_deployment_ema_matches_original_updates_exactly(self):
         from models.bt_self_flow.checkpoint import DeploymentEMA
 
