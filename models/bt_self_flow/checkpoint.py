@@ -100,6 +100,10 @@ def publish_checkpoint_alias(source, target):
     source, target = Path(source), Path(target)
     temporary = target.with_suffix(".pt.tmp")
     temporary.unlink(missing_ok=True)
+    # POSIX rename is a no-op when both names already reference one inode;
+    # publishing an existing hardlink again would leave the temporary alias.
+    if target.exists() and source.samefile(target):
+        return
     try:
         try:
             os.link(source, temporary)

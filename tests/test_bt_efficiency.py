@@ -77,6 +77,18 @@ def test_best_copy_failure_preserves_previous_weights(tmp_path):
     assert not (tmp_path/"best.pt.tmp").exists()
 
 
+def test_republishing_same_best_hardlink_leaves_no_temporary_alias(tmp_path):
+    qualities = ("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")
+    best = BestCheckpoint(tmp_path)
+    source = tmp_path/"0000001.pt"
+    save_atomic(source, {"method": METHOD, "schema": SCHEMA, "step": 1})
+    assert best.consider({q: {"loss": 1.} for q in qualities}, 1)
+    best.publish(source)
+    best.publish(source)
+    assert read_checkpoint(tmp_path/"best.pt")["step"] == 1
+    assert not (tmp_path/"best.pt.tmp").exists()
+
+
 def test_kodak_style_validation_keeps_full_image_and_counts_real_packet(tmp_path):
     import numpy as np
     from PIL import Image

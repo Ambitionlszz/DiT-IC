@@ -27,6 +27,51 @@ class ResidualRun(PairedRun):
     def exit_status(self, name, code):
         return "failed" if code else "completed" if (self.root/"joint/complete.pt").exists() else "paused"
 
+    def fp32_restart_checkpoint(self):
+        request_path = self.root/"joint/fp32_restart.json"
+        if not request_path.exists():
+            return None
+        request = json.loads(request_path.read_text())
+        path = self.root/"joint/paused.pt"
+        if (request.get("reason") != "amp_nonfinite_forward" or request.get("checkpoint") != path.name
+                or request.get("world_size") != len(self.gpus) or not path.exists()
+                or path.stat().st_size != request.get("checkpoint_size")
+                or path.stat().st_mtime_ns != request.get("checkpoint_mtime_ns")):
+            return None
+        checkpoint = read_checkpoint(path)
+        if (not checkpoint.get("full_precision_retry") or checkpoint["step"] != request.get("step")
+                or checkpoint["attempts"] != request.get("attempts")
+                or len(checkpoint.get("rng_by_rank", [])) != len(self.gpus)):
+            return None
+        return path, request
+
+    def joint_command(self, config_path, initialization, previous):
+        command = [self.python, "-m", "torch.distributed.run", "--standalone", "--nproc_per_node=2",
+                   "train_bt_self_flow.py", "--config", str(config_path)]
+        return command+(["--resume", str(previous)] if previous else ["--init-checkpoint", initialization])
+
+    def train_joint(self, config_path, initialization, max_numerical_restarts=3):
+        history_path = self.root/"numerical_restarts.json"
+        history = json.loads(history_path.read_text()) if history_path.exists() else []
+        self.state["numerical_restarts"] = history
+        while True:
+            previous = resume_checkpoint(self.root/"joint")
+            # A failed launch/OOM must never reuse an earlier restart request.
+            (self.root/"joint/fp32_restart.json").unlink(missing_ok=True)
+            self.update("training")
+            self.start("joint", self.joint_command(config_path, initialization, previous), self.gpus)
+            try:
+                self.wait("joint")
+                return
+            except RuntimeError:
+                retry = None if self.stop_requested else self.fp32_restart_checkpoint()
+                if retry is None or len(history) >= max_numerical_restarts:
+                    raise
+                checkpoint, request = retry
+                history.append(dict(**request, checkpoint_path=str(checkpoint), restarted_at=self.now()))
+                write_json(history_path, history)
+                self.update("recovering_fp32")
+
     def stop(self, signum, frame):
         self.stop_requested = True
         for process in list(self.children.values()):
@@ -86,13 +131,7 @@ def main():
             if (root/"joint/complete.pt").exists():
                 run.update("completed")
                 return
-            command = [sys.executable, "-m", "torch.distributed.run", "--standalone", "--nproc_per_node=2",
-                       "train_bt_self_flow.py", "--config", str(root/"configs/joint.json")]
-            previous = resume_checkpoint(root/"joint")
-            command += ["--resume", str(previous)] if previous else ["--init-checkpoint", args.init_checkpoint]
-            run.update("training")
-            run.start("joint", command, gpus)
-            run.wait("joint")
+            run.train_joint(root/"configs/joint.json", args.init_checkpoint)
             run.update("completed" if (root/"joint/complete.pt").exists() else "paused")
         except BaseException as error:
             run.state["error"] = f"{type(error).__name__}: {error}"

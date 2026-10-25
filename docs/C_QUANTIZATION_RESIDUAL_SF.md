@@ -121,3 +121,34 @@ FP32. SANA feed-forward modules now reuse the original weights/keys with FP32
 arithmetic, preserving large finite outputs through the gated residual. This
 changes numerical precision only; the data, loss, ramp, optimizer and teacher
 state resume from the saved update.
+
+## Stable continuation and bounded recovery
+
+`c_sf_b4a2_stable.json` keeps the same optimization contract and saves every500
+updates (keeping the last2 numeric snapshots and the protected pure-C state).
+The existing gradient clip and GradScaler retry the same batches on gradient
+overflow; skipped updates now log the loss scale explicitly.
+
+For a nonfinite AMP forward with finite model state, both ranks save the
+optimizer/EMA/teacher/RNG/crop counter **before** any update, with
+`full_precision_retry=true`. Rank0 publishes a restart request only after the
+checkpoint save completes. The supervisor verifies the request against the
+checkpoint size, timestamp, step, attempts and both RNG states, then rebuilds
+the two workers. Their first update replays the same crops/masks in FP32 with
+activation checkpointing; subsequent updates return to AMP. A single-process
+trainer can replay directly without rebuilding DDP.
+
+The restart history persists across supervisor invocations with a maximum of3
+numerical restarts. An old request, OOM, nonfinite model state, repeated FP32
+failure or unrelated process error cannot trigger this recovery. Such errors
+remain visible and stop instead of silently skipping data or looping.
+
+The V100S recovery probe starts from the production step11332 checkpoint,
+forces a rank1 NaN after a partial accumulated backward, and exercises the
+real supervisor restart. It completes the same update in FP32, then the next
+update in AMP with full SF weight and participation. Both GPUs fit within
+25GiB reserved; all probe updates are discarded. Results and restart history
+are recorded in `docs/test_reports/c_quant_residual_ddp_recovery_v100.json`.
+Before continuation, every floating tensor in the student, EMA, teacher and
+both optimizer states at step11332 passed a finite-value audit. Production
+resumes that checkpoint with its original SF ramp and optimization contract.

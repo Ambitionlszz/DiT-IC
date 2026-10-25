@@ -509,13 +509,23 @@ def train(config, args, rank, world, device):
                             json.dumps({"ranks": diagnostics}, indent=2)+"\n")
                 if not state_ok.item():
                     raise FloatingPointError("nonfinite model state; refusing to overwrite a valid recovery point")
-                # C/D run one process per model. A DDP synchronized forward
-                # cannot be abandoned and reused without rebuilding its reducer;
-                # distributed failures therefore stop at a valid recovery point.
-                can_retry = scaler.is_enabled() and world == 1 and not full_precision_retry
-                full_precision_retry = scaler.is_enabled() and world == 1
+                # Rebuild DDP in fresh processes before replaying an abandoned
+                # forward. The checkpoint rewinds data/RNG to the update start.
+                full_precision_retry = scaler.is_enabled() and not full_precision_retry
+                can_retry = full_precision_retry and world == 1
                 del result, loss, metrics
                 save("paused.pt", micro_seen-len(pending_images), update_rng)
+                if full_precision_retry and world > 1:
+                    with rank_zero_section(rank, control_group):
+                        if rank == 0:
+                            recovery = output/"paused.pt"
+                            request = dict(reason="amp_nonfinite_forward", step=step, attempts=attempts,
+                                           world_size=world, checkpoint="paused.pt",
+                                           checkpoint_size=recovery.stat().st_size,
+                                           checkpoint_mtime_ns=recovery.stat().st_mtime_ns)
+                            pending = output/"fp32_restart.json.tmp"
+                            pending.write_text(json.dumps(request, indent=2)+"\n")
+                            pending.replace(output/"fp32_restart.json")
                 if not can_retry:
                     raise FloatingPointError("nonfinite main loss persists; saved the last completed update for diagnosis")
                 restore_rng(update_rng)
@@ -532,6 +542,10 @@ def train(config, args, rank, world, device):
             skipped = scaler.get_scale() < previous_scale
             if skipped:
                 consecutive_amp_skips += 1
+                if rank == 0:
+                    print(json.dumps(dict(amp_skipped_update=step+1, attempts=attempts,
+                                          previous_scale=previous_scale, loss_scale=scaler.get_scale(),
+                                          action="retry_same_batches")), flush=True)
                 if consecutive_amp_skips > settings.get("max_amp_skips", 100):
                     raise FloatingPointError("too many AMP skipped updates")
                 # Retry the same CPU batches at the lower loss scale. Otherwise

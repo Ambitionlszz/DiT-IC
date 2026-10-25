@@ -1,4 +1,4 @@
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 from copy import deepcopy
 from datetime import timedelta
 import io
@@ -87,6 +87,9 @@ class OneOverflowScaler:
     def state_dict(self):
         return {"scale": self.value, "attempt": self.attempt}
 
+    def load_state_dict(self, state):
+        self.value, self.attempt = state["scale"], state["attempt"]
+
 
 class EnabledScaler(OneOverflowScaler):
     """Exercise the FP16 replay policy on CPU without injecting gradient skips."""
@@ -128,7 +131,7 @@ def ddp_worker(rank, directory, slow_checkpoint=False):
         dist.destroy_process_group()
 
 
-def ddp_nonfinite_worker(rank, directory):
+def ddp_nonfinite_worker(rank, directory, enabled_amp=False):
     torch.set_num_threads(1)
     root = Path(directory)
     dist.init_process_group("gloo", rank=rank, world_size=2, init_method=f"file://{root/'rendezvous'}",
@@ -142,7 +145,8 @@ def ddp_nonfinite_worker(rank, directory):
     args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=None)
     config = small_config(root)
     try:
-        with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+        with (patch.object(trainer.torch.amp, "GradScaler", EnabledScaler) if enabled_amp else nullcontext()), \
+             patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
              patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
              redirect_stdout(io.StringIO()):
             trainer.train(config, args, rank, 2, torch.device("cpu"))
@@ -157,6 +161,10 @@ def ddp_nonfinite_worker(rank, directory):
             paused = read_checkpoint(root/"failed/paused.pt")
             assert paused["step"] == 0 and paused["micro_seen"] == 0
             assert len(paused["rng_by_rank"]) == 2
+            assert paused["full_precision_retry"] is enabled_amp
+            if enabled_amp:
+                request = json.loads((root/"failed/fp32_restart.json").read_text())
+                assert request["step"] == paused["step"] and request["world_size"] == 2
             args.resume = str(root/"failed/paused.pt")
             trainer.train(config, args, rank, 2, torch.device("cpu"))
         reference = read_checkpoint(root/"codec/complete.pt")
@@ -169,6 +177,14 @@ def ddp_nonfinite_worker(rank, directory):
 
 
 class TrainingTest(unittest.TestCase):
+    def test_amp_nonfinite_on_one_rank_requests_fp32_replay_and_preserves_both_ranks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.random.default_rng(903).integers(
+                0, 256, (256, 256, 3), dtype=np.uint8)).save(root/"images/one.png")
+            mp.spawn(ddp_nonfinite_worker, args=(directory, True), nprocs=2, join=True)
+
     def test_nonfinite_last_microbatch_on_one_rank_recovers_both_ranks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
