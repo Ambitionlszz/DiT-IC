@@ -229,7 +229,8 @@ def test_real_mu_calibration_preserves_rng_and_gradients(tmp_path):
     assert len(report["privileged_d411"]) == 6
 
 
-def test_real_trainer_transition_and_active_resume_match(tmp_path):
+@pytest.mark.parametrize("privileged_gate_passed", [True, False])
+def test_real_trainer_transition_and_active_resume_match(tmp_path, privileged_gate_passed):
     make_images(tmp_path)
     config = small_config(tmp_path, "joint")
     config["model"]["backend"] = "C"
@@ -249,7 +250,7 @@ def test_real_trainer_transition_and_active_resume_match(tmp_path):
         model = tiny_residual().to(device)
         model.vae.requires_grad_(False)
         return model
-    calibration = dict(alpha=.001, privileged_gate_passed=True, protocol="test_fixture")
+    calibration = dict(alpha=.001, privileged_gate_passed=privileged_gate_passed, protocol="test_fixture")
     args = SimpleNamespace(resume=None, init_checkpoint=str(init), max_updates=None)
     with patch.object(trainer, "make_model", side_effect=factory), \
          patch.object(trainer, "asset_identity", return_value={"test": "residual"}), \
@@ -265,6 +266,7 @@ def test_real_trainer_transition_and_active_resume_match(tmp_path):
         active = read_checkpoint(tmp_path/"split/paused.pt")
         assert active["step"] == 2 and "teacher" in active
         assert active["raw"]["residual"]["active"].item()
+        assert active["residual_sf"]["privileged_gate_passed"] is privileged_gate_passed
         args.resume, args.init_checkpoint, args.max_updates = str(tmp_path/"split/paused.pt"), None, None
         trainer.train(split, args, 0, 1, torch.device("cpu"))
     full = read_checkpoint(tmp_path/"joint/complete.pt")

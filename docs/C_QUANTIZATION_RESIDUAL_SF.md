@@ -49,8 +49,12 @@ At activation, independent training crops provide at least4 valid samples per
 q. Set alpha once to `min(10,.05*median_q(||dD411/dmean||/||dNLL/dmean||))`.
 Preserve the main data/RNG stream. Also inject the privileged target through
 the actual decoder: if it worsens average D411 at both q endpoints and wins
-on at most25% of those samples, retain the pure-RD checkpoint and stop for
-review. This diagnostic cannot establish final RD improvement.
+on at most25% of those samples, retain that finding in `sf_transition.json`
+and log a warning, then continue the scheduled ramp. This is a small-sample
+test before the decoder adapts to residual injection, not a requirement for
+starting training or evidence of final RD improvement. Nonfinite/degenerate
+calibration remains an error. Active-SF resume requires a recorded calibration
+protocol and a finite positive SF weight, including when this diagnostic fails.
 
 Checkpoints contain raw/deployment EMA including head/activation, teacher
 adapters/text, fixed alpha and calibration, Adam/aux/scheduler/scaler, crop
@@ -105,4 +109,7 @@ b4a2 completed native RD, real two-rank calibration, two active-SF Adam
 updates and exact packet reconstruction (max error0), peak allocated22.14GiB
 per GPU. The capacity probe after just one RD update failed the privileged
 task gate at q0/q1; it is discarded, including its alpha10. Research runs the
-agreed10K RD prefix and repeats this diagnostic before enabling SF.
+agreed10K RD prefix and repeats this diagnostic before enabling SF. The first
+10K transition also failed this diagnostic and stopped under the original
+policy; the continuation preserves that pure-C checkpoint and treats the
+diagnostic as a warning, as requested by the user.
