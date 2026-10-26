@@ -1,14 +1,18 @@
 """An explicit SF coefficient change must preserve continuation state."""
 
 from copy import deepcopy
+import json
+import sys
 from types import SimpleNamespace
 
 import pytest
 import torch
 
 from models.bt_self_flow.experiment import load_config, training_contract
+from models.bt_self_flow.checkpoint import METHOD, SCHEMA, read_checkpoint, save_atomic
 from models.bt_self_flow.residual_training import residual_weight
 from scripts.set_residual_sf_weight import with_fixed_weight
+from scripts import set_residual_sf_weight
 
 
 def active_checkpoint():
@@ -67,3 +71,26 @@ def test_fixed_weight_is_explicit_and_calibrated_recipes_stay_compatible():
     assert residual_weight(fixed, .6413) == 1.
     assert training_contract(original, SimpleNamespace(fingerprint="same"), 2) != training_contract(
         fixed, SimpleNamespace(fingerprint="same"), 2)
+
+
+def test_cli_preserves_best_and_validation_history(tmp_path, monkeypatch):
+    old = tmp_path/"old"
+    old.mkdir()
+    source = active_checkpoint()
+    source.update(method=METHOD, schema=SCHEMA)
+    source["validation_best"]["checkpoint"] = "0012000.pt"
+    save_atomic(old/"paused.pt", source)
+    (old/"0012000.pt").write_bytes(b"immutable previous best")
+    (old/"validation_0012000.json").write_text('{"quality": "old evaluation"}\n')
+    (old/"train.jsonl").write_text('{"step": 13100}\n')
+    root = tmp_path/"fixed"
+    monkeypatch.setattr(sys, "argv", ["set_residual_sf_weight", "--checkpoint", str(old/"paused.pt"),
+                                    "--root", str(root), "--weight", "1"])
+    set_residual_sf_weight.main()
+    restored = read_checkpoint(root/"joint/paused.pt")
+    assert restored["step"] == 13123 and restored["rep_weight"] == 1.
+    assert restored["validation_best"] == source["validation_best"]
+    assert (root/"joint/0012000.pt").read_bytes() == b"immutable previous best"
+    assert (root/"joint/train.jsonl").read_text() == (old/"train.jsonl").read_text()
+    assert (root/"joint/validation_0012000.json").read_text() == (old/"validation_0012000.json").read_text()
+    assert json.loads((root/"weight_change.json").read_text())["first_fixed_weight_update"] == 13124

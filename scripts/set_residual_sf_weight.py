@@ -69,9 +69,9 @@ def main():
         (root/"joint"/best["checkpoint"]).symlink_to(source_path.parent/best["checkpoint"])
     for path in source_path.parent.glob("validation_*.json"):
         if int(path.stem.split("_")[-1]) <= source["step"]:
-            shutil.copy2(path, root/"joint"/path.name)
+            shutil.copyfile(path, root/"joint"/path.name)
     if (source_path.parent/"train.jsonl").exists():
-        shutil.copy2(source_path.parent/"train.jsonl", root/"joint/train.jsonl")
+        shutil.copyfile(source_path.parent/"train.jsonl", root/"joint/train.jsonl")
     (root/"configs/joint.json").write_text(json.dumps(updated["config"], indent=2)+"\n")
     (root/"joint/sf_transition.json").write_text(json.dumps(updated["residual_sf"], indent=2)+"\n")
     report = dict(**provenance, step=source["step"], first_fixed_weight_update=source["step"]+1,
