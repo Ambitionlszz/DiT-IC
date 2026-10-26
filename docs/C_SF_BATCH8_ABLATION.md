@@ -3,8 +3,9 @@
 This comparison continues the user's **pure-C 10K checkpoint with effective
 batch 8**. Preparation does not stop the existing batch-16 run, start a new
 trainer, or reinterpret a joint checkpoint as a new backend initialization.
-The source checkpoint has not yet arrived; its embedded configuration remains
-the authority if any prepared baseline setting differs.
+The pinned source's embedded metadata reports two ranks, local batch 2 and
+accumulation 2 (effective batch 8), at step 10000 with `micro_seen = 20000`.
+Downloading tensor data and verifying its SHA256 remain prerequisites for migration.
 
 | Setting | Pure C | C + SF |
 |---|---|---|
@@ -68,30 +69,31 @@ The script writes both fully resolved configs and `plan.json`. Its
 `launch_ready` stays false: metadata inspection alone is not a state migration.
 No trainer process or training output directory is created by this command.
 
-Ordinary `--resume` rejects a single-rank BF16 checkpoint against the new
-two-rank FP16 training contract. Once the file arrives, verify source tensors,
+Ordinary `--resume` rejects the source batch/accumulation and AMP contract against
+the new contract. Once the file arrives, verify source tensors,
 assets, dataset identity and configuration, then explicitly migrate:
 
 1. Preserve raw weights, deployment EMA, named Adam/auxiliary moments and LR
    scheduler at optimizer step 10000. Only the SF branch adds new head state.
-2. Preserve the global data/crop counter. For 1 × 8 × accumulation 1 to
-   2 × 4 × accumulation 1, the existing counter sampler partitions the same
-   global sequence of eight samples; `micro_seen` need not change.
-3. Document a shared two-rank RNG policy for both branches and create a fresh
+2. Preserve the global data/crop counter. For 2 × 2 × accumulation 2 to
+   2 × 4 × accumulation 1, change `micro_seen` from 20000 to 10000: both represent
+   80000 samples. The next optimizer update receives the same eight sample/crop
+   pairs, regrouped between ranks and microbatches.
+3. Preserve both source rank RNG states for both branches and create a fresh
    FP16 GradScaler. BF16 source scalers are disabled/empty; do not load an empty
    scaler into an enabled FP16 one. Cross-device training cannot be bitwise
-   identical to the old single-GPU BF16 trajectory.
+   identical to the source BF16 trajectory with different microbatch grouping.
 4. Verify C outputs and loss agree before SF, calibrate on the uploaded source,
    and smoke-test the actual resumed update before a long run.
 
 This controls the continuation comparison from 10K onward. The historical
-single-GPU BF16 curve remains useful context; the new pure-C FP16 continuation
+BF16 curve remains useful context; the new pure-C FP16 continuation
 is the control for attributing gains to SF.
 
 The explicit converter is `scripts/migrate_c_sf_batch8.py`. It verifies the
 original C parameter layout, raw/EMA weights, named optimizer state shapes,
 pretrained asset identity, and the training file-list fingerprint after path
-relocation. Rank 0 retains the source RNG; new rank 1 uses seed 904. Both branches
+relocation. Both existing ranks retain their source RNG states. Both branches
 receive the same fresh FP16 scaler with initial scale 64. The converter never
 changes the source file.
 

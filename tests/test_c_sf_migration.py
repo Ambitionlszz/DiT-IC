@@ -9,7 +9,8 @@ import torch
 from torch import nn
 
 from models.bt_self_flow.checkpoint import capture_rng, clone_state
-from scripts.migrate_c_sf_batch8 import check_dataset, migrate_state, parameter_layout, remap_optimizer
+from scripts.migrate_c_sf_batch8 import check_dataset, migrate_progress, migrate_state, new_rank_rng, parameter_layout, remap_optimizer
+from models.bt_self_flow.data import CounterSampler
 from scripts.prepare_c_sf_ablation import paired_configs
 from scripts.launch_c_sf_ablation import next_segment
 from scripts.launch_quantization_residual import ResidualRun
@@ -43,6 +44,7 @@ class TinyC(nn.Module):
 def source_state():
     torch.manual_seed(7)
     config = paired_configs()["pure_c"]
+    config["train"].update(batch_size=2, accumulation_steps=2)
     model = TinyC()
     groups, aux, layout, aux_layout = parameter_layout(model, config)
     optimizer = torch.optim.AdamW(groups, betas=(.9, .999), weight_decay=0)
@@ -63,8 +65,9 @@ def source_state():
             if value.is_floating_point():
                 value.add_(.01)
     source = dict(raw=raw, ema=ema, optimizer=optimizer.state_dict(), aux_optimizer=auxiliary.state_dict(),
-                  scheduler=scheduler.state_dict(), scaler={}, config=config, step=10000, micro_seen=10000,
-                  attempts=10000, rng_by_rank=[capture_rng()], source_sha256="warmup", validation_best={}, assets={})
+                  scheduler=scheduler.state_dict(), scaler={}, config=config, step=10000, micro_seen=20000,
+                  contract=dict(world_size=2), attempts=10000, rng_by_rank=[capture_rng(), new_rank_rng(904)],
+                  source_sha256="warmup", validation_best={}, assets={})
     return source, layout, aux_layout
 
 
@@ -77,8 +80,11 @@ def test_migration_preserves_shared_weights_and_named_moments(name):
     assert migrated["step"] == migrated["micro_seen"] == 10000
     assert migrated["attempts"] == 10000 and migrated["validation_best"] is None
     assert migrated["contract"]["world_size"] == 2
-    assert len(migrated["rng_by_rank"]) == 2 and migrated["rng_by_rank"][1]["cuda"] is None
-    assert torch.equal(migrated["rng_by_rank"][0]["torch"], source["rng_by_rank"][0]["torch"])
+    assert len(migrated["rng_by_rank"]) == 2
+    for rank in (0, 1):
+        assert torch.equal(migrated["rng_by_rank"][rank]["torch"], source["rng_by_rank"][rank]["torch"])
+    assert migrated["migration"]["preserved_global_samples"] == 80000
+    assert migrated["migration"]["source_micro_seen"] == 20000
     assert migrated["scaler"]["scale"] == 64.
     for kind in ("raw", "ema"):
         for component, values in source[kind].items():
@@ -118,6 +124,35 @@ def test_both_branches_get_identical_scaler_and_rank_rng_policy():
     assert states[0]["scaler"] == states[1]["scaler"]
     for rank in (0, 1):
         assert torch.equal(states[0]["rng_by_rank"][rank]["torch"], states[1]["rng_by_rank"][rank]["torch"])
+
+
+@pytest.mark.parametrize("world,batch,accumulation,micro", [(2, 2, 2, 20000), (1, 8, 1, 10000)])
+def test_counter_migration_preserves_the_next_global_sample_and_crop_stream(world, batch, accumulation, micro):
+    source, _, _ = source_state()
+    source["contract"]["world_size"] = world
+    source["config"]["train"].update(batch_size=batch, accumulation_steps=accumulation)
+    source["micro_seen"] = micro
+    source["rng_by_rank"] = source["rng_by_rank"][:world]
+    target = paired_configs()["pure_c"]
+    target_micro, samples, rng, _ = migrate_progress(source, target)
+    assert target_micro == 10000 and samples == 80000 and len(rng) == 2
+    def next_update(local_batch, num_ranks, start_micro, count):
+        streams = [iter(CounterSampler(100003, 903, rank, num_ranks, local_batch, start_micro))
+                   for rank in range(num_ranks)]
+        return [next(streams[rank]) for _ in range(count) for rank in range(num_ranks)
+                for _ in range(local_batch)]
+    assert next_update(batch, world, micro, accumulation) == next_update(4, 2, target_micro, 1)
+
+
+def test_migration_rejects_partial_accumulation_or_missing_rank_rng():
+    source, _, _ = source_state()
+    source["micro_seen"] += 1
+    with pytest.raises(ValueError, match="update boundary"):
+        migrate_progress(source, paired_configs()["pure_c"])
+    source["micro_seen"] -= 1
+    source["rng_by_rank"].pop()
+    with pytest.raises(ValueError, match="RNG rank"):
+        migrate_progress(source, paired_configs()["pure_c"])
 
 
 @pytest.mark.parametrize("invalid", ["shape", "missing", "nonfinite"])

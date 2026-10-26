@@ -97,7 +97,7 @@ def prepare(directory, checkpoint=None):
         pending=[
             "Verify embedded C config, raw/EMA tensors, dataset fingerprint and pretrained-asset hashes.",
             "Preserve Adam/auxiliary moments and scheduler; map parameters by name and add only SF head state.",
-            "Preserve global data counter; map one-rank RNG to a documented common two-rank policy.",
+            "Preserve global sample counter across batch/accumulation layouts and all existing rank RNG states.",
             "Create a fresh FP16 GradScaler consistently for both branches; source BF16 scaler is empty.",
             "Verify identical C outputs/loss at step 10000; calibrate SF and smoke-test the actual resumed update.",
         ],

@@ -1,4 +1,4 @@
-"""Explicitly migrate one-rank pure C into matched two-rank C/SF continuations."""
+"""Migrate effective-batch8 pure C into matched two-rank C/SF continuations."""
 
 import argparse
 from copy import deepcopy
@@ -97,6 +97,37 @@ def new_rank_rng(seed):
                 torch=torch.Generator().manual_seed(seed).get_state(), cuda=None)
 
 
+def migrate_progress(source, config, target_world=2):
+    """Preserve global sample counters when local batch/accumulation changes."""
+    source_world = source["contract"]["world_size"]
+    previous, current = source["config"]["train"], config["train"]
+    layouts = [dict(world_size=world, batch_size=train["batch_size"],
+                    accumulation_steps=train["accumulation_steps"])
+               for world, train in ((source_world, previous), (target_world, current))]
+    for layout, train in zip(layouts, (previous, current)):
+        if any(type(value) is not int or value <= 0 for value in layout.values()):
+            raise ValueError("invalid batch layout")
+        if (layout["world_size"]*layout["batch_size"]*layout["accumulation_steps"] != 8
+                or train["effective_batch"] != 8):
+            raise ValueError("migration requires effective batch 8 on both sides")
+    if source_world not in (1, 2) or len(source["rng_by_rank"]) != source_world:
+        raise ValueError("source RNG rank count differs or rank layout is unsupported")
+    micro = source["micro_seen"]
+    if type(micro) is not int or micro < 0 or micro % previous["accumulation_steps"]:
+        raise ValueError("source counter is not at an optimizer update boundary")
+    samples = micro*source_world*previous["batch_size"]
+    target_stride = target_world*current["batch_size"]
+    if samples % target_stride:
+        raise ValueError("global sample counter cannot be represented by target layout")
+    target_micro = samples//target_stride
+    if target_micro % current["accumulation_steps"]:
+        raise ValueError("target counter is not at an optimizer update boundary")
+    rng = list(source["rng_by_rank"])
+    while len(rng) < target_world:
+        rng.append(new_rank_rng(current["seed"]+len(rng)))
+    return target_micro, samples, rng, layouts
+
+
 def check_dataset(source, target_config, dataset):
     original = source["config"]["data"]["train"]
     current = target_config["data"]["train"]
@@ -116,6 +147,7 @@ def check_dataset(source, target_config, dataset):
 
 
 def migrate_state(source, source_layout, source_aux, model, config, dataset, assets, source_hash):
+    micro_seen, samples, rng, layouts = migrate_progress(source, config)
     residual = config["self_flow"].get("method") == "quantization_residual_v1"
     extra = {"residual": model.residual_head.state_dict()} if residual else {}
     if residual and model.residual_head.active.item():
@@ -143,15 +175,17 @@ def migrate_state(source, source_layout, source_aux, model, config, dataset, ass
                   scheduler=remap_scheduler(source["scheduler"], source_layout, target_layout, main),
                   scaler=scaler, config=config, contract=training_contract(config, dataset, 2), assets=assets,
                   source_sha256=source_hash, validation_best=None, rep_weight=0., full_precision_retry=False,
-                  rng_by_rank=[source["rng_by_rank"][0], new_rank_rng(config["train"]["seed"]+1)])
+                  micro_seen=micro_seen, rng_by_rank=rng)
     result.pop("teacher", None)
     result.pop("residual_sf", None)
     if residual:
         result["residual_sf"] = {}
-    result["migration"] = dict(protocol="pure_c_batch8_single_to_two_rank_v1", source_sha256=source_hash,
+    result["migration"] = dict(protocol="pure_c_batch8_layout_v2", source_sha256=source_hash,
                                parent_source_sha256=source.get("source_sha256"),
-                               rng_policy="preserve source rank0; rank1 CPU/CUDA seeded train.seed+1",
-                               fresh_fp16_scale=64., preserved_global_samples=source["micro_seen"]*8)
+                               source_layout=layouts[0], target_layout=layouts[1],
+                               source_micro_seen=source["micro_seen"], target_micro_seen=micro_seen,
+                               rng_policy="preserve existing rank RNGs; seed only newly added ranks with train.seed+rank",
+                               fresh_fp16_scale=64., preserved_global_samples=samples)
     return result
 
 
@@ -169,10 +203,7 @@ def main():
     if audit["metadata_errors"]:
         raise ValueError("; ".join(audit["metadata_errors"]))
     source = read_checkpoint(args.checkpoint)
-    if audit["world_size"] != 1 or source["config"]["train"]["accumulation_steps"] != 1:
-        raise ValueError("this migration supports exactly single-rank batch8 accumulation1")
-    if len(source["rng_by_rank"]) != 1:
-        raise ValueError("source RNG rank count differs")
+    migrate_progress(source, configs["pure_c"])
     assets = asset_identity(configs["pure_c"])
     if assets != source["assets"]:
         raise ValueError("source pretrained assets differ")
