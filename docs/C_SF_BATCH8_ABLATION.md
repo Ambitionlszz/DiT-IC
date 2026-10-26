@@ -1,5 +1,34 @@
 # Batch-8 C versus C + quantization-residual Self-Flow
 
+## Current run: C+SF only, then fixed weight 1
+
+The user clarified on 2026-10-26 that the pure-C baseline is already trained on
+another server. The local alternating schedule below is historical preparation;
+do not launch a local pure-C arm. Both GPUs train C+SF continuously, with local
+batch 4 and accumulation 1 (effective batch 8).
+
+The uploaded 10K checkpoint initially gave a calibrated SF weight of
+`0.05 * median(gradient_ratios) = 0.641302792947235`. Calibration used four
+independent training crops at each of six qualities, comparing reconstruction
+and SF gradients at the residual mean. This is an implementation choice, not
+a prescribed constant. The user subsequently requested fixed weight **1**.
+`self_flow.weight: 1.0` selects it explicitly; omission preserves existing
+calibrated recipes. The steady loss remains
+`L_main + 1.0 * (sf_loss / 0.5)`: `sf_loss` is averaged over the whole batch,
+including zero terms from samples that do not participate. Logs record both
+`sf_weight` (1) and `sf_loss_multiplier` (2). This does not change participation,
+erasure strength, the original 10K–12K ramp, or any main-task loss coefficient.
+
+To change an active run, first pause its supervisor and wait for the durable
+checkpoint. Then explicitly migrate to a **new** root with
+`scripts/set_residual_sf_weight.py --checkpoint /old/joint/paused.pt
+--root /new/run --weight 1`. The converter preserves raw/EMA/teacher weights,
+optimizers, scheduler, scaler, both rank RNG states and sample counters. It records
+the saved step where the coefficient changes. Continue with
+`scripts/launch_quantization_residual.py`, using `/new/run/configs/joint.json`
+and both GPUs, without `--max-updates`. It is a continuation from the saved step;
+the coefficient-0.6413 prefix and fixed-1 suffix must be reported separately.
+
 This comparison continues the user's **pure-C 10K checkpoint with effective
 batch 8**. Preparation does not stop the existing batch-16 run, start a new
 trainer, or reinterpret a joint checkpoint as a new backend initialization.

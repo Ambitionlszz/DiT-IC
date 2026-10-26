@@ -31,7 +31,7 @@ from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_obje
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.quantization_residual import CResidualTeacher
-from models.bt_self_flow.residual_training import balanced_quality, calibrate_residual, training_mask
+from models.bt_self_flow.residual_training import balanced_quality, calibrate_residual, residual_weight, training_mask
 from models.bt_self_flow.training_precision import (finite_state, full_precision_recompute, nonfinite_diagnostics,
                                                     training_amp_dtype)
 from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
@@ -263,6 +263,9 @@ def train(config, args, rank, world, device):
         if (residual_sf and config["self_flow"].get("enabled") and model.residual_head.active.item()
                 and (not sf_state.get("protocol") or not np.isfinite(rep_weight) or rep_weight <= 0)):
             raise ValueError("residual SF resume has no valid transition/calibration")
+        if (residual_sf and model.residual_head.active.item() and "weight" in config["self_flow"]
+                and rep_weight != residual_weight(config, rep_weight)):
+            raise ValueError("checkpoint SF weight differs; explicitly migrate it before resuming")
         if teacher is not None:
             teacher.load_ema_state_dict(resume["teacher"])
         restore_rng(resume["rng_by_rank"][rank])
@@ -387,7 +390,7 @@ def train(config, args, rank, world, device):
                 model.activate_residual()
                 teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
                 sf_state = calibrate_residual(model, teacher, dataset, image_loss, config, rank, world, amp_dtype)
-                rep_weight = sf_state["alpha"]
+                rep_weight = residual_weight(config, sf_state["alpha"])
                 if rank == 0:
                     (output/"sf_transition.json").write_text(json.dumps(sf_state, indent=2)+"\n")
                     print(json.dumps(dict(residual_sf_transition=step, **sf_state)), flush=True)
@@ -451,6 +454,7 @@ def train(config, args, rank, world, device):
                             loss = loss + sf_ramp*rep_weight*sf_loss/.5
                             metrics.update(result.auxiliary)
                             metrics["sf_weight"] = loss.new_tensor(sf_ramp*rep_weight)
+                            metrics["sf_loss_multiplier"] = loss.new_tensor(sf_ramp*rep_weight/.5)
                         elif teacher is not None:
                             with torch.no_grad():
                                 high = model.codec.quantize_analysis(result.source, RateControl(1.))

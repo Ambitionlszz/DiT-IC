@@ -230,12 +230,15 @@ def test_real_mu_calibration_preserves_rng_and_gradients(tmp_path):
 
 
 @pytest.mark.parametrize("privileged_gate_passed", [True, False])
-def test_real_trainer_transition_and_active_resume_match(tmp_path, privileged_gate_passed):
+@pytest.mark.parametrize("fixed_weight", [None, 1.])
+def test_real_trainer_transition_and_active_resume_match(tmp_path, privileged_gate_passed, fixed_weight):
     make_images(tmp_path)
     config = small_config(tmp_path, "joint")
     config["model"]["backend"] = "C"
     config["self_flow"] = dict(method="quantization_residual_v1", enabled=True, mixed_sampling=False,
                                 warmup=1, ramp=1, cell_fraction=.25, gradient_target=.05)
+    if fixed_weight is not None:
+        config["self_flow"]["weight"] = fixed_weight
     config["quality"] = dict(values=[0., .2, .4, .6, .8, 1.], rate_coefficients=[16., 8., 4., 2., 1., .5])
     config["train"].update(steps=3, accumulation_steps=1, batch_size=2, router_ramp_steps=0)
     config["objective"] = dict(base_weight=.1, repaired_weight=0.)
@@ -267,6 +270,7 @@ def test_real_trainer_transition_and_active_resume_match(tmp_path, privileged_ga
         assert active["step"] == 2 and "teacher" in active
         assert active["raw"]["residual"]["active"].item()
         assert active["residual_sf"]["privileged_gate_passed"] is privileged_gate_passed
+        assert active["rep_weight"] == (fixed_weight if fixed_weight is not None else calibration["alpha"])
         args.resume, args.init_checkpoint, args.max_updates = str(tmp_path/"split/paused.pt"), None, None
         trainer.train(split, args, 0, 1, torch.device("cpu"))
     full = read_checkpoint(tmp_path/"joint/complete.pt")
@@ -278,3 +282,7 @@ def test_real_trainer_transition_and_active_resume_match(tmp_path, privileged_ga
     for name, tensor in full["teacher"].items():
         assert torch.equal(tensor, resumed["teacher"][name]), name
     assert resumed["residual_sf"] == full["residual_sf"]
+    if fixed_weight is not None:
+        records = [json.loads(line) for line in (tmp_path/"split/train.jsonl").read_text().splitlines()]
+        assert records[-1]["sf_weight"] == fixed_weight
+        assert records[-1]["sf_loss_multiplier"] == fixed_weight/.5

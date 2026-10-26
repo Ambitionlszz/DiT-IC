@@ -12,6 +12,13 @@ from .packet import RateControl
 from .quantization_residual import erasure_mask, normalized_residual
 
 
+def residual_weight(config, calibrated_alpha):
+    weight = config["self_flow"].get("weight", calibrated_alpha)
+    if isinstance(weight, bool) or not isinstance(weight, (int, float)) or not math.isfinite(weight) or weight <= 0:
+        raise ValueError("residual SF weight must be finite and positive")
+    return float(weight)
+
+
 def balanced_quality(config, step):
     import random
     values = list(config["quality"]["values"])
@@ -96,13 +103,16 @@ def calibrate_residual(model, teacher, dataset, image_loss, config, rank, world,
         if world > 1:
             dist.all_reduce(statistics)
         ratios = (statistics[:, 0]/statistics[:, 1]).sqrt()
-        alpha = min(10., config["self_flow"]["gradient_target"]*float(ratios.quantile(.5)))
+        calibrated_alpha = min(10., config["self_flow"]["gradient_target"]*float(ratios.quantile(.5)))
+        alpha = residual_weight(config, calibrated_alpha)
         counts = statistics[:, 2]
         base = statistics[:, 3]/counts
         oracle = statistics[:, 4]/counts
         wins = statistics[:, 5]/counts
         systematically_hurts = all(float(oracle[i]) > float(base[i]) and float(wins[i]) <= .25 for i in (0, 5))
-        return dict(alpha=alpha, gradient_ratios=ratios.tolist(), samples=counts.tolist(),
+        return dict(alpha=alpha, calibrated_alpha=calibrated_alpha,
+                    weight_policy="fixed" if "weight" in config["self_flow"] else "gradient_calibrated",
+                    gradient_ratios=ratios.tolist(), samples=counts.tolist(),
                     baseline_d411=base.tolist(), privileged_d411=oracle.tolist(),
                     privileged_win_fraction=wins.tolist(), privileged_gate_passed=not systematically_hurts,
                     local_samples=records, protocol="independent_training_crops_mu_gradient_v1")

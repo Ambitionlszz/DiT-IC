@@ -40,6 +40,10 @@ def load_config(path):
             raise ValueError("residual SF requires a valid RD prefix and positive ramp")
         if not 0 < sf.get("cell_fraction", 0) < 1 or not 0 < sf.get("teacher_decay", .999) < 1:
             raise ValueError("invalid residual SF erasure fraction or EMA decay")
+        if "weight" in sf and (isinstance(sf["weight"], bool) or
+                                not isinstance(sf["weight"], (int, float)) or
+                                not math.isfinite(sf["weight"]) or sf["weight"] <= 0):
+            raise ValueError("self_flow.weight must be finite and positive")
     if sf.get("enabled") and not residual_sf and (phase != "self_flow" or config["model"]["backend"] != "D"):
         raise ValueError("BT Self-Flow is a separate D-backend phase")
     if phase != "self_flow" and sf.get("mixed_sampling"):
