@@ -28,6 +28,10 @@ def load_config(path):
     if config["model"]["backend"] not in ("C", "D"):
         raise ValueError("unknown BT backend")
     sf = config["self_flow"]
+    if config.get("quality", {}).get("sampling", "independent") not in ("independent", "balanced"):
+        raise ValueError("quality.sampling must be independent or balanced")
+    if config["train"].get("amp_dtype", "auto") not in ("auto", "fp16", "bf16"):
+        raise ValueError("train.amp_dtype must be auto, fp16 or bf16")
     residual_sf = sf.get("method") == "quantization_residual_v1"
     if residual_sf and (phase != "joint" or config["model"]["backend"] != "C" or not config["model"].get("codec", {}).get("precision_conditioning")):
         raise ValueError("quantization residual SF requires precision-v2 joint C")

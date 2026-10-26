@@ -23,6 +23,14 @@ def resume_checkpoint(directory):
     return max(candidates, key=lambda p: p.stat().st_mtime_ns) if candidates else None
 
 
+def check_effective_batch(config, world_size):
+    settings = config["train"]
+    actual = world_size*settings["batch_size"]*settings["accumulation_steps"]
+    if actual != settings["effective_batch"]:
+        raise ValueError("GPU count/batch/accumulation differs from the declared effective batch")
+    return actual
+
+
 class ResidualRun(PairedRun):
     def exit_status(self, name, code):
         return "failed" if code else "completed" if (self.root/"joint/complete.pt").exists() else "paused"
@@ -113,8 +121,7 @@ def main():
         commit = subprocess.check_output(git+["rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
         config = load_config(args.config)
         config["train"]["output"] = str(root/"joint")
-        if 2*config["train"]["batch_size"]*config["train"]["accumulation_steps"] != 16:
-            raise ValueError("research run must preserve effective batch 16")
+        check_effective_batch(config, len(gpus))
         manifest = dict(repository=str(ROOT), commit=commit, gpus=gpus, python=sys.executable,
                         initialization=str(Path(args.init_checkpoint).resolve()),
                         initialization_sha256=sha256_file(args.init_checkpoint), config=config)

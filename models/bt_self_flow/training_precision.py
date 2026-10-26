@@ -7,6 +7,19 @@ import torch
 from models.sana_self_flow import unwrap_sana_transformer
 
 
+def training_amp_dtype(device, requested="auto"):
+    """Pin paired runs to the same AMP mode; reject emulated BF16 on V100."""
+    if requested not in ("auto", "fp16", "bf16"):
+        raise ValueError("train.amp_dtype must be auto, fp16 or bf16")
+    native_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8
+                   and torch.cuda.is_bf16_supported())
+    if requested == "bf16" and device.type == "cuda" and not native_bf16:
+        raise ValueError("requested BF16 requires native BF16 support; V100 uses FP16")
+    if requested == "fp16":
+        return torch.float16
+    return torch.bfloat16 if requested == "bf16" or device.type != "cuda" or native_bf16 else torch.float16
+
+
 @contextmanager
 def full_precision_recompute(model, enabled=False):
     """Recompute FP32 activations in blocks so a retry fits the same GPU.

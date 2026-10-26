@@ -32,7 +32,8 @@ from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.quantization_residual import CResidualTeacher
 from models.bt_self_flow.residual_training import balanced_quality, calibrate_residual, training_mask
-from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
+from models.bt_self_flow.training_precision import (finite_state, full_precision_recompute, nonfinite_diagnostics,
+                                                    training_amp_dtype)
 from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
 
 
@@ -61,7 +62,9 @@ def seed_all(seed):
 
 
 def sample_control(config, step, rank, shape, device):
-    if config["self_flow"].get("method") == "quantization_residual_v1":
+    default_sampling = ("balanced" if config["self_flow"].get("method") == "quantization_residual_v1"
+                        else "independent")
+    if config.get("quality", {}).get("sampling", default_sampling) == "balanced":
         return RateControl(balanced_quality(config, step))
     phase = config["train"]["phase"]
     stream = {"codec": 11, "backend": 12, "joint": 13, "self_flow": 14}[phase]
@@ -235,10 +238,8 @@ def train(config, args, rank, world, device):
         optimizer, lambda s: schedule_factor(s, settings["steps"], config["optimizer"]))
     # Recent PyTorch reports BF16 emulation as supported even on V100. Select
     # native BF16 only on Ampere or later; V100 uses FP16 with GradScaler.
-    native_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8
-                   and torch.cuda.is_bf16_supported())
-    fp16 = device.type == "cuda" and not native_bf16
-    amp_dtype = torch.float16 if fp16 else torch.bfloat16
+    amp_dtype = training_amp_dtype(device, settings.get("amp_dtype", "auto"))
+    fp16 = device.type == "cuda" and amp_dtype == torch.float16
     scaler = torch.amp.GradScaler("cuda", enabled=fp16)
     image_loss = None if phase == "codec" else ImageLoss(**config.get("image_loss", {})).to(device).eval()
     teacher = None
