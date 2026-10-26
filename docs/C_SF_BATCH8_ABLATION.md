@@ -87,3 +87,26 @@ assets, dataset identity and configuration, then explicitly migrate:
 This controls the continuation comparison from 10K onward. The historical
 single-GPU BF16 curve remains useful context; the new pure-C FP16 continuation
 is the control for attributing gains to SF.
+
+The explicit converter is `scripts/migrate_c_sf_batch8.py`. It verifies the
+original C parameter layout, raw/EMA weights, named optimizer state shapes,
+pretrained asset identity, and the training file-list fingerprint after path
+relocation. Rank 0 retains the source RNG; new rank 1 uses seed 904. Both branches
+receive the same fresh FP16 scaler with initial scale 64. The converter never
+changes the source file.
+
+`scripts/launch_c_sf_ablation.py` then shares the two GPUs between the branches:
+SF 10K→12K, C 10K→12K, SF 12K→14K, C 12K→14K, and so on. Each branch uses both
+GPUs with local batch 4, accumulation 1. Switching pauses at a saved checkpoint
+and resumes all training state; the absolute 200K schedule does not restart.
+The existing supervisor retains bounded FP32 recovery inside each segment.
+
+```bash
+CUDA_VISIBLE_DEVICES='' python scripts/migrate_c_sf_batch8.py \
+  --checkpoint /absolute/path/to/uploaded_10k.pt \
+  --output /data2/ls/checkpoints/c_sf_ablation_b8_20261026
+
+python scripts/launch_c_sf_ablation.py \
+  --checkpoint /absolute/path/to/uploaded_10k.pt \
+  --root /data2/ls/checkpoints/c_sf_ablation_b8_20261026 --gpus 0,1
+```

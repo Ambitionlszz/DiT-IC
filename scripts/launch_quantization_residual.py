@@ -56,7 +56,10 @@ class ResidualRun(PairedRun):
     def joint_command(self, config_path, initialization, previous):
         command = [self.python, "-m", "torch.distributed.run", "--standalone", "--nproc_per_node=2",
                    "train_bt_self_flow.py", "--config", str(config_path)]
-        return command+(["--resume", str(previous)] if previous else ["--init-checkpoint", initialization])
+        command += (["--resume", str(previous)] if previous else ["--init-checkpoint", initialization])
+        if getattr(self, "max_updates", None) is not None:
+            command += ["--max-updates", str(self.max_updates)]
+        return command
 
     def train_joint(self, config_path, initialization, max_numerical_restarts=3):
         history_path = self.root/"numerical_restarts.json"
@@ -107,6 +110,7 @@ def main():
     parser.add_argument("--config", required=True)
     parser.add_argument("--init-checkpoint", required=True)
     parser.add_argument("--gpus", default="0,1")
+    parser.add_argument("--max-updates", type=int, help="Pause at this absolute step without changing the training contract")
     args = parser.parse_args()
     root = args.root.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -132,6 +136,9 @@ def main():
         write_json(root/"manifest.json", manifest)
         write_json(root/"configs/joint.json", config)
         run = ResidualRun(root, gpus, sys.executable)
+        run.max_updates = args.max_updates
+        if args.max_updates is not None:
+            run.state["segment_target"] = args.max_updates
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, run.stop)
         try:
