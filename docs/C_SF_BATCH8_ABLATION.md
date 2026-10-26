@@ -103,6 +103,16 @@ GPUs with local batch 4, accumulation 1. Switching pauses at a saved checkpoint
 and resumes all training state; the absolute 200K schedule does not restart.
 The existing supervisor retains bounded FP32 recovery inside each segment.
 
+The source metadata's path-list fingerprint currently differs after relocation.
+This fingerprint describes paths, and does not establish whether image bytes
+differ. The converter defaults to rejecting that mismatch. For a new controlled
+continuation pair, `--dataset-policy shared-local` explicitly records both path
+fingerprints and the local image count in both checkpoints, then uses exactly
+the same local dataset and sample/crop counters for both branches. In that case
+only the new pure-C continuation is the matched control; the historical source
+curve cannot establish SF's effect. The global count of 80000 seen samples is
+preserved, but identical image identity/order across hosts remains unverified.
+
 ```bash
 CUDA_VISIBLE_DEVICES='' python scripts/migrate_c_sf_batch8.py \
   --checkpoint /absolute/path/to/uploaded_10k.pt \

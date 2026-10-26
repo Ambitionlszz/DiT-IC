@@ -26,6 +26,18 @@ def next_segment(progress, total, interval):
 
 
 class AblationRun(ResidualRun):
+    def stop(self, signum, frame):
+        self.stop_requested = True
+        # Our direct children are supervisors. Let each supervisor signal its
+        # trainer ranks and wait for the durable checkpoint; bypassing it to
+        # terminate torchrun would start the launcher's finite kill timeout.
+        for process in list(self.children.values()):
+            if process.poll() is None:
+                try:
+                    process.send_signal(signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+
     def exit_status(self, name, code):
         return "failed" if code else "completed" if (self.root/name/"joint/complete.pt").exists() else "paused"
 

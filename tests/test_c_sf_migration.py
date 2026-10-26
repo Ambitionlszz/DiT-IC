@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 import hashlib
+import signal
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +13,7 @@ from models.bt_self_flow.checkpoint import capture_rng, clone_state
 from scripts.migrate_c_sf_batch8 import check_dataset, migrate_progress, migrate_state, new_rank_rng, parameter_layout, remap_optimizer
 from models.bt_self_flow.data import CounterSampler
 from scripts.prepare_c_sf_ablation import paired_configs
-from scripts.launch_c_sf_ablation import next_segment
+from scripts.launch_c_sf_ablation import AblationRun, next_segment
 from scripts.launch_quantization_residual import ResidualRun
 
 
@@ -185,6 +186,15 @@ def test_segment_ceiling_is_forwarded_as_a_pause_without_changing_config(tmp_pat
     assert "--resume" in command and "--init-checkpoint" not in command
 
 
+def test_ablation_stop_signals_child_supervisor_without_bypassing_it(tmp_path):
+    signals = []
+    run = AblationRun(tmp_path, ["0", "1"], "python")
+    run.children = dict(c_sf=SimpleNamespace(poll=lambda: None, send_signal=signals.append),
+                        finished=SimpleNamespace(poll=lambda: 0))
+    run.stop(signal.SIGTERM, None)
+    assert run.stop_requested and signals == [signal.SIGTERM]
+
+
 def test_dataset_relocation_requires_the_same_source_file_list(tmp_path):
     paths = [tmp_path/"new/a.png", tmp_path/"new/nested/b.png"]
     fingerprint = hashlib.sha256('/old/data/a.png\n/old/data/nested/b.png'.encode()).hexdigest()
@@ -195,3 +205,8 @@ def test_dataset_relocation_requires_the_same_source_file_list(tmp_path):
     dataset.paths = paths[:-1]
     with pytest.raises(ValueError, match="file list"):
         check_dataset(source, config, dataset)
+    # A new matched pair can deliberately use one common local list, but the
+    # changed fingerprint must remain visible rather than claiming identity.
+    changed = check_dataset(source, config, dataset, allow_changed=True)
+    assert changed != fingerprint
+    assert changed == hashlib.sha256('/old/data/a.png'.encode()).hexdigest()

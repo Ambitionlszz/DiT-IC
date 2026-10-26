@@ -128,7 +128,7 @@ def migrate_progress(source, config, target_world=2):
     return target_micro, samples, rng, layouts
 
 
-def check_dataset(source, target_config, dataset):
+def check_dataset(source, target_config, dataset, allow_changed=False):
     original = source["config"]["data"]["train"]
     current = target_config["data"]["train"]
     if len(original) != len(current):
@@ -141,7 +141,7 @@ def check_dataset(source, target_config, dataset):
             raise ValueError(f"ambiguous dataset root mapping: {path}")
         projected.append(str(matches[0]))
     fingerprint = hashlib.sha256("\n".join(sorted(set(projected))).encode()).hexdigest()
-    if fingerprint != source["contract"]["dataset_fingerprint"]:
+    if fingerprint != source["contract"]["dataset_fingerprint"] and not allow_changed:
         raise ValueError("source training file list differs after path relocation")
     return fingerprint
 
@@ -193,6 +193,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path, help="New comparison root; contains pure_c and c_sf")
+    parser.add_argument("--dataset-policy", choices=("require-source", "shared-local"), default="require-source",
+                        help="Require the source file list, or explicitly start both continuations on the same local list")
     args = parser.parse_args()
     configs = paired_configs()
     for name, config in configs.items():
@@ -208,7 +210,14 @@ def main():
     if assets != source["assets"]:
         raise ValueError("source pretrained assets differ")
     dataset = ImageDataset(configs["pure_c"]["data"]["train"], configs["pure_c"]["data"]["crop"])
-    check_dataset(source, configs["pure_c"], dataset)
+    mapped_fingerprint = check_dataset(source, configs["pure_c"], dataset,
+                                       allow_changed=args.dataset_policy == "shared-local")
+    dataset_record = dict(policy=args.dataset_policy,
+                          source_path_fingerprint=source["contract"]["dataset_fingerprint"],
+                          relocated_local_path_fingerprint=mapped_fingerprint,
+                          local_path_fingerprint=dataset.fingerprint, local_images=len(dataset),
+                          source_file_list_matches=mapped_fingerprint == source["contract"]["dataset_fingerprint"])
+    print(json.dumps(dict(dataset=dataset_record)), flush=True)
     source_layout = source_aux = None
     for name, config in configs.items():
         print(json.dumps(dict(migrating=name, step=source["step"])), flush=True)
@@ -216,6 +225,7 @@ def main():
         if source_layout is None:
             _, _, source_layout, source_aux = parameter_layout(model, config)
         checkpoint = migrate_state(source, source_layout, source_aux, model, config, dataset, assets, audit["sha256"])
+        checkpoint["migration"]["dataset"] = dataset_record
         destination = Path(config["train"]["output"])/"0010000.pt"
         save_atomic(destination, checkpoint)
         record = dict(source=audit, output=str(destination), config=config,
