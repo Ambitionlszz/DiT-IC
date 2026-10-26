@@ -32,6 +32,7 @@ def load_config(path):
         raise ValueError("quality.sampling must be independent or balanced")
     if config["train"].get("amp_dtype", "auto") not in ("auto", "fp16", "bf16"):
         raise ValueError("train.amp_dtype must be auto, fp16 or bf16")
+    task_sf = sf.get("method") == "dual_rate_task_v1"
     residual_sf = sf.get("method") == "quantization_residual_v1"
     if residual_sf and (phase != "joint" or config["model"]["backend"] != "C" or not config["model"].get("codec", {}).get("precision_conditioning")):
         raise ValueError("quantization residual SF requires precision-v2 joint C")
@@ -44,7 +45,14 @@ def load_config(path):
                                 not isinstance(sf["weight"], (int, float)) or
                                 not math.isfinite(sf["weight"]) or sf["weight"] <= 0):
             raise ValueError("self_flow.weight must be finite and positive")
-    if sf.get("enabled") and not residual_sf and (phase != "self_flow" or config["model"]["backend"] != "D"):
+    if task_sf:
+        if phase != "joint" or config["model"]["backend"] != "C" or not sf.get("enabled"):
+            raise ValueError("dual-rate task SF requires joint C with SF enabled")
+        if not config["model"].get("codec", {}).get("precision_conditioning"):
+            raise ValueError("dual-rate task SF requires precision conditioning")
+        if sf.get("weight") != 1. or sf.get("ramp", 0) <= 0 or not 0 < sf.get("cell_fraction", 0) < 1:
+            raise ValueError("task SF requires explicit unit weight and a valid mask/ramp")
+    if sf.get("enabled") and not (residual_sf or task_sf) and (phase != "self_flow" or config["model"]["backend"] != "D"):
         raise ValueError("BT Self-Flow is a separate D-backend phase")
     if phase != "self_flow" and sf.get("mixed_sampling"):
         raise ValueError("initial C/D experiments must not add binary mixtures")
@@ -53,7 +61,7 @@ def load_config(path):
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
     if config["model"].get("codec", {}).get("precision_conditioning"):
-        if phase not in ("codec", "joint") or (sf.get("enabled") and not residual_sf) or sf.get("mixed_sampling"):
+        if phase not in ("codec", "joint") or (sf.get("enabled") and not (residual_sf or task_sf)) or sf.get("mixed_sampling"):
             raise ValueError("precision v2 has exactly codec warmup and joint C/D training")
         if config["train"].get("router_uniform_steps", 0) or config["train"].get("router_ramp_steps", 0):
             raise ValueError("precision v2 must use the same full Router throughout both stages")
@@ -105,11 +113,14 @@ def make_model(config, device):
         residual_sf = config["self_flow"].get("method") == "quantization_residual_v1"
         if residual_sf:
             from .quantization_model import CQuantizationResidualCodec
-        factory = CQuantizationResidualCodec if residual_sf else BTCodec
+        task_sf = config["self_flow"].get("method") == "dual_rate_task_v1"
+        if task_sf:
+            from .dual_rate_task import CDualRateTaskCodec
+        factory = CDualRateTaskCodec if task_sf else CQuantizationResidualCodec if residual_sf else BTCodec
         result = factory(model["sana_path"], model["text_path"], backend=model["backend"],
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
                          vae_rank=model.get("vae_rank", 32), checkpoint_blocks=model.get("checkpoint_blocks", True),
-                         representation=config["self_flow"].get("enabled", False) and not residual_sf,
+                         representation=config["self_flow"].get("enabled", False) and not (residual_sf or task_sf),
                          student_layer=config["self_flow"].get("student_layer", 8),
                          teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device))
         result.set_codec_frozen(phase == "backend")
@@ -130,6 +141,8 @@ def optimizer_groups(model, config):
             label, lr = "codec", opt["codec_lr"] if phase == "codec" else opt["joint_codec_lr"]
         elif name.startswith("residual_head."):
             label, lr = "residual", opt["backend_lr"]
+        elif config["self_flow"].get("method") == "dual_rate_task_v1" and name.startswith(("quality_conditioner.", "representation_projector.")):
+            label, lr = "task_sf", opt["backend_lr"]
         elif name.startswith("vae."):
             if "lora_" not in name or "decoder." not in name:
                 raise ValueError(f"unexpected trainable DC-AE parameter: {name}")

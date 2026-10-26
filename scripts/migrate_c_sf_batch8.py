@@ -29,7 +29,7 @@ def parameter_layout(model, config):
     return groups, auxiliary, main, aux
 
 
-def remap_optimizer(stored, source_layout, target_layout, template, allow_residual=False):
+def remap_optimizer(stored, source_layout, target_layout, template, allow_residual=False, allow_task=False):
     """Map moments by names, requiring an exact source parameter partition."""
     if len(stored["param_groups"]) != len(source_layout):
         raise ValueError("source optimizer group count differs from original C")
@@ -69,7 +69,8 @@ def remap_optimizer(stored, source_layout, target_layout, template, allow_residu
                 if state:
                     result["state"][identity] = state
                 consumed.add(name)
-            elif not (allow_residual and label == "residual" and name.startswith("residual_head.")):
+            elif not ((allow_residual and label == "residual" and name.startswith("residual_head."))
+                      or (allow_task and label == "task_sf" and name.startswith(("quality_conditioner.", "representation_projector.")))):
                 raise ValueError(f"unexpected new trainable parameter: {name}")
         result["param_groups"].append(group)
     if consumed != set(source_by_name):
