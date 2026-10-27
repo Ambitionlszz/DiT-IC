@@ -16,6 +16,7 @@ from .decoder import decode_latent
 from .packet import BTImagePacket, RateControl, fixed_side_bits, pack_codes, unpack_codes
 from .scale import DistortionScale
 from .precision import install_stable_attention
+from .precision_conditioning import PrecisionGeneratorConditioner
 
 
 @dataclass
@@ -61,7 +62,9 @@ class BTCodecStage(nn.Module):
     @torch.no_grad()
     def encode_clean_latent(self, image):
         with torch.autocast(device_type=image.device.type, enabled=False):
-            return self.vae.encode(image.float()).latent * self.vae.config.scaling_factor
+            size = getattr(self, "encoder_batch_size", 0)
+            batches = image.split(size) if size else (image,)
+            return torch.cat([self.vae.encode(batch.float()).latent for batch in batches]) * self.vae.config.scaling_factor
 
     def forward(self, image, rate_control=None, **kwargs):
         clean = self.encode_clean_latent(image)
@@ -92,6 +95,8 @@ class BTCodec(Codec):
                  representation=False, student_layer=8, teacher_layer=20, device="cpu"):
         if backend not in ("C", "D") or (representation and backend != "D"):
             raise ValueError("BT uses C or D; representation learning requires D")
+        if (codec_params or {}).get("precision_consistent") and backend != "C":
+            raise ValueError("precision-consistent v3 is a pure C architecture")
         super().__init__(device=device, model_type="BTCodec", dit_path=sana_path,
                          text_encoder_path=text_path, codec_param=codec_params or {},
                          training=False, freeze_codec=False, codec_path=None,
@@ -109,7 +114,11 @@ class BTCodec(Codec):
         hidden = int(sana.config.num_attention_heads * sana.config.attention_head_dim)
         if int(sana.config.patch_size) != 1:
             raise ValueError("BT requires one SANA token per latent cell")
-        if backend == "D":
+        if self.codec.precision_consistent:
+            with torch.random.fork_rng(devices=[]):
+                torch.manual_seed(1903)
+                self.quality_conditioner = PrecisionGeneratorConditioner(hidden, len(sana.transformer_blocks))
+        elif backend == "D":
             # Must not perturb the shared pretrained/LoRA/text initialization.
             with torch.random.fork_rng(devices=[]):
                 torch.manual_seed(1903)
@@ -137,10 +146,19 @@ class BTCodec(Codec):
         self.codec.requires_grad_(not frozen)
         self.codec.train(self.training and not frozen)
 
-    def predict(self, coarse, log_rho=None, transition=1.0, capture=False):
+    def predict(self, coarse, log_rho=None, transition=1.0, capture=False, precision=None):
         self.prediction_calls += 1
         time = self.self_flow_timestep(coarse.shape[0], coarse.device)
         condition = self._fixed_text_condition(coarse.shape[0], coarse.device)
+        if self.codec.precision_consistent:
+            if precision is None or precision.shape != (coarse.shape[0], 1, coarse.shape[2] // 2, coarse.shape[3] // 2):
+                raise ValueError("precision-consistent generation requires the decoded local quantization steps")
+            log_step = F.interpolate(precision.float().log(), size=coarse.shape[-2:], mode="nearest").squeeze(1)
+            return quality_conditioned_sana_forward(
+                unwrap_sana_transformer(self.DiT), coarse, condition, time, log_step,
+                self.quality_conditioner, continuous_conditioning=True,
+                checkpoint_blocks=self.checkpoint_blocks, precision_embedding=self.codec.precision_embedding,
+            )
         if self.backend == "C":
             prediction = self.DiT(coarse, encoder_hidden_states=condition,
                                   timestep=time, return_dict=False)[0]
@@ -152,9 +170,9 @@ class BTCodec(Codec):
             continuous_conditioning=True, checkpoint_blocks=self.checkpoint_blocks,
         )
 
-    def repair(self, coarse, scale_info=None, transition=1.0, capture=False):
+    def repair(self, coarse, scale_info=None, transition=1.0, capture=False, precision=None):
         prediction, feature = self.predict(coarse, None if self.backend == "C" else scale_info["log_rho"],
-                                            transition, capture)
+                                            transition, capture, precision=precision)
         if self.backend == "C":
             latent = self.sched.step(prediction, coarse)
         else:
@@ -174,7 +192,10 @@ class BTCodec(Codec):
         view = self.codec.quantize_analysis(source, control)
         coarse = view["mean"]
         scale_info = self.distortion_scale(clean, coarse) if self.backend == "D" else {}
-        latent, reconstruction, feature = self.repair(coarse, scale_info, transition, capture)
+        latent, reconstruction, feature = self.repair(
+            coarse, scale_info, transition, capture,
+            precision=view["delta"] if self.codec.precision_consistent else None,
+        )
         if feature is not None and self.representation_projector is not None:
             feature = self.representation_projector(feature)
         h, w = view["allocation_codes"].shape[-2:]
@@ -199,7 +220,8 @@ class BTCodec(Codec):
         mask = pack_codes(control.high_mask.flatten().tolist(), 1) if control.mixed else b""
         return BTImagePacket(self.backend, original, encoded["y_shape"], encoded["hyper_shape"],
                              control.low_code, control.high_code, encoded["hyper_stream"],
-                             encoded["main_stream"], encoded["allocation"], scales, mask)
+                             encoded["main_stream"], encoded["allocation"], scales, mask,
+                             version=self.codec.packet_version)
 
     @torch.no_grad()
     def decompress(self, packet):
@@ -216,7 +238,8 @@ class BTCodec(Codec):
             codes = torch.tensor(unpack_codes(packet.scales, 4, h*w), device=view["mean"].device).reshape(1, 1, h, w)
             scale, log_rho = self.distortion_scale.decode(codes)
             info = {"scale": scale, "log_rho": log_rho}
-        latent, image, _ = self.repair(view["mean"], info)
+        latent, image, _ = self.repair(view["mean"], info,
+                                       precision=view["delta"] if self.codec.precision_consistent else None)
         self.last_decode_stats = {"repair_latent_rms": (latent.float()-view["mean"]).square().mean().sqrt().item()}
         h, w = packet.original_shape
         return image[..., :h, :w]
@@ -247,7 +270,7 @@ class BTCodec(Codec):
             if "conditioner" in state:
                 self.quality_conditioner.load_state_dict(state["conditioner"], strict=True)
             elif not initialize_conditioner:
-                raise ValueError("D/E checkpoint is missing its conditioner")
+                raise ValueError("spatially conditioned checkpoint is missing its conditioner")
         if self.representation_projector is not None and "projector" in state:
             self.representation_projector.load_state_dict(state["projector"], strict=True)
 

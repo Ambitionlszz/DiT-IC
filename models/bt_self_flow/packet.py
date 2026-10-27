@@ -8,6 +8,7 @@ import struct
 
 MAGIC = b"BTIC"
 VERSION = 1
+PRECISION_CONSISTENT_VERSION = 3
 # magic/version/backend/mixed, original H/W, y H/W, hyper H/W, lambda low/high.
 _HEADER = struct.Struct(">4sBBB6I2H")
 _LENGTHS = struct.Struct(">5I")
@@ -122,8 +123,13 @@ class BTImagePacket:
     allocation: bytes
     scales: bytes = b""
     mask: bytes = b""
+    version: int = VERSION
 
     def __post_init__(self):
+        if self.version not in (VERSION, PRECISION_CONSISTENT_VERSION):
+            raise ValueError("unsupported BT packet version")
+        if self.version == PRECISION_CONSISTENT_VERSION and (self.backend != "C" or self.mask):
+            raise ValueError("precision-consistent packets require pure C and whole-image quality")
         if self.backend not in BACKENDS:
             raise ValueError("BT backend must be C or D (E deploys as D)")
         for shape in (self.original_shape, self.y_shape, self.hyper_shape):
@@ -155,7 +161,7 @@ class BTImagePacket:
         return (self.hyper_stream, self.main_stream, self.allocation, self.scales, self.mask)
 
     def to_bytes(self):
-        header = _HEADER.pack(MAGIC, VERSION, BACKENDS[self.backend], bool(self.mask),
+        header = _HEADER.pack(MAGIC, self.version, BACKENDS[self.backend], bool(self.mask),
                               *self.original_shape, *self.y_shape, *self.hyper_shape,
                               self.low_code, self.high_code)
         return header + _LENGTHS.pack(*(len(p) for p in self.payloads)) + b"".join(self.payloads)
@@ -166,7 +172,8 @@ class BTImagePacket:
             raise ValueError("truncated BT packet")
         fields = _HEADER.unpack(data[:_HEADER.size])
         magic, version, backend, mixed, oh, ow, yh, yw, hh, hw, low, high = fields
-        if magic != MAGIC or version != VERSION or backend not in BACKENDS.values() or mixed not in (0, 1):
+        if (magic != MAGIC or version not in (VERSION, PRECISION_CONSISTENT_VERSION)
+                or backend not in BACKENDS.values() or mixed not in (0, 1)):
             raise ValueError("unsupported BT packet header")
         lengths = _LENGTHS.unpack(data[_HEADER.size:FIXED_HEADER_BYTES])
         if len(data) != FIXED_HEADER_BYTES + sum(lengths):
@@ -176,7 +183,7 @@ class BTImagePacket:
         if bool(payloads[-1]) != bool(mixed):
             raise ValueError("mask/header mismatch")
         return cls("C" if backend == 0 else "D", (oh, ow), (yh, yw), (hh, hw),
-                   low, high, *payloads)
+                   low, high, *payloads, version=version)
 
     def rate_control(self, device="cpu"):
         import torch

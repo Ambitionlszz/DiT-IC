@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -18,6 +19,7 @@ def main():
     parser.add_argument("--parent-pid", type=int, required=True)
     parser.add_argument("--allocation-gate", type=Path)
     parser.add_argument("--standby-status", type=Path)
+    parser.add_argument("--control", type=Path, help="optional atomic JSON file containing the desired gib")
     args = parser.parse_args()
     if args.gib <= 0 or args.minimum_free_gib < 0:
         parser.error("invalid memory reservation")
@@ -64,7 +66,30 @@ def main():
             os.kill(args.parent_pid, 0)
         except ProcessLookupError:
             break
-        time.sleep(.5)
+        if args.control and args.control.exists():
+            requested = float(json.loads(args.control.read_text())["gib"])
+            if not math.isfinite(requested) or requested < 0:
+                raise ValueError("invalid controlled reservation size")
+            target = int(requested*1024**3)
+            if target != size:
+                if target < size:
+                    blocks.clear()
+                    torch.cuda.empty_cache()
+                    size = 0
+                free, _ = torch.cuda.mem_get_info(device)
+                if free >= target-size+args.minimum_free_gib*1024**3:
+                    remaining = target-size
+                    while remaining:
+                        chunk = min(remaining, 256*1024**2)
+                        blocks.append(torch.empty(chunk, dtype=torch.uint8, device=device).fill_(1))
+                        remaining -= chunk
+                    size = target
+                    torch.cuda.synchronize(device)
+                record.update(allocated_bytes=torch.cuda.memory_allocated(device), requested_bytes=target,
+                              ready=size == target)
+                temporary.write_text(json.dumps(record, indent=2)+"\n")
+                temporary.replace(args.status)
+        time.sleep(.01 if args.control else .5)
     args.status.unlink(missing_ok=True)
 
 

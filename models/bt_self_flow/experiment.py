@@ -36,6 +36,10 @@ def load_config(path):
         if int(config["train"][key]) < 1:
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
+    codec = config["model"].get("codec", {})
+    if codec.get("precision_consistent"):
+        if not codec.get("precision_conditioning") or config["model"]["backend"] != "C":
+            raise ValueError("precision-consistent v3 requires pure C with precision_conditioning")
     if config["model"].get("codec", {}).get("precision_conditioning"):
         if phase not in ("codec", "joint") or sf.get("enabled") or sf.get("mixed_sampling"):
             raise ValueError("precision v2 has exactly codec warmup and joint C/D training")
@@ -85,6 +89,10 @@ def make_model(config, device):
     torch.manual_seed(config["train"]["seed"])
     if phase == "codec":
         result = BTCodecStage(model["sana_path"], model.get("codec"))
+        size = int(config.get("execution", {}).get("frozen_encoder_batch_size", 0))
+        if size < 0:
+            raise ValueError("frozen encoder batch size must be nonnegative")
+        result.encoder_batch_size = size
     else:
         result = BTCodec(model["sana_path"], model["text_path"], backend=model["backend"],
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
@@ -159,7 +167,9 @@ def training_contract(config, dataset, world_size):
         value["train"].pop(key, None)
     value["dataset_fingerprint"] = dataset.fingerprint
     value["world_size"] = world_size
-    value["format"] = "bt_packet_v1_q16_a3_s4"
+    value["format"] = ("bt_packet_v3_q16_a3_precision_consistent"
+                       if config["model"].get("codec", {}).get("precision_consistent")
+                       else "bt_packet_v1_q16_a3_s4")
     return optimization_contract(value)
 
 

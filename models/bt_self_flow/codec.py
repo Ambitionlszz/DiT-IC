@@ -8,9 +8,9 @@ from torch.nn import functional as F
 from compressai.ans import BufferedRansEncoder, RansDecoder
 
 from models.latent_codec import LatentCodec, update_registered_buffers
-from .packet import RateControl, pack_codes
+from .packet import PRECISION_CONSISTENT_VERSION, VERSION, RateControl, pack_codes
 from .precision_conditioning import PrecisionAffine, PrecisionEmbedding
-from .router import RateRouter, allocation_from_codes, ste_round
+from .router import SourcePrecisionPlanner, RateRouter, allocation_from_codes, ste_round
 
 
 @dataclass
@@ -30,7 +30,9 @@ class BTLatentCodec(LatentCodec):
 
     def __init__(self, ch_emd=32, channel=320, channel_out=32,
                  delta_coarse=4.0, delta_fine=0.5, kappa=math.log(2),
-                 precision_conditioning=False, rate_likelihood="hard", **kwargs):
+                 precision_conditioning=False, rate_likelihood="hard", precision_consistent=False, **kwargs):
+        if precision_consistent and not precision_conditioning:
+            raise ValueError("precision-consistent C requires precision_conditioning")
         kwargs.pop("variable_rate", None)
         super().__init__(ch_emd=ch_emd, channel=channel, channel_out=channel_out,
                          variable_rate=False, **kwargs)
@@ -43,13 +45,22 @@ class BTLatentCodec(LatentCodec):
         if rate_likelihood not in ("hard", "noise"):
             raise ValueError("rate_likelihood must be hard or noise")
         self.precision_conditioning = bool(precision_conditioning)
+        self.precision_consistent = bool(precision_consistent)
+        self.packet_version = PRECISION_CONSISTENT_VERSION if self.precision_consistent else VERSION
         self.rate_likelihood = rate_likelihood
         self.mechanism = "bt_explicit_local_step_precision_v2" if self.precision_conditioning else type(self).mechanism
-        self.router = RateRouter(ch_emd, channel, precision_conditioning=self.precision_conditioning)
+        if self.precision_consistent:
+            self.mechanism = "precision_consistent_generative_compression_v3"
+            self.router = SourcePrecisionPlanner(ch_emd)
+        else:
+            self.router = RateRouter(ch_emd, channel, precision_conditioning=self.precision_conditioning)
         if self.precision_conditioning:
             self.precision_embedding = PrecisionEmbedding()
             self.analysis_precision = PrecisionAffine(192)
             self.synthesis_precision = PrecisionAffine(320)
+            if self.precision_consistent:
+                self.analysis_precision_low = PrecisionAffine(320)
+                self.synthesis_precision_low = PrecisionAffine(channel)
 
     def load_state_dict(self, state_dict, strict=True, assign=False):
         # CDF lengths change after quantile updates and EMA evaluation.
@@ -98,7 +109,20 @@ class BTLatentCodec(LatentCodec):
             clean = clean.float()
             control = rate_control or RateControl()
             precision = None
-            if self.precision_conditioning:
+            if self.precision_consistent:
+                if clean.shape[-2] % 8 or clean.shape[-1] % 8:
+                    raise ValueError("BT requires padded image dimensions divisible by 256")
+                log_step = self.global_log_step(control, clean.shape[0], clean.device)
+                allocation, codes = self.router(clean, self.precision_embedding(log_step))
+                delta = self.steps(control, allocation)
+                precision = self.precision_embedding(delta.log())
+                y = self.analysis_precision(self.g_a.pre1(clean),
+                                            F.interpolate(precision, size=clean.shape[-2:], mode="nearest"))
+                for index, layer in enumerate(self.g_a.analysis_transform):
+                    y = layer(y)
+                    if index == 2:
+                        y = self.analysis_precision_low(y, precision)
+            elif self.precision_conditioning:
                 log_step = self.global_log_step(control, clean.shape[0], clean.device)
                 precision = self.precision_embedding(log_step)
                 y = self.g_a.analysis_transform(self.analysis_precision(self.g_a.pre1(clean), precision))
@@ -108,6 +132,9 @@ class BTLatentCodec(LatentCodec):
                 raise ValueError("BT requires padded image dimensions divisible by 256")
             hyper_hat, hyper_likelihood = self._hyper_forward(y)
             base = self.h_s(hyper_hat)
+            if self.precision_consistent:
+                return SourceAnalysis(clean, y, hyper_hat, hyper_likelihood, base, allocation, codes,
+                                      control.low_code)
             # Router's reference cost is detached by design. Avoid retaining an
             # otherwise unused prior/probability graph for every microbatch.
             with torch.no_grad():
@@ -184,7 +211,16 @@ class BTLatentCodec(LatentCodec):
             encoder = BufferedRansEncoder()
             encoder.encode_with_indexes(all_symbols, all_indexes, cdf, lengths, offsets)
             encoded = encoder.flush()
-        if self.precision_conditioning:
+        if self.precision_consistent:
+            local = self.precision_embedding(delta.log())
+            restored = self.synthesis_precision_low(restored, local)
+            for index, layer in enumerate(self.g_s.synthesis_transform):
+                restored = layer(restored)
+                if index == 3:
+                    condition = F.interpolate(local, size=restored.shape[-2:], mode="nearest")
+                    restored = self.synthesis_precision(restored, condition)
+            mean = restored
+        elif self.precision_conditioning:
             # Precision belongs to a coding cell; each becomes 2x2 AE cells.
             local = self.precision_embedding(delta.log())
             for index, layer in enumerate(self.g_s.synthesis_transform):
@@ -237,6 +273,8 @@ class BTLatentCodec(LatentCodec):
     def decompress(self, packet, trace=False):
         from .packet import unpack_codes
 
+        if packet.version != self.packet_version:
+            raise ValueError("packet version does not match the codec architecture")
         if self.training:
             raise ValueError("real BT decoding requires eval mode")
         if self.router_strength.item() != 1:

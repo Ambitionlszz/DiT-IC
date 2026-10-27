@@ -1,0 +1,16 @@
+base: common.yaml
+execution:
+  frozen_encoder_batch_size: 0
+objective:
+  base_weight: 0.1
+optimizer:
+  schedule: milestone
+  milestones: [100000, 160000, 190000]
+  factors: [0.5, 0.2, 0.1]
+train:
+  phase: joint
+  steps: 200000
+  output: ${C_V3_RUN_ROOT:-checkpoints/c_precision_v3}/C/joint
+  batch_size: 8
+  accumulation_steps: 1
+  effective_batch: 8

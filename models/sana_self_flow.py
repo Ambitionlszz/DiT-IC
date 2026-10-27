@@ -178,6 +178,7 @@ def quality_conditioned_sana_forward(
     stop_layer=None,
     continuous_conditioning=False,
     checkpoint_blocks=False,
+    precision_embedding=None,
 ):
     """Run SANA with spatial q conditioning and optionally expose one layer."""
     batch_size, _, height, width = hidden_states.shape
@@ -211,7 +212,14 @@ def quality_conditioned_sana_forward(
         device=hidden_states.device,
         dtype=torch.float32 if continuous_conditioning else torch.long,
     )
-    block_modulation, output_modulation = quality_conditioner(quality_tokens)
+    if precision_embedding is not None:
+        if not continuous_conditioning:
+            raise ValueError("precision embedding requires continuous log-step conditioning")
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            embedded_precision = precision_embedding(quality_tokens.reshape(batch_size, 1, height, width))
+        block_modulation, output_modulation = quality_conditioner(embedded_precision.flatten(2).transpose(1, 2))
+    else:
+        block_modulation, output_modulation = quality_conditioner(quality_tokens)
     scale = torch.as_tensor(
         conditioning_scale, device=hidden_states.device, dtype=hidden_states.dtype
     )

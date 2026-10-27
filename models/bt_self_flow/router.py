@@ -24,6 +24,47 @@ def position_encoding(height, width, channels, device):
     return torch.cat([f(a) for a in angles for f in (torch.sin, torch.cos)], dim=-1)
 
 
+class SourcePrecisionPlanner(nn.Module):
+    """Choose a hard precision field before the conditional analysis transform."""
+
+    def __init__(self, source_channels=32, width=128):
+        super().__init__()
+        self.width = width
+        self.source = nn.Conv2d(4 * source_channels, width, 1)
+        self.source_norm = nn.LayerNorm(width)
+        layer = nn.TransformerEncoderLayer(width, 4, 4 * width, dropout=0,
+                                           activation="gelu", batch_first=True,
+                                           norm_first=True)
+        self.transformer = nn.TransformerEncoder(layer, 2, enable_nested_tensor=False)
+        self.precision_projections = nn.ModuleList(nn.Linear(width, 4 * width) for _ in range(2))
+        for projection in self.precision_projections:
+            nn.init.zeros_(projection.weight)
+            nn.init.zeros_(projection.bias)
+        self.head = nn.Sequential(nn.Linear(width, 64), nn.SiLU(), nn.Linear(64, 1))
+        nn.init.normal_(self.head[-1].weight, std=.001)
+        nn.init.constant_(self.head[-1].bias, math.atanh(1 / 7))
+
+    def forward(self, clean, precision):
+        b, _, height, width = clean.shape
+        if height % 2 or width % 2 or precision.shape != (b, self.width, 1, 1):
+            raise ValueError("source planner requires an even source grid and global precision embedding")
+        source = self.source(F.pixel_unshuffle(clean, 2))
+        h, w = source.shape[-2:]
+        hidden = self.source_norm(source.flatten(2).transpose(1, 2))
+        hidden = hidden + position_encoding(h, w, self.width, clean.device)
+        condition = precision.flatten(2).transpose(1, 2)
+        for layer, projection in zip(self.transformer.layers, self.precision_projections):
+            gamma_a, beta_a, gamma_f, beta_f = projection(condition).chunk(4, -1)
+            normalized = (1 + gamma_a) * layer.norm1(hidden) + beta_a
+            attended = layer.self_attn(normalized, normalized, normalized, need_weights=False)[0]
+            hidden = hidden + layer.dropout1(attended)
+            normalized = (1 + gamma_f) * layer.norm2(hidden) + beta_f
+            hidden = hidden + layer.dropout2(layer.linear2(layer.dropout(layer.activation(layer.linear1(normalized)))))
+        continuous = (self.head(hidden).transpose(1, 2).reshape(b, 1, h, w).tanh() + 1) * 3.5
+        codes = ste_round(continuous)
+        return allocation_from_codes(codes), codes.detach().to(torch.uint8)
+
+
 class RateRouter(nn.Module):
     def __init__(self, source_channels=32, feature_channels=320, width=128, precision_conditioning=False):
         super().__init__()

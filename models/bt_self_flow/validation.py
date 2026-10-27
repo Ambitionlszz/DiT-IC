@@ -45,7 +45,8 @@ def calibrate_interface(model, dataset, output, samples=512, seed=903, packet_sa
                     encoded = model.codec.compress(clean, control)
                     packet = BTImagePacket("C", tuple(image.shape[-2:]), encoded["y_shape"], encoded["hyper_shape"],
                                            control.low_code, control.high_code, encoded["hyper_stream"],
-                                           encoded["main_stream"], encoded["allocation"])
+                                           encoded["main_stream"], encoded["allocation"],
+                                           version=model.codec.packet_version)
                     rates[str(quality)].append(8*len(packet.to_bytes())/(image.shape[-2]*image.shape[-1]))
         model.distortion_scale.calibrate(model.distortion_scale.s_data.square(), scales)
     rates = {key: sum(values)/len(values) for key, values in rates.items()}
@@ -98,7 +99,8 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                         scales = pack_codes(info["codes"].flatten().tolist(), 4)
                     packet = BTImagePacket(model.backend, (height, width), encoded["y_shape"], encoded["hyper_shape"],
                                            control.low_code, control.high_code, encoded["hyper_stream"],
-                                           encoded["main_stream"], encoded["allocation"], scales)
+                                           encoded["main_stream"], encoded["allocation"], scales,
+                                           version=model.codec.packet_version)
                     actual_bpp = loss.new_tensor(8*len(packet.to_bytes())/(height*width))
                     loss = loss+rate_beta(control, quality)*(actual_bpp-metrics["rate_est"])
                     metrics["weighted_rate"] = rate_beta(control, quality)*actual_bpp

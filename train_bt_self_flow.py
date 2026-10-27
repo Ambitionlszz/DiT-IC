@@ -362,6 +362,21 @@ def train(config, args, rank, world, device):
     for sig in (signal.SIGINT, signal.SIGTERM):
         old_handlers[sig] = signal.signal(sig, lambda signum, frame: stop_requested.__setitem__(0, True))
     try:
+        if getattr(args, "startup_gate", None):
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            ready = Path(args.startup_ready)
+            ready.write_text(json.dumps(dict(pid=os.getpid(), phase=phase,
+                                            batch_size=settings["batch_size"],
+                                            accumulation_steps=settings["accumulation_steps"],
+                                            ready_for_updates=True))+"\n")
+            while not Path(args.startup_gate).exists():
+                if stop_requested[0]:
+                    raise InterruptedError("stop requested before first update")
+                parent = os.environ.get("C_V3_SUPERVISOR_PID")
+                if parent and not Path(f"/proc/{parent}").exists():
+                    raise InterruptedError("startup supervisor exited")
+                time.sleep(.01)
         while step < settings["steps"] and not stop:
             started = time.monotonic()
             data_wait = 0.
@@ -614,7 +629,11 @@ def main():
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--max-updates", type=int, help="stop and save without changing the resume contract")
     parser.add_argument("--run-root", help="override storage root consistently for all phases")
+    parser.add_argument("--startup-ready", help="publish readiness after model and optimizer initialization")
+    parser.add_argument("--startup-gate", help="wait for this file before the first update")
     args = parser.parse_args()
+    if bool(args.startup_ready) != bool(args.startup_gate):
+        parser.error("startup-ready and startup-gate must be supplied together")
     config = load_config(args.config)
     if args.run_root:
         phase = config["train"]["phase"]
