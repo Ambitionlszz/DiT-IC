@@ -30,6 +30,8 @@ from models.bt_self_flow.experiment import (asset_identity, check_stage_model, l
 from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.dual_rate_task import DualRateTeacher, synchronize_gradients, prepare_predictor
+from models.bt_self_flow.native_relational import (MIGRATION as RELATIONAL_MIGRATION,
+    relation_distance, relation_ramp, spatial_relation)
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.quantization_residual import CResidualTeacher
 from models.bt_self_flow.residual_training import balanced_quality, calibrate_residual, residual_weight, training_mask
@@ -183,6 +185,8 @@ def train(config, args, rank, world, device):
     phase = settings["phase"]
     residual_sf = config["self_flow"].get("method") == "quantization_residual_v1"
     task_sf = config["self_flow"].get("method") == "dual_rate_task_v1"
+    relational_sf = config["self_flow"].get("method") == "native_relational_v1"
+    sequential_sf = task_sf or relational_sf
     sf_state = {}
     seed_all(settings["seed"]+rank)
     output = Path(settings["output"])
@@ -245,12 +249,14 @@ def train(config, args, rank, world, device):
     scaler = torch.amp.GradScaler("cuda", enabled=fp16)
     image_loss = None if phase == "codec" else ImageLoss(**config.get("image_loss", {})).to(device).eval()
     teacher = None
-    if config["self_flow"].get("enabled") and not (residual_sf or task_sf):
+    if config["self_flow"].get("enabled") and not (residual_sf or task_sf or relational_sf):
         teacher = BTCrossRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
     if residual_sf and resume and model.residual_head.active.item() and config["self_flow"].get("enabled"):
         teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
     if task_sf:
         teacher = DualRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
+    if relational_sf:
+        teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
     ema = DeploymentEMA(model)
     step = micro_seen = attempts = 0
     rep_weight = 0.
@@ -263,7 +269,9 @@ def train(config, args, rank, world, device):
         ema.state = {part: {key: value.to(device) for key, value in values.items()} for part, values in resume["ema"].items()}
         step, micro_seen, attempts = resume["step"], resume["micro_seen"], resume["attempts"]
         rep_weight = resume.get("rep_weight", 0.)
-        sf_state = resume.get("dual_rate_task" if task_sf else "residual_sf", {})
+        sf_state = resume.get("native_relational" if relational_sf else "dual_rate_task" if task_sf else "residual_sf", {})
+        if relational_sf and sf_state.get("protocol") != "native_relational_v1":
+            raise ValueError("native relational resume is missing its method state")
         if (residual_sf and config["self_flow"].get("enabled") and model.residual_head.active.item()
                 and (not sf_state.get("protocol") or not np.isfinite(rep_weight) or rep_weight <= 0)):
             raise ValueError("residual SF resume has no valid transition/calibration")
@@ -273,9 +281,13 @@ def train(config, args, rank, world, device):
         if teacher is not None:
             if "teacher" in resume:
                 teacher.load_ema_state_dict(resume["teacher"])
-            elif not (task_sf and not sf_state.get("prepared")):
+            elif not ((task_sf and not sf_state.get("prepared")) or
+                      (relational_sf and resume.get("migration", {}).get("protocol") == RELATIONAL_MIGRATION
+                       and step == 10000 and not sf_state.get("teacher_initialized", False))):
                 raise ValueError("active Self-Flow checkpoint is missing teacher state")
         restore_rng(resume["rng_by_rank"][rank])
+    if relational_sf:
+        sf_state = dict(sf_state, protocol="native_relational_v1", teacher_initialized=True)
     with rank_zero_section(rank, control_group):
         best = BestCheckpoint(output, step, resume.get("validation_best") if resume else None,
                               identity=validation_identity) if rank == 0 else None
@@ -309,7 +321,7 @@ def train(config, args, rank, world, device):
                         persistent_workers=config["data"].get("workers", 4) > 0)
     iterator = iter(loader)
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
-                                      broadcast_buffers=False, find_unused_parameters=residual_sf) if world > 1 and not task_sf else model
+                                      broadcast_buffers=False, find_unused_parameters=residual_sf) if world > 1 and not sequential_sf else model
 
     last_saved = {}
 
@@ -349,6 +361,8 @@ def train(config, args, rank, world, device):
                               "full_precision_retry": full_precision_retry}
                 if task_sf:
                     checkpoint["dual_rate_task"] = sf_state
+                if relational_sf:
+                    checkpoint["native_relational"] = sf_state
                 if residual_sf:
                     checkpoint["residual_sf"] = sf_state
                 if teacher is not None:
@@ -448,7 +462,7 @@ def train(config, args, rank, world, device):
                     micro_seen += 1
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
-                context = wrapped.no_sync() if world > 1 and not task_sf and not synchronize else nullcontext()
+                context = wrapped.no_sync() if world > 1 and not sequential_sf and not synchronize else nullcontext()
                 with context, full_precision_recompute(model, full_precision_retry):
                     with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                         enabled=device.type == "cuda" and not full_precision_retry):
@@ -471,6 +485,21 @@ def train(config, args, rank, world, device):
                             metrics.update(result.auxiliary)
                             metrics["sf_weight"] = loss.new_tensor(sf_ramp*rep_weight)
                             metrics["sf_loss_multiplier"] = loss.new_tensor(sf_ramp*rep_weight/.5)
+                        elif relational_sf:
+                            views = model.relational_views(result, control, teacher, config, step, micro, rank)
+                            native_sf_loss = relation_distance(spatial_relation(result.feature), views.target).mean()
+                            sf_ramp = relation_ramp(config, step)
+                            sf_multiplier = sf_ramp*config["self_flow"]["weight"]
+                            loss = loss + sf_multiplier*views.native_weight*native_sf_loss
+                            metrics.update(sf_native=native_sf_loss.detach(),
+                                sf_loss=views.native_weight*native_sf_loss.detach(),
+                                sf_mixed=native_sf_loss.detach().new_zeros(()),
+                                sf_weight=loss.new_tensor(sf_multiplier),
+                                sf_native_view_weight=loss.new_tensor(views.native_weight),
+                                sf_q_b=loss.new_tensor(views.quality_b),
+                                sf_mixed_fraction=loss.new_tensor(views.cell_fraction),
+                                sf_teacher_spatial_std=views.teacher_spatial_std,
+                                sf_native_spatial_std=result.feature.detach().float().std(dim=1).mean())
                         elif teacher is not None and not task_sf:
                             with torch.no_grad():
                                 high = model.codec.quantize_analysis(result.source, RateControl(1.))
@@ -507,6 +536,24 @@ def train(config, args, rank, world, device):
                         print(json.dumps({"nonfinite_forward": diagnostic, "rank": rank}), flush=True)
                         break
                     scaler.scale(loss/settings["accumulation_steps"]).backward()
+                    if relational_sf and views.mixed is not None:
+                        # The full native graph has been consumed. Only the detached
+                        # mixed prefix is rebuilt, and both backwards precede one sync.
+                        with torch.autocast(device_type=device.type, dtype=amp_dtype,
+                                            enabled=device.type == "cuda" and not full_precision_retry):
+                            mixed_sf_loss = model.mixed_relation(views)
+                            loss = sf_multiplier*.5*mixed_sf_loss
+                        finite = torch.isfinite(loss).to(torch.int32)
+                        if world > 1:
+                            dist.all_reduce(finite, op=dist.ReduceOp.MIN)
+                        if not finite.item():
+                            nonfinite_forward = True
+                            diagnostic = dict(step=step, micro=micro, rank=rank, backend=model.backend,
+                                              auxiliary=True, **nonfinite_diagnostics(result, {"sf_mixed": mixed_sf_loss}))
+                            break
+                        scaler.scale(loss/settings["accumulation_steps"]).backward()
+                        metrics["sf_mixed"] = mixed_sf_loss.detach()
+                        metrics["sf_loss"] = metrics["sf_loss"]+.5*mixed_sf_loss.detach()
                     if task_sf:
                         # Release native saved activations before building the auxiliary graph.
                         with torch.autocast(device_type=device.type, dtype=amp_dtype,
@@ -569,7 +616,7 @@ def train(config, args, rank, world, device):
                     raise FloatingPointError("nonfinite main loss persists; saved the last completed update for diagnosis")
                 restore_rng(update_rng)
                 continue
-            if task_sf:
+            if sequential_sf:
                 synchronize_gradients([p for group in optimizer.param_groups for p in group["params"]], world)
             scaler.unscale_(optimizer)
             norm = torch.nn.utils.clip_grad_norm_([p for group in optimizer.param_groups for p in group["params"]],
@@ -603,7 +650,7 @@ def train(config, args, rank, world, device):
             ema.update(model)
             if teacher is not None:
                 teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner,
-                                            config["self_flow"].get("teacher_decay", .999) if residual_sf or task_sf else .9999)
+                                            config["self_flow"].get("teacher_decay", .999) if residual_sf or sequential_sf else .9999)
             step += 1
             if replayed_in_fp32 and rank == 0:
                 print(json.dumps({"fp32_replay_completed": True, "step": step, "attempts": attempts}), flush=True)

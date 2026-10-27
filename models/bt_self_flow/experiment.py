@@ -34,6 +34,7 @@ def load_config(path):
         raise ValueError("train.amp_dtype must be auto, fp16 or bf16")
     task_sf = sf.get("method") == "dual_rate_task_v1"
     residual_sf = sf.get("method") == "quantization_residual_v1"
+    relational_sf = sf.get("method") == "native_relational_v1"
     if residual_sf and (phase != "joint" or config["model"]["backend"] != "C" or not config["model"].get("codec", {}).get("precision_conditioning")):
         raise ValueError("quantization residual SF requires precision-v2 joint C")
     if residual_sf:
@@ -52,7 +53,21 @@ def load_config(path):
             raise ValueError("dual-rate task SF requires precision conditioning")
         if sf.get("weight") != 1. or sf.get("ramp", 0) <= 0 or not 0 < sf.get("cell_fraction", 0) < 1:
             raise ValueError("task SF requires explicit unit weight and a valid mask/ramp")
-    if sf.get("enabled") and not (residual_sf or task_sf) and (phase != "self_flow" or config["model"]["backend"] != "D"):
+    if relational_sf:
+        if (phase != "joint" or config["model"]["backend"] != "C" or not sf.get("enabled")
+                or not config["model"].get("codec", {}).get("precision_conditioning")):
+            raise ValueError("native relational SF requires enabled precision-v2 joint C")
+        if (sf.get("weight") != 1. or sf.get("ramp", 0) <= 0
+                or not 0 <= sf.get("warmup", -1) < config["train"]["steps"]
+                or not 0 < sf.get("cell_fraction", 0) < 1
+                or not 0 < sf.get("teacher_decay", 0) < 1
+                or type(sf.get("teacher_batch_size", 4)) is not int or sf.get("teacher_batch_size", 4) < 1):
+            raise ValueError("invalid relational SF weight, ramp, mask or EMA settings")
+        if sf.get("student_layer") != 8 or sf.get("teacher_layer") != 20:
+            raise ValueError("this relational SF protocol requires student 8 and teacher 20")
+        if any(key in sf for key in ("prepare_steps", "prepare_lr", "gradient_target", "calibrate_every")):
+            raise ValueError("relational SF has no predictor preparation or weight calibration")
+    if sf.get("enabled") and not (residual_sf or task_sf or relational_sf) and (phase != "self_flow" or config["model"]["backend"] != "D"):
         raise ValueError("BT Self-Flow is a separate D-backend phase")
     if phase != "self_flow" and sf.get("mixed_sampling"):
         raise ValueError("initial C/D experiments must not add binary mixtures")
@@ -61,7 +76,7 @@ def load_config(path):
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
     if config["model"].get("codec", {}).get("precision_conditioning"):
-        if phase not in ("codec", "joint") or (sf.get("enabled") and not (residual_sf or task_sf)) or sf.get("mixed_sampling"):
+        if phase not in ("codec", "joint") or (sf.get("enabled") and not (residual_sf or task_sf or relational_sf)) or sf.get("mixed_sampling"):
             raise ValueError("precision v2 has exactly codec warmup and joint C/D training")
         if config["train"].get("router_uniform_steps", 0) or config["train"].get("router_ramp_steps", 0):
             raise ValueError("precision v2 must use the same full Router throughout both stages")
@@ -116,11 +131,15 @@ def make_model(config, device):
         task_sf = config["self_flow"].get("method") == "dual_rate_task_v1"
         if task_sf:
             from .dual_rate_task import CDualRateTaskCodec
-        factory = CDualRateTaskCodec if task_sf else CQuantizationResidualCodec if residual_sf else BTCodec
+        relational_sf = config["self_flow"].get("method") == "native_relational_v1"
+        if relational_sf:
+            from .native_relational import CNativeRelationalCodec
+        factory = (CNativeRelationalCodec if relational_sf else CDualRateTaskCodec if task_sf
+                   else CQuantizationResidualCodec if residual_sf else BTCodec)
         result = factory(model["sana_path"], model["text_path"], backend=model["backend"],
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
                          vae_rank=model.get("vae_rank", 32), checkpoint_blocks=model.get("checkpoint_blocks", True),
-                         representation=config["self_flow"].get("enabled", False) and not (residual_sf or task_sf),
+                         representation=config["self_flow"].get("enabled", False) and not (residual_sf or task_sf or relational_sf),
                          student_layer=config["self_flow"].get("student_layer", 8),
                          teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device))
         result.set_codec_frozen(phase == "backend")
