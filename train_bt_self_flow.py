@@ -33,6 +33,8 @@ from models.bt_self_flow.dual_rate_task import DualRateTeacher, synchronize_grad
 from models.bt_self_flow.native_relational import (MIGRATION as RELATIONAL_MIGRATION,
     relation_distance, relation_ramp, spatial_relation)
 from models.bt_self_flow.packet import RateControl
+from models.bt_self_flow.local_precision import (LocalPrecisionTeacher, sample_local_control,
+    MIGRATION as LOCAL_MIGRATION)
 from models.bt_self_flow.quantization_residual import CResidualTeacher
 from models.bt_self_flow.residual_training import balanced_quality, calibrate_residual, residual_weight, training_mask
 from models.bt_self_flow.training_precision import (finite_state, full_precision_recompute, nonfinite_diagnostics,
@@ -186,6 +188,7 @@ def train(config, args, rank, world, device):
     residual_sf = config["self_flow"].get("method") == "quantization_residual_v1"
     task_sf = config["self_flow"].get("method") == "dual_rate_task_v1"
     relational_sf = config["self_flow"].get("method") == "native_relational_v1"
+    local_sf = config["self_flow"].get("method") == "local_precision_v1"
     sequential_sf = task_sf or relational_sf
     sf_state = {}
     seed_all(settings["seed"]+rank)
@@ -249,7 +252,7 @@ def train(config, args, rank, world, device):
     scaler = torch.amp.GradScaler("cuda", enabled=fp16)
     image_loss = None if phase == "codec" else ImageLoss(**config.get("image_loss", {})).to(device).eval()
     teacher = None
-    if config["self_flow"].get("enabled") and not (residual_sf or task_sf or relational_sf):
+    if config["self_flow"].get("enabled") and not (residual_sf or task_sf or relational_sf or local_sf):
         teacher = BTCrossRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
     if residual_sf and resume and model.residual_head.active.item() and config["self_flow"].get("enabled"):
         teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
@@ -257,6 +260,8 @@ def train(config, args, rank, world, device):
         teacher = DualRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
     if relational_sf:
         teacher = CResidualTeacher(model.DiT, model.text_proj, model.teacher_layer).to(device)
+    if local_sf:
+        teacher = LocalPrecisionTeacher(model).to(device)
     ema = DeploymentEMA(model)
     step = micro_seen = attempts = 0
     rep_weight = 0.
@@ -269,7 +274,9 @@ def train(config, args, rank, world, device):
         ema.state = {part: {key: value.to(device) for key, value in values.items()} for part, values in resume["ema"].items()}
         step, micro_seen, attempts = resume["step"], resume["micro_seen"], resume["attempts"]
         rep_weight = resume.get("rep_weight", 0.)
-        sf_state = resume.get("native_relational" if relational_sf else "dual_rate_task" if task_sf else "residual_sf", {})
+        sf_state = resume.get("local_precision" if local_sf else "native_relational" if relational_sf else "dual_rate_task" if task_sf else "residual_sf", {})
+        if local_sf and sf_state.get('protocol') != 'local_precision_v1':
+            raise ValueError('local precision resume is missing its method state')
         if relational_sf and sf_state.get("protocol") != "native_relational_v1":
             raise ValueError("native relational resume is missing its method state")
         if (residual_sf and config["self_flow"].get("enabled") and model.residual_head.active.item()
@@ -282,12 +289,16 @@ def train(config, args, rank, world, device):
             if "teacher" in resume:
                 teacher.load_ema_state_dict(resume["teacher"])
             elif not ((task_sf and not sf_state.get("prepared")) or
+                      (local_sf and resume.get('migration', {}).get('protocol') == LOCAL_MIGRATION
+                       and step == 10000 and not sf_state.get('teacher_initialized', False)) or
                       (relational_sf and resume.get("migration", {}).get("protocol") == RELATIONAL_MIGRATION
                        and step == 10000 and not sf_state.get("teacher_initialized", False))):
                 raise ValueError("active Self-Flow checkpoint is missing teacher state")
         restore_rng(resume["rng_by_rank"][rank])
     if relational_sf:
         sf_state = dict(sf_state, protocol="native_relational_v1", teacher_initialized=True)
+    if local_sf:
+        sf_state = dict(sf_state, protocol='local_precision_v1', teacher_initialized=True)
     with rank_zero_section(rank, control_group):
         best = BestCheckpoint(output, step, resume.get("validation_best") if resume else None,
                               identity=validation_identity) if rank == 0 else None
@@ -363,6 +374,8 @@ def train(config, args, rank, world, device):
                     checkpoint["dual_rate_task"] = sf_state
                 if relational_sf:
                     checkpoint["native_relational"] = sf_state
+                if local_sf:
+                    checkpoint['local_precision'] = sf_state
                 if residual_sf:
                     checkpoint["residual_sf"] = sf_state
                 if teacher is not None:
@@ -471,6 +484,10 @@ def train(config, args, rank, world, device):
                         if residual_sf and model.residual_head.active.item():
                             mask, sf_ramp = training_mask(config, step, micro, rank, image.shape[0], device)
                             residual_kwargs = dict(sf_mask=mask, sf_teacher=teacher)
+                        if local_sf:
+                            local_control, qb = sample_local_control(config, control, step, micro, rank,
+                                (image.shape[0], image.shape[-2]//64, image.shape[-1]//64), device)
+                            residual_kwargs = dict(local_control=local_control)
                         result = wrapped(image, rate_control=control, transition=transition,
                                          capture=teacher is not None, **residual_kwargs)
                         loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
@@ -485,6 +502,12 @@ def train(config, args, rank, world, device):
                             metrics.update(result.auxiliary)
                             metrics["sf_weight"] = loss.new_tensor(sf_ramp*rep_weight)
                             metrics["sf_loss_multiplier"] = loss.new_tensor(sf_ramp*rep_weight/.5)
+                        elif local_sf:
+                            sf_loss, sf_metrics = model.local_sf(result, control, qb, teacher, config)
+                            sf_ramp = relation_ramp(config, step)
+                            loss = loss + sf_ramp*config['self_flow']['weight']*sf_loss
+                            metrics.update(sf_metrics)
+                            metrics['sf_weight'] = loss.new_tensor(sf_ramp*config['self_flow']['weight'])
                         elif relational_sf:
                             views = model.relational_views(result, control, teacher, config, step, micro, rank)
                             native_sf_loss = relation_distance(spatial_relation(result.feature), views.target).mean()
@@ -648,7 +671,9 @@ def train(config, args, rank, world, device):
             auxiliary_update(model.codec, aux_optimizer, world)
             scheduler.step()
             ema.update(model)
-            if teacher is not None:
+            if local_sf:
+                teacher.update_local_student(model, config['self_flow']['teacher_decay'])
+            elif teacher is not None:
                 teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner,
                                             config["self_flow"].get("teacher_decay", .999) if residual_sf or sequential_sf else .9999)
             step += 1
@@ -676,7 +701,13 @@ def train(config, args, rank, world, device):
                                   **metrics_sum)
                     if model.codec.precision_conditioning:
                         with torch.no_grad():
-                            delta = model.codec.steps(control, result.source.allocation)
+                            delta = (result.scale_info['delta'] if local_sf else
+                                     model.codec.steps(control, result.source.allocation))
+                            if local_sf:
+                                record.update(mixed=local_control.mixed,
+                                    mixed_image_fraction=.5 if local_control.mixed else 0.,
+                                    actual_side_bits_per_image=result.side_bits,
+                                    precision_protocol='local_precision_v1')
                             record["precision"] = dict(min_step=delta.min().item(), max_step=delta.max().item(),
                                                        geometric_mean_step=delta.log().mean().exp().item(),
                                                        last_micro_allocation_histogram=torch.bincount(

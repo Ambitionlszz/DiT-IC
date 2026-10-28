@@ -110,6 +110,20 @@ class RateControl:
 
 
 @dataclass(frozen=True)
+class LocalPrecisionControl(RateControl):
+    """Explicit encoder-only analysis anchor for local_precision_v1.
+
+    The decoder needs only the inherited, transmitted quality/mask fields.
+    This anchor conditions g_a/router, never the decoder or RD price.
+    """
+    analysis_quality: float = .5
+
+    def __post_init__(self):
+        super().__post_init__()
+        quality_code(self.analysis_quality)
+
+
+@dataclass(frozen=True)
 class BTImagePacket:
     backend: str
     original_shape: tuple[int, int]

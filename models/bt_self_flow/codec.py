@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from compressai.ans import BufferedRansEncoder, RansDecoder
 
 from models.latent_codec import LatentCodec, update_registered_buffers
-from .packet import RateControl, pack_codes
+from .packet import LocalPrecisionControl, RateControl, pack_codes, quality_code
 from .precision_conditioning import PrecisionAffine, PrecisionEmbedding
 from .router import RateRouter, allocation_from_codes, ste_round
 
@@ -31,7 +31,7 @@ class BTLatentCodec(LatentCodec):
 
     def __init__(self, ch_emd=32, channel=320, channel_out=32,
                  delta_coarse=4.0, delta_fine=0.5, kappa=math.log(2),
-                 precision_conditioning=False, rate_likelihood="hard", **kwargs):
+                 precision_conditioning=False, rate_likelihood="hard", local_precision_protocol=False, **kwargs):
         kwargs.pop("variable_rate", None)
         super().__init__(ch_emd=ch_emd, channel=channel, channel_out=channel_out,
                          variable_rate=False, **kwargs)
@@ -44,8 +44,13 @@ class BTLatentCodec(LatentCodec):
         if rate_likelihood not in ("hard", "noise"):
             raise ValueError("rate_likelihood must be hard or noise")
         self.precision_conditioning = bool(precision_conditioning)
+        self.local_precision_protocol = bool(local_precision_protocol)
+        if self.local_precision_protocol and not self.precision_conditioning:
+            raise ValueError("local precision requires the precision-v2 codec")
         self.rate_likelihood = rate_likelihood
         self.mechanism = "bt_explicit_local_step_precision_v2" if self.precision_conditioning else type(self).mechanism
+        if self.local_precision_protocol:
+            self.mechanism = "bt_explicit_local_step_precision_v3"
         self.router = RateRouter(ch_emd, channel, precision_conditioning=self.precision_conditioning)
         if self.precision_conditioning:
             self.precision_embedding = PrecisionEmbedding()
@@ -98,6 +103,10 @@ class BTLatentCodec(LatentCodec):
         with torch.autocast(device_type=clean.device.type, enabled=False):
             clean = clean.float()
             control = rate_control or RateControl()
+            if isinstance(control, LocalPrecisionControl):
+                if not self.local_precision_protocol:
+                    raise ValueError("local analysis anchor requires precision-v3")
+                control = RateControl(control.analysis_quality)
             precision = None
             if self.precision_conditioning:
                 log_step = self.global_log_step(control, clean.shape[0], clean.device)
@@ -122,7 +131,7 @@ class BTLatentCodec(LatentCodec):
                                   control.low_code if self.precision_conditioning else None, ste_codes)
 
     def steps(self, control, allocation):
-        if self.precision_conditioning and control.mixed:
+        if self.precision_conditioning and control.mixed and not self.local_precision_protocol:
             raise ValueError("precision v2 uses one whole-image quality, not mixed quality maps")
         b, _, h, w = allocation.shape
         quality = control.tensor(b, h, w, allocation.device)
@@ -201,7 +210,10 @@ class BTLatentCodec(LatentCodec):
 
     def quantize_analysis(self, analysis, control, trace=False, allocation_codes=None,
                           erase_mask=None, delta_override=None, compute_likelihood=True):
-        if self.precision_conditioning and (control.mixed or analysis.quality_code != control.low_code):
+        anchored = self.local_precision_protocol and isinstance(control, LocalPrecisionControl)
+        if anchored and analysis.quality_code != quality_code(control.analysis_quality):
+            raise ValueError("local quantization must retain the original analysis anchor")
+        if self.precision_conditioning and not anchored and (control.mixed or analysis.quality_code != control.low_code):
             raise ValueError("precision-conditioned analysis cannot be reused across qualities; call analyze(clean, control)")
         with torch.autocast(device_type=analysis.y.device.type, enabled=False):
             allocation, codes = analysis.allocation, analysis.allocation_codes

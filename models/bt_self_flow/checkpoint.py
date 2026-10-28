@@ -40,6 +40,8 @@ class DeploymentEMA:
                               conditioner=model.quality_conditioner, projector=model.representation_projector)
         if hasattr(model, "residual_head"):
             components["residual"] = model.residual_head
+        if hasattr(model, "precision_adapter"):
+            components["precision_adapter"] = model.precision_adapter
         self.averaged = {(part, name) for part, module in components.items() if module is not None
                          # state_dict includes legacy aliases (down/branch1,
                          # up/branch1). Every exported name must receive the

@@ -75,7 +75,7 @@ class QuantizationResidualHead(nn.Module):
 def c_sana_forward(sana, latent, condition, timestep, *, capture_layer=None,
                    stop_layer=None, checkpoint_blocks=False, head=None,
                    log_step=None, student_layer=7, injection_layer=19,
-                   residual_override=None, shuffle_mean=False):
+                   residual_override=None, shuffle_mean=False, precision_tokens=None):
     """Native SANA blocks with an explicit 8→20 reconstruction connection.
 
     Layer indices are zero based. With no head this follows the library C
@@ -85,6 +85,10 @@ def c_sana_forward(sana, latent, condition, timestep, *, capture_layer=None,
     patch = int(sana.config.patch_size)
     height, width = height//patch, width//patch
     hidden = sana.patch_embed(latent)
+    if precision_tokens is not None:
+        if precision_tokens.shape != hidden.shape:
+            raise ValueError("precision condition must match the patch tokens")
+        hidden = hidden + precision_tokens.to(hidden.dtype)
     modulation, embedded = sana.time_embed(timestep, batch_size=batch, hidden_dtype=hidden.dtype)
     condition = sana.caption_projection(condition).view(batch, -1, hidden.shape[-1])
     condition = sana.caption_norm(condition)

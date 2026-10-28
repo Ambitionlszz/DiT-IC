@@ -111,7 +111,7 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                                         packet.allocation, packet.scales, packet.mask))
                     metrics["rate_header"] = loss.new_tensor(8*(len(packet.to_bytes())-payload_bytes)/(height*width))
                 metrics["loss"] = loss
-                if result.scale_info:
+                if "saturation" in result.scale_info:
                     metrics["scale_saturation"] = result.scale_info["saturation"]
                 for name, value in metrics.items():
                     sums[name] = sums.get(name, 0.)+value.detach()

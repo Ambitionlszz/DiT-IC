@@ -2,8 +2,8 @@
 
 diffusers 0.35.2's SANA processors cast inputs to float, but outer autocast
 still casts their matmuls back to FP16. The 1e-15 normalization denominator
-can then underflow to zero. Keep self-attention projections under AMP and
-isolate their contractions/normalization. Cross-attention also needs FP32
+can then underflow to zero. Keep self-attention projections, LoRA products,
+contractions and normalization in FP32. Cross-attention also needs FP32
 projections: late SANA residuals are finite in FP32, but their query projection
 can exceed FP16's range before scaled-dot-product attention. SANA's MLP also
 needs FP32 through its point projection and the following gated residual.
@@ -65,7 +65,14 @@ class StableSanaFeedForward(GLUMBConv):
 
 class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
     def __call__(self, attn, hidden_states, encoder_hidden_states=None, attention_mask=None):
-        dtype = hidden_states.dtype
+        # The 13643 replay overflows inside block8 to_out.lora_B, before
+        # the old post-projection clamp. Keep PEFT's intermediate products
+        # and the residual output finite, exactly as for cross attention.
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            context = None if encoder_hidden_states is None else encoder_hidden_states.float()
+            return self._forward_float(attn, hidden_states.float(), context, attention_mask)
+
+    def _forward_float(self, attn, hidden_states, encoder_hidden_states=None, attention_mask=None):
         context = hidden_states if encoder_hidden_states is None else encoder_hidden_states
         query, key, value = attn.to_q(hidden_states), attn.to_k(context), attn.to_v(context)
         if attn.norm_q is not None:
@@ -79,9 +86,9 @@ class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
             augmented = F.pad(value.float(), (0, 0, 0, 1), value=1.)
             product = (augmented @ key.float()) @ query.float()
             normalized = product[:, :, :-1] / (product[:, :, -1:] + 1e-15)
-        output = normalized.flatten(1, 2).transpose(1, 2).to(dtype)
+        output = normalized.flatten(1, 2).transpose(1, 2)
         output = attn.to_out[1](attn.to_out[0](output))
-        return output.clamp(-65504, 65504) if dtype == torch.float16 else output
+        return output
 
 
 class StableSanaCrossAttention(SanaAttnProcessor2_0):
