@@ -29,7 +29,7 @@ def parameter_layout(model, config):
     return groups, auxiliary, main, aux
 
 
-def remap_optimizer(stored, source_layout, target_layout, template, allow_residual=False, allow_task=False, allow_local=False):
+def remap_optimizer(stored, source_layout, target_layout, template, allow_residual=False, allow_task=False, allow_local=False, allow_context=False):
     """Map moments by names, requiring an exact source parameter partition."""
     if len(stored["param_groups"]) != len(source_layout):
         raise ValueError("source optimizer group count differs from original C")
@@ -71,7 +71,8 @@ def remap_optimizer(stored, source_layout, target_layout, template, allow_residu
                 consumed.add(name)
             elif not ((allow_residual and label == "residual" and name.startswith("residual_head."))
                       or (allow_task and label == "task_sf" and name.startswith(("quality_conditioner.", "representation_projector.")))
-                      or (allow_local and label == 'backend' and name.startswith('precision_adapter.'))):
+                      or (allow_local and label == 'backend' and name.startswith('precision_adapter.'))
+                      or (allow_context and label == 'backend' and name.startswith(('context_generator.', 'context_readout.')))):
                 raise ValueError(f"unexpected new trainable parameter: {name}")
         result["param_groups"].append(group)
     if consumed != set(source_by_name):
@@ -155,6 +156,10 @@ def migrate_state(source, source_layout, source_aux, model, config, dataset, ass
     extra = {"residual": model.residual_head.state_dict()} if residual else {}
     if local:
         extra['precision_adapter'] = deepcopy(model.precision_adapter.state_dict())
+    context = config['self_flow'].get('method') == 'context_sf_v1'
+    if context:
+        extra.update(context_generator=deepcopy(model.context_generator.state_dict()),
+                     context_readout=deepcopy(model.context_readout.state_dict()))
     if residual and model.residual_head.active.item():
         raise ValueError("new residual head must be dormant at the 10K boundary")
     for kind in ("raw", "ema"):
@@ -169,7 +174,7 @@ def migrate_state(source, source_layout, source_aux, model, config, dataset, ass
     optimizer = torch.optim.AdamW(groups, betas=(.9, .999), weight_decay=0)
     auxiliary_optimizer = torch.optim.AdamW(auxiliary, lr=config["optimizer"]["aux_lr"], weight_decay=0)
     main = remap_optimizer(source["optimizer"], source_layout, target_layout, optimizer.state_dict(), residual,
-                           allow_local=local)
+                           allow_local=local, allow_context=context)
     aux = remap_optimizer(source["aux_optimizer"], [("aux", source_aux)], [("aux", target_aux)],
                           auxiliary_optimizer.state_dict())
     # Both branches use exactly the same fresh FP16 scaling policy. The CPU

@@ -42,6 +42,9 @@ class DeploymentEMA:
             components["residual"] = model.residual_head
         if hasattr(model, "precision_adapter"):
             components["precision_adapter"] = model.precision_adapter
+        for label in ("context_generator", "context_readout"):
+            if hasattr(model, label):
+                components[label] = getattr(model, label)
         self.averaged = {(part, name) for part, module in components.items() if module is not None
                          # state_dict includes legacy aliases (down/branch1,
                          # up/branch1). Every exported name must receive the
