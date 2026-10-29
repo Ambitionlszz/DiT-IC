@@ -1,0 +1,16 @@
+{
+  "C": {
+    "step": 15727,
+    "micro_seen": 62908,
+    "scheduler_epoch": 15727,
+    "full_precision_retry": false,
+    "raw_finite": true
+  },
+  "D": {
+    "step": 18079,
+    "micro_seen": 72316,
+    "scheduler_epoch": 18079,
+    "full_precision_retry": false,
+    "raw_finite": true
+  }
+}

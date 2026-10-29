@@ -1,0 +1,15 @@
+{
+  "checked_at": "2026-10-19 16:37:24 +0800",
+  "previous_full_kodak_eval_images": 144,
+  "previous_D_allocated_peak_bytes": 6058153984,
+  "current_gpu1_used_mib": 24812,
+  "current_gpu1_free_mib": 7688,
+  "proposed_allocator_fraction": 0.195,
+  "approximate_max_allocator_bytes": 6645350400,
+  "required_unallocated_guard_bytes": 1342177280,
+  "allocator_limit_exceeds_measured_peak": true,
+  "live_free_exceeds_cap_plus_guard": true,
+  "training_max_memory_bytes": 24941327360,
+  "training_not_paused": true,
+  "behavior": "Evaluation refuses to start below headroom guard and its caching allocator cannot exceed quota; an evaluation allocation failure is isolated from training"
+}

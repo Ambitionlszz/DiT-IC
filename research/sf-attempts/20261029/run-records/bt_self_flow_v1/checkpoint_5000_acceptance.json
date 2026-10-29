@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-10-15T18:35:56.192325+00:00",
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/common/0005000.pt",
+  "bytes": 1864506876,
+  "phase": "codec",
+  "step": 5000,
+  "attempts": 5000,
+  "consumed_microbatches": 10000,
+  "rank_rng_states": 2,
+  "tensors_checked": 1687,
+  "nonfinite_tensor_paths": [],
+  "router_output_head_l2": 0.17454682290554047,
+  "router_strength": 0.999666690826416,
+  "scheduler_last_epoch": 5000,
+  "optimizer_groups": [
+    "codec"
+  ],
+  "aux_optimizer_present": true,
+  "calibration_complete": false,
+  "seconds": 8.416908896004315
+}

@@ -1,0 +1,20 @@
+{
+  "started_at": "2026-10-15T22:58:02.577909+08:00",
+  "commit": "b8a98279f31d0957beffea949efbfe1fb52570e3",
+  "tmux": "bt-self-flow-v1",
+  "run_root": "/data2/ls/checkpoints/bt_self_flow_v1",
+  "supervisor_log": "/data2/ls/checkpoints/bt_self_flow_v1/supervisor.log",
+  "command": [
+    "/data2/ls/code/venvs/ditic/bin/python",
+    "-u",
+    "/data2/ls/code/DiT-IC-bt-self-flow/scripts/launch_bt_pair.py",
+    "--root",
+    "/data2/ls/checkpoints/bt_self_flow_v1",
+    "--gpus",
+    "0,1"
+  ],
+  "gpu_usage_before": "0, 5, 0\n1, 5, 0\n",
+  "prior_jobs_stop_evidence": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/previous_experiments_stop.json",
+  "full_smoke": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/preflight.json",
+  "performance": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/performance/no_checkpoint.json"
+}

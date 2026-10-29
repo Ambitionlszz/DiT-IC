@@ -1,0 +1,31 @@
+{
+  "supervisor_pid": 6210,
+  "started_at": "2026-10-23T02:31:16.215598+00:00",
+  "status": "training",
+  "jobs": {
+    "joint": {
+      "pid": 6234,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/configs/joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/logs/joint.log",
+      "started_at": "2026-10-23T02:31:16.219993+00:00",
+      "status": "running"
+    }
+  },
+  "self_flow_start_step": 10000,
+  "updated_at": "2026-10-23T02:31:16.220022+00:00"
+}

@@ -1,0 +1,19 @@
+model:
+  model_type: Codec
+  params:
+    decode_mode: "gs_residual"
+    dit_path: SANA
+    text_encoder_path: /data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers
+    DiT_params:
+      DiT_lora: true
+      lora_rank_DiT: 128
+      lora_alpha_DiT: 128
+    vae_params:
+      vae_lora: true
+      lora_rank_vae: 64
+      lora_alpha_vae: 64
+    codec_param:
+      ch_emd: 32
+      channel: 320
+      channel_out: 32
+      upsample_mode: pixelshuffle

@@ -1,0 +1,24 @@
+[
+  {
+    "backend": "C",
+    "returncode": 0,
+    "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/performance/C_no_checkpoint.log",
+    "steady_seconds_per_update": 4.528300741249041,
+    "max_memory_bytes": 24252677632,
+    "checkpointed": {
+      "seconds_per_effective_batch8_update": 6.53937475299972,
+      "peak_memory_bytes": 13986419200
+    }
+  },
+  {
+    "backend": "D",
+    "returncode": 0,
+    "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/performance/D_no_checkpoint.log",
+    "steady_seconds_per_update": 4.565718841749913,
+    "max_memory_bytes": 25236425216,
+    "checkpointed": {
+      "seconds_per_effective_batch8_update": 6.492189941999641,
+      "peak_memory_bytes": 14637432832
+    }
+  }
+]

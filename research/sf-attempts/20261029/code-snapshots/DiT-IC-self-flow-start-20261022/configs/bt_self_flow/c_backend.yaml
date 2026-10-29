@@ -1,0 +1,9 @@
+base: common.yaml
+model:
+  checkpoint_blocks: false
+train:
+  phase: backend
+  steps: 5000
+  batch_size: 2
+  accumulation_steps: 4
+  output: /data2/ls/checkpoints/bt_self_flow_v1/C/backend

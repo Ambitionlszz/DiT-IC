@@ -1,0 +1,5 @@
+base: c_joint.yaml
+train:
+  batch_size: 2
+  accumulation_steps: 2
+  effective_batch: 8

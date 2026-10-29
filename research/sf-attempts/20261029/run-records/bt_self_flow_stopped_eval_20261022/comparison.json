@@ -1,0 +1,533 @@
+{
+  "steps": {
+    "C": 95542,
+    "D": 96750
+  },
+  "curves": {
+    "C": [
+      {
+        "bpp": 0.029822455512152776,
+        "psnr": 22.538828134536743,
+        "ms_ssim": 0.7786816577610804,
+        "lpips": 0.16710494924336672,
+        "dists": 0.0921656663219134,
+        "avg_bpp": 0.029822455512152776,
+        "quality_index": 0.0
+      },
+      {
+        "bpp": 0.047536214192708336,
+        "psnr": 23.60489757855733,
+        "ms_ssim": 0.8259779976226884,
+        "lpips": 0.12999663036316633,
+        "dists": 0.0720059300462405,
+        "avg_bpp": 0.047536214192708336,
+        "quality_index": 0.2
+      },
+      {
+        "bpp": 0.06721666124131945,
+        "psnr": 24.407188177108765,
+        "ms_ssim": 0.8552154849061114,
+        "lpips": 0.1077717044390738,
+        "dists": 0.06075021376212438,
+        "avg_bpp": 0.06721666124131945,
+        "quality_index": 0.4
+      },
+      {
+        "bpp": 0.09018622504340278,
+        "psnr": 24.993595043818157,
+        "ms_ssim": 0.8736705577291953,
+        "lpips": 0.09538695045436422,
+        "dists": 0.053509136041005455,
+        "avg_bpp": 0.09018622504340278,
+        "quality_index": 0.6
+      },
+      {
+        "bpp": 0.1193813747829861,
+        "psnr": 25.327685197194416,
+        "ms_ssim": 0.8836084505853679,
+        "lpips": 0.08820833374435703,
+        "dists": 0.04943650464216868,
+        "avg_bpp": 0.1193813747829861,
+        "quality_index": 0.8
+      },
+      {
+        "bpp": 0.156158447265625,
+        "psnr": 25.492307901382446,
+        "ms_ssim": 0.8883778371851782,
+        "lpips": 0.08523798764993747,
+        "dists": 0.04846680909395218,
+        "avg_bpp": 0.156158447265625,
+        "quality_index": 1.0
+      }
+    ],
+    "D": [
+      {
+        "bpp": 0.029069688585069444,
+        "psnr": 22.63884099324544,
+        "ms_ssim": 0.779356973966033,
+        "lpips": 0.1640160291766127,
+        "dists": 0.08985164761543274,
+        "avg_bpp": 0.029069688585069444,
+        "quality_index": 0.0
+      },
+      {
+        "bpp": 0.04671563042534722,
+        "psnr": 23.66287287076314,
+        "ms_ssim": 0.8265185010503505,
+        "lpips": 0.12684039026498795,
+        "dists": 0.0721416821082433,
+        "avg_bpp": 0.04671563042534722,
+        "quality_index": 0.2
+      },
+      {
+        "bpp": 0.06645033094618055,
+        "psnr": 24.417192856470745,
+        "ms_ssim": 0.8549392782861331,
+        "lpips": 0.10665093564117949,
+        "dists": 0.059691657622655235,
+        "avg_bpp": 0.06645033094618055,
+        "quality_index": 0.4
+      },
+      {
+        "bpp": 0.08944023980034722,
+        "psnr": 24.968435366948444,
+        "ms_ssim": 0.8732487700210835,
+        "lpips": 0.09502614149823785,
+        "dists": 0.05371192842721939,
+        "avg_bpp": 0.08944023980034722,
+        "quality_index": 0.6
+      },
+      {
+        "bpp": 0.11872694227430557,
+        "psnr": 25.32304040590922,
+        "ms_ssim": 0.883672877665608,
+        "lpips": 0.08764169675608476,
+        "dists": 0.050338404874006905,
+        "avg_bpp": 0.11872694227430557,
+        "quality_index": 0.8
+      },
+      {
+        "bpp": 0.1555820041232639,
+        "psnr": 25.500592867533367,
+        "ms_ssim": 0.8885143866849203,
+        "lpips": 0.08502301728973786,
+        "dists": 0.048921296993891396,
+        "avg_bpp": 0.1555820041232639,
+        "quality_index": 1.0
+      }
+    ],
+    "Baseline 512 / 200K": [
+      {
+        "quality_index": 0,
+        "avg_bpp": 0.02529568142361111,
+        "psnr": 22.90525054931641,
+        "ms_ssim": 0.7798437202641705,
+        "lpips": 0.1652450474599997,
+        "dists": 0.09345257778962453,
+        "num_images": 24
+      },
+      {
+        "quality_index": 1,
+        "avg_bpp": 0.03916083441840278,
+        "psnr": 23.82238181432088,
+        "ms_ssim": 0.8229029761724629,
+        "lpips": 0.1311903096114596,
+        "dists": 0.07497384647528331,
+        "num_images": 24
+      },
+      {
+        "quality_index": 2,
+        "avg_bpp": 0.05450439453125,
+        "psnr": 24.42110951741536,
+        "ms_ssim": 0.8491625126969969,
+        "lpips": 0.1127266326608757,
+        "dists": 0.06468503177165985,
+        "num_images": 24
+      },
+      {
+        "quality_index": 3,
+        "avg_bpp": 0.06880018446180555,
+        "psnr": 24.75815447171529,
+        "ms_ssim": 0.8620985535737834,
+        "lpips": 0.1030255470735331,
+        "dists": 0.0601433739066124,
+        "num_images": 24
+      },
+      {
+        "quality_index": 4,
+        "avg_bpp": 0.08062405056423612,
+        "psnr": 24.90865747133891,
+        "ms_ssim": 0.8677395594956917,
+        "lpips": 0.09881716500967741,
+        "dists": 0.05884183943271637,
+        "num_images": 24
+      },
+      {
+        "quality_index": 5,
+        "avg_bpp": 0.08884345160590278,
+        "psnr": 24.96528323491414,
+        "ms_ssim": 0.8700319516216649,
+        "lpips": 0.09726838100080688,
+        "dists": 0.05818868925174078,
+        "num_images": 24
+      }
+    ]
+  },
+  "bd_rate": {
+    "C_vs_Baseline 512 / 200K": {
+      "psnr": {
+        "status": "computed",
+        "percent": 28.654349415054398,
+        "increasing_quality_interval": [
+          22.90525054931641,
+          24.96528323491414
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.6974934139460284
+      },
+      "ms_ssim": {
+        "status": "computed",
+        "percent": 15.259623268386576,
+        "increasing_quality_interval": [
+          0.7798437202641705,
+          0.8700319516216649
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.822163833152444
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 16.543763865015855,
+        "increasing_quality_interval": [
+          -0.1652450474599997,
+          -0.09726838100080688
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.8303308823989471
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 10.315082742370775,
+        "increasing_quality_interval": [
+          -0.0921656663219134,
+          -0.05818868925174078
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9635062518324206,
+        "overlap_fraction_of_candidate_quality_span": 0.7775255287095255
+      }
+    },
+    "D_vs_Baseline 512 / 200K": {
+      "psnr": {
+        "status": "computed",
+        "percent": 24.67254781289109,
+        "increasing_quality_interval": [
+          22.90525054931641,
+          24.96528323491414
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7198502092744558
+      },
+      "ms_ssim": {
+        "status": "computed",
+        "percent": 12.90550824620616,
+        "increasing_quality_interval": [
+          0.7798437202641705,
+          0.8700319516216649
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.8262217756090997
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 10.172586938402029,
+        "increasing_quality_interval": [
+          -0.1640160291766127,
+          -0.09726838100080688
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9819199977373884,
+        "overlap_fraction_of_candidate_quality_span": 0.8449816835873344
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 6.375544991857628,
+        "increasing_quality_interval": [
+          -0.08985164761543274,
+          -0.05818868925174078
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.8978861854578705,
+        "overlap_fraction_of_candidate_quality_span": 0.7735814104418635
+      }
+    },
+    "D_vs_C": {
+      "psnr": {
+        "status": "computed",
+        "percent": -2.822340569406965,
+        "increasing_quality_interval": [
+          22.63884099324544,
+          25.492307901382446
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9661372798854446,
+        "overlap_fraction_of_candidate_quality_span": 0.9971049320434245
+      },
+      "ms_ssim": {
+        "status": "computed",
+        "percent": -1.776814158954631,
+        "increasing_quality_interval": [
+          0.779356973966033,
+          0.8883778371851782
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9938437582010793,
+        "overlap_fraction_of_candidate_quality_span": 0.9987490588468432
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": -5.027266924003091,
+        "increasing_quality_interval": [
+          -0.1640160291766127,
+          -0.08523798764993747
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9622690276195381,
+        "overlap_fraction_of_candidate_quality_span": 0.9972786154741452
+      },
+      "dists": {
+        "status": "computed",
+        "percent": -2.030058976605802,
+        "increasing_quality_interval": [
+          -0.08985164761543274,
+          -0.048921296993891396
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9366457893400374,
+        "overlap_fraction_of_candidate_quality_span": 1.0
+      }
+    }
+  },
+  "matched_rate_interpolation": {
+    "0.04": {
+      "C": {
+        "psnr": 23.20848366633921,
+        "ms_ssim": 0.8095264659576668,
+        "lpips": 0.1427680562406134,
+        "dists": 0.07878370737430872
+      },
+      "D": {
+        "psnr": 23.328868568572407,
+        "ms_ssim": 0.8122165829877168,
+        "lpips": 0.1376992706508752,
+        "dists": 0.07782077800018937
+      },
+      "Baseline 512 / 200K": {
+        "psnr": 23.863400749280483,
+        "ms_ssim": 0.8247560019747736,
+        "lpips": 0.12983335694341272,
+        "dists": 0.07422129031792798
+      }
+    },
+    "0.06": {
+      "C": {
+        "psnr": 24.152878920876297,
+        "ms_ssim": 0.8464641715383487,
+        "lpips": 0.11419823316079362,
+        "dists": 0.06409669811425854
+      },
+      "D": {
+        "psnr": 24.20686831894345,
+        "ms_ssim": 0.8474399170374678,
+        "lpips": 0.11175605741220816,
+        "dists": 0.0627708086808876
+      },
+      "Baseline 512 / 200K": {
+        "psnr": 24.572481357300177,
+        "ms_ssim": 0.8550988804394017,
+        "lpips": 0.10831239910212911,
+        "dists": 0.062482129044325437
+      }
+    },
+    "0.08": {
+      "C": {
+        "psnr": 24.77995927915423,
+        "ms_ssim": 0.8671437340732971,
+        "lpips": 0.09975703524433742,
+        "dists": 0.056097403657828906
+      },
+      "D": {
+        "psnr": 24.780624849318897,
+        "ms_ssim": 0.8672639334697378,
+        "lpips": 0.0988608900121271,
+        "dists": 0.05559177592199421
+      },
+      "Baseline 512 / 200K": {
+        "psnr": 24.903036462208423,
+        "ms_ssim": 0.867519455744661,
+        "lpips": 0.09897220646225412,
+        "dists": 0.05889838376264867
+      }
+    }
+  },
+  "allocation_stats": {
+    "C": {
+      "histograms": {
+        "q00000": [
+          0,
+          0,
+          0,
+          17,
+          433,
+          1759,
+          95,
+          0
+        ],
+        "q13107": [
+          0,
+          0,
+          0,
+          17,
+          433,
+          1759,
+          95,
+          0
+        ],
+        "q26214": [
+          0,
+          0,
+          0,
+          17,
+          433,
+          1759,
+          95,
+          0
+        ],
+        "q39321": [
+          0,
+          0,
+          0,
+          17,
+          433,
+          1759,
+          95,
+          0
+        ],
+        "q52428": [
+          0,
+          0,
+          0,
+          17,
+          433,
+          1759,
+          95,
+          0
+        ],
+        "q65535": [
+          0,
+          0,
+          0,
+          17,
+          433,
+          1759,
+          95,
+          0
+        ]
+      },
+      "fraction_code_3_or_4": {
+        "q00000": 0.1953125,
+        "q13107": 0.1953125,
+        "q26214": 0.1953125,
+        "q39321": 0.1953125,
+        "q52428": 0.1953125,
+        "q65535": 0.1953125
+      },
+      "images_with_identical_allocation_across_six_q": 24,
+      "images": 24
+    },
+    "D": {
+      "histograms": {
+        "q00000": [
+          0,
+          0,
+          270,
+          1819,
+          214,
+          1,
+          0,
+          0
+        ],
+        "q13107": [
+          0,
+          0,
+          270,
+          1819,
+          214,
+          1,
+          0,
+          0
+        ],
+        "q26214": [
+          0,
+          0,
+          270,
+          1819,
+          214,
+          1,
+          0,
+          0
+        ],
+        "q39321": [
+          0,
+          0,
+          270,
+          1819,
+          214,
+          1,
+          0,
+          0
+        ],
+        "q52428": [
+          0,
+          0,
+          270,
+          1819,
+          214,
+          1,
+          0,
+          0
+        ],
+        "q65535": [
+          0,
+          0,
+          270,
+          1819,
+          214,
+          1,
+          0,
+          0
+        ]
+      },
+      "fraction_code_3_or_4": {
+        "q00000": 0.8823784722222222,
+        "q13107": 0.8823784722222222,
+        "q26214": 0.8823784722222222,
+        "q39321": 0.8823784722222222,
+        "q52428": 0.8823784722222222,
+        "q65535": 0.8823784722222222
+      },
+      "images_with_identical_allocation_across_six_q": 24,
+      "images": 24
+    }
+  },
+  "method": "PCHIP log actual total packet bpp over common quality interval; no extrapolation, no point deletion; raw MS-SSIM",
+  "limits": [
+    "C/D have slightly different training steps; this is their stopped deployment comparison, not an equal-step D ablation.",
+    "The 200K baseline curve is archived, not rerun today. Different training objectives and budgets prevent architecture-only attribution.",
+    "Timing runs concurrently with new warmup and is unsuitable for speed comparisons."
+  ],
+  "baseline_source": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/historical_reference.json",
+  "baseline_checkpoint_identity": {
+    "A": "A：非窗口训练",
+    "B": "512×512",
+    "C": "无",
+    "D": "EMA 200000步",
+    "E": "/data2/luosheng/code/DiT-IC/checkpoints/window_b_infer_only_512_w8s4_bs2a2_mse4_lpips1_dists1_20260930/checkpoints/0200000.pt",
+    "F": "2d9bbab4ad14aea94fc7f4a37fa96f186e339c8b69ce739f52ebfd5cfe15aac1",
+    "G": "/data2/luosheng/code/DiT-IC/.codex-worktrees/window-aware-e2e-self-flow-20260926/configs/window_b_infer_only_512_w8s4_bs2a2_mse4_lpips1_dists1_20260930.yaml",
+    "H": "336aaa86778d0979f129c216e141ec58d2589de6b28ab40743a4f37564c8b407"
+  }
+}

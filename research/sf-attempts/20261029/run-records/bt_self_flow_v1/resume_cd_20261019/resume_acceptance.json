@@ -1,0 +1,89 @@
+{
+  "verified_at": "2026-10-19T21:53:44+0800",
+  "resumed": true,
+  "configuration_changes": null,
+  "code_commit": "2845a1d595e346b2e3c273d95c743e22820fbb61",
+  "execution_repository": "/data2/ls/code/DiT-IC-resume-cd-20261019",
+  "supervisor_pid": 58928,
+  "jobs": {
+    "c_joint": {
+      "pid": 58984,
+      "gpus": [
+        "0"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+      "started_at": "2026-10-19T13:47:29.767286+00:00",
+      "status": "running"
+    },
+    "d_joint": {
+      "pid": 58985,
+      "gpus": [
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+      "started_at": "2026-10-19T13:47:29.771876+00:00",
+      "status": "running"
+    }
+  },
+  "verified_updates": {
+    "C": {
+      "step": 36945,
+      "attempts": 37063,
+      "lambda_low": 0.3594415197985809,
+      "mixed": false,
+      "transition": 1.0,
+      "grad_norm": 1.0716581344604492,
+      "seconds_per_update": 14.300983993001864,
+      "steady_seconds_per_update": 14.300983993001864,
+      "max_memory_bytes": 23943188480,
+      "mse": 0.01739884354174137,
+      "lpips": 0.10684597492218018,
+      "dists": 0.07564254105091095,
+      "psnr": 24.18979263305664,
+      "base": 0.06594815105199814,
+      "latent": 0.06529296934604645,
+      "rate_est": 0.06451233476400375
+    },
+    "D": {
+      "step": 38404,
+      "attempts": 38439,
+      "lambda_low": 0.32642099641412986,
+      "mixed": false,
+      "transition": 1.0,
+      "grad_norm": 1.1272153854370117,
+      "seconds_per_update": 14.018293442000868,
+      "steady_seconds_per_update": 14.018293442000868,
+      "max_memory_bytes": 24941327360,
+      "mse": 0.04450336471199989,
+      "lpips": 0.1543397605419159,
+      "dists": 0.09582370519638062,
+      "psnr": 19.673572540283203,
+      "base": 0.08189331740140915,
+      "latent": 0.0688762366771698,
+      "rate_est": 0.06325230002403259
+    }
+  },
+  "original_steps": {
+    "C": 36944,
+    "D": 38403
+  },
+  "target_steps": 200000,
+  "checkpoint_preload": "completed both original paused files",
+  "new_lowrate_experiment": "stopped_by_user"
+}

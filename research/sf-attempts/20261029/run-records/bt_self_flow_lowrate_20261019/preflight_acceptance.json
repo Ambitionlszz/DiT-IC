@@ -1,0 +1,17 @@
+{
+  "probe_successful_optimizer_updates": 6,
+  "per_gpu_batch": 32,
+  "world_size": 2,
+  "effective_batch": 64,
+  "peak_tensor_memory_bytes": 25228090880,
+  "seconds_per_update_initial_probe": 2.872542783400422,
+  "pure_train_hours_50k": 39.896427547228086,
+  "tests": "38 passed + 4 batch64 recipe/supervisor tests passed",
+  "source": "profiles/ddp32.log",
+  "fresh_long_run": true,
+  "warmup_steps": 50000,
+  "joint_steps_per_C": 200000,
+  "coarse_step": 8,
+  "fine_step": 1,
+  "rate_loss_multiplier": 3
+}

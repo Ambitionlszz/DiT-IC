@@ -1,0 +1,5 @@
+base: c_backend.yaml
+model:
+  backend: D
+train:
+  output: /data2/ls/checkpoints/bt_self_flow_v1/D/backend

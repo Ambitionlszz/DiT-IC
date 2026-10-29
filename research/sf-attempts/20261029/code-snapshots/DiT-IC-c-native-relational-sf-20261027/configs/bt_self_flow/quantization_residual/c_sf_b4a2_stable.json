@@ -1,0 +1,7 @@
+{
+  "base": "c_sf_b4a2.json",
+  "train": {
+    "output": "/data2/ls/checkpoints/c_quant_residual_sf_stable_20261026/joint",
+    "save_every": 500
+  }
+}

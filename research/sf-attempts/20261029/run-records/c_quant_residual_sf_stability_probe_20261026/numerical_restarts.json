@@ -1,0 +1,13 @@
+[
+  {
+    "reason": "amp_nonfinite_forward",
+    "step": 11332,
+    "attempts": 11339,
+    "world_size": 2,
+    "checkpoint": "paused.pt",
+    "checkpoint_size": 4200093996,
+    "checkpoint_mtime_ns": 1792945449337716200,
+    "checkpoint_path": "/data2/ls/checkpoints/c_quant_residual_sf_stability_probe_20261026/joint/paused.pt",
+    "restarted_at": "2026-10-25T16:25:32.482169+00:00"
+  }
+]

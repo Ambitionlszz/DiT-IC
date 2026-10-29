@@ -1,0 +1,11 @@
+{
+  "pid": 677170,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_delayed_self_flow.py",
+    "--gpus",
+    "0,1"
+  ],
+  "started_at": "2026-10-22T14:09:53.324440+00:00",
+  "detached": true
+}

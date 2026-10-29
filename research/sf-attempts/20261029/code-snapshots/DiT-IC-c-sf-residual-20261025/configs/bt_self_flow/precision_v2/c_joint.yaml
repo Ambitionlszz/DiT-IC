@@ -1,0 +1,14 @@
+base: common.yaml
+objective:
+  base_weight: 0.1
+optimizer:
+  schedule: milestone
+  milestones: [100000, 160000, 190000]
+  factors: [0.5, 0.2, 0.1]
+train:
+  phase: joint
+  steps: 200000
+  output: ${BT_RUN_ROOT:-checkpoints/c_precision_v2}/C/joint
+  batch_size: 2
+  accumulation_steps: 4
+  effective_batch: 8

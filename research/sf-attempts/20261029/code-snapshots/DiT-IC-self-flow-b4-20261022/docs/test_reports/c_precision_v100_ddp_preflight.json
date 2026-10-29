@@ -1,0 +1,132 @@
+{
+  "python": "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+  "gpu_smoke_requested": true,
+  "packages": {
+    "torch": "2.12.0+cu126",
+    "diffusers": "0.35.2",
+    "peft": "0.18.1",
+    "compressai": "1.2.8",
+    "pyiqa": "0.1.16",
+    "lpips": "0.1.4"
+  },
+  "assets_exist": {
+    "/data2/ls/data/DIV2K_train_HR_clean": true,
+    "/data2/ls/data/Flickr2K/Flickr2K_png": true,
+    "/data2/ls/data/LSDIR": true,
+    "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png": true,
+    "/data2/ls/data/Kodak": true,
+    "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt": true,
+    "/data2/ls/checkpoints/SANA/vae/diffusion_pytorch_model.safetensors": true,
+    "/data2/ls/checkpoints/SANA/transformer/diffusion_pytorch_model.safetensors": true
+  },
+  "cuda_available": true,
+  "gpus": [
+    {
+      "name": "Tesla V100S-PCIE-32GB",
+      "native_bf16": false,
+      "total_memory_bytes": 34079899648,
+      "free_memory_bytes": 34070331392,
+      "utilization_percent": 0
+    },
+    {
+      "name": "Tesla V100S-PCIE-32GB",
+      "native_bf16": false,
+      "total_memory_bytes": 34079899648,
+      "free_memory_bytes": 34070331392,
+      "utilization_percent": 0
+    }
+  ],
+  "commands": [
+    {
+      "name": "common",
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/common.yaml"
+      ],
+      "returncode": 0,
+      "seconds": 205.37634874001378,
+      "log": "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/common.log"
+    },
+    {
+      "name": "prepare",
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/C_joint.yaml",
+        "--prepare-backend",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/common/complete.pt",
+        "--output",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/backend_init.pt"
+      ],
+      "returncode": 0,
+      "seconds": 58.2585952859954,
+      "log": "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/prepare.log"
+    },
+    {
+      "name": "D_pause",
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/D_joint.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/backend_init.pt",
+        "--max-updates",
+        "2"
+      ],
+      "returncode": 0,
+      "seconds": 168.0435389909544,
+      "log": "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/D_pause.log"
+    },
+    {
+      "name": "D_resume",
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/D_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/D_joint/paused.pt"
+      ],
+      "returncode": 0,
+      "seconds": 194.2242842350388,
+      "log": "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke/D_resume.log"
+    }
+  ],
+  "throughput": {
+    "D": {
+      "joint": {
+        "seconds_per_effective_batch8_update": 4.119687001235434,
+        "peak_memory_bytes": 15627937280
+      },
+      "nominal_200000_joint_days": 9.5363125028598,
+      "note": "short-run estimate; excludes validation/checkpoint time"
+    }
+  },
+  "smoke_output": "/data2/ls/checkpoints/c_precision_v2_D_v100_20261022/preflight/smoke",
+  "status": "passed",
+  "packet_forward_max_error": {
+    "0.0": 0.0,
+    "0.2": 0.0,
+    "0.4": 0.0,
+    "0.6": 0.0,
+    "0.8": 0.0,
+    "1.0": 0.0
+  },
+  "research_training": false
+}

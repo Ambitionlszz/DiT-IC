@@ -1,0 +1,20 @@
+[
+  {
+    "branch": "pure_c",
+    "path": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/pure_c/joint/0010000.pt",
+    "step": 10000,
+    "micro_seen": 10000,
+    "sha256": "f7fc938884c3305c57903bdf81de8c6c13dbf405fc3c17b2ff8dc2359ff55c70",
+    "bytes": 3750307432,
+    "readback_verified": true
+  },
+  {
+    "branch": "c_sf",
+    "path": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/c_sf/joint/0010000.pt",
+    "step": 10000,
+    "micro_seen": 10000,
+    "sha256": "e68b4c1287430e9bd0aac53eed312d198c40f74ea8bfc58df478d9143181c5e0",
+    "bytes": 3782198239,
+    "readback_verified": true
+  }
+]

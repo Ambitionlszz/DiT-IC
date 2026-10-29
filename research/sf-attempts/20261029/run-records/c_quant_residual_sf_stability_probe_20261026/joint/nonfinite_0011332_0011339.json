@@ -1,0 +1,98 @@
+{
+  "ranks": [
+    {
+      "step": 11332,
+      "micro": 1,
+      "rank": 0,
+      "backend": "C",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": 0.03276747465133667,
+        "lpips": 0.11491715162992477,
+        "dists": 0.07507166266441345,
+        "psnr": 20.866168975830078,
+        "base": 0.040806811302900314,
+        "latent": 0.043544746935367584,
+        "rate_est": 0.09121142327785492,
+        "weighted_base": 0.004080681130290031,
+        "weighted_repaired": 0.0,
+        "weighted_rate": 0.09121142327785492,
+        "weighted_mse": 0.13106989860534668,
+        "weighted_lpips": 0.11491715162992477,
+        "weighted_dists": 0.07507166266441345,
+        "sf_loss": -1.4934170246124268,
+        "sf_valid": 0.5,
+        "sf_target_rms": 0.004196895286440849,
+        "sf_mean_rms": 0.004801877308636904,
+        "sf_std": 0.05003851652145386,
+        "sf_weight": 1.1796276569366455
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 5.462360858917236
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.310835838317871
+        },
+        "latent": {
+          "finite": true,
+          "max_abs": 5.395369529724121
+        },
+        "image": {
+          "finite": true,
+          "max_abs": 1.0
+        }
+      },
+      "model_state_finite": true
+    },
+    {
+      "step": 11332,
+      "micro": 1,
+      "rank": 1,
+      "backend": "C",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": 0.014199631288647652,
+        "lpips": 0.09773445129394531,
+        "dists": 0.0678122490644455,
+        "psnr": 24.497831344604492,
+        "base": 0.04062267020344734,
+        "latent": 0.04331284388899803,
+        "rate_est": 0.08534373342990875,
+        "weighted_base": 0.004062267020344734,
+        "weighted_repaired": 0.0,
+        "weighted_rate": 0.08534373342990875,
+        "weighted_mse": 0.05679852515459061,
+        "weighted_lpips": 0.09773445129394531,
+        "weighted_dists": 0.0678122490644455,
+        "sf_loss": -1.4927947521209717,
+        "sf_valid": 0.5,
+        "sf_target_rms": 0.005236269440501928,
+        "sf_mean_rms": 0.0047937133349478245,
+        "sf_std": 0.050035953521728516,
+        "sf_weight": 1.1796276569366455
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 4.660693645477295
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 4.634755611419678
+        },
+        "latent": {
+          "finite": true,
+          "max_abs": 4.565307140350342
+        },
+        "image": {
+          "finite": true,
+          "max_abs": 1.0
+        }
+      },
+      "model_state_finite": true
+    }
+  ]
+}

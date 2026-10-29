@@ -1,0 +1,47 @@
+{
+  "supervisor_pid": 7185,
+  "started_at": "2026-10-17T02:29:59.864465+00:00",
+  "status": "paused",
+  "jobs": {
+    "c_joint": {
+      "pid": 7214,
+      "gpus": [
+        "0"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+      "started_at": "2026-10-17T02:29:59.890981+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-18T01:26:24.596003+00:00"
+    },
+    "d_joint": {
+      "pid": 7215,
+      "gpus": [
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+      "started_at": "2026-10-17T02:29:59.896355+00:00",
+      "status": "completed",
+      "returncode": 0,
+      "ended_at": "2026-10-18T01:26:01.668815+00:00"
+    }
+  },
+  "updated_at": "2026-10-18T01:26:24.596042+00:00",
+  "error": "InterruptedError: supervisor stop requested"
+}

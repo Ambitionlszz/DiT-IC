@@ -1,0 +1,124 @@
+{
+  "status": "superseded",
+  "launch_ready": true,
+  "repository": "/data2/ls/code/DiT-IC-c-sf-ablation-b8-20261026",
+  "commit": "2a59bac",
+  "working_tree_dirty": false,
+  "source": {
+    "path": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+    "sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+    "step": 10000,
+    "world_size": 2,
+    "batch_size": 2,
+    "accumulation_steps": 2,
+    "effective_batch": 8,
+    "source_amp": "auto (confirm source hardware/runtime)",
+    "micro_seen": 20000,
+    "attempts": 10000,
+    "metadata_errors": [],
+    "converted": false
+  },
+  "start_step": 10000,
+  "total_step_target": 200000,
+  "shared": {
+    "gpus": [
+      0,
+      1
+    ],
+    "local_batch": 4,
+    "accumulation": 1,
+    "effective_batch": 8,
+    "crop": 512,
+    "quality_sampling": "independent quality draw per optimizer step; same draw on both DDP ranks",
+    "amp": "FP16 + GradScaler; common FP32 numerical fixes",
+    "image_loss": {
+      "mse_weight": 4.0,
+      "lpips_weight": 1.0,
+      "dists_weight": 1.0
+    },
+    "objective": {
+      "base_weight": 0.1,
+      "repaired_weight": 0.0
+    },
+    "optimizer": {
+      "codec_lr": 0.0001,
+      "joint_codec_lr": 0.0001,
+      "backend_lr": 0.0001,
+      "vae_lr": 0.0001,
+      "aux_lr": 0.001,
+      "max_grad_norm": 4.0,
+      "warmup": 0,
+      "schedule": "milestone",
+      "milestones": [
+        100000,
+        160000,
+        190000
+      ],
+      "factors": [
+        0.5,
+        0.2,
+        0.1
+      ]
+    },
+    "periodic_save_every": 10000,
+    "log_every": 100,
+    "eval_every": 2000
+  },
+  "sf": {
+    "activation_after_saved_step": 10000,
+    "first_sf_update": 10001,
+    "full_weight_step": 12000,
+    "settings": {
+      "enabled": true,
+      "mixed_sampling": false,
+      "high_fraction": 0.25,
+      "student_layer": 8,
+      "teacher_layer": 20,
+      "warmup": 10000,
+      "ramp": 2000,
+      "calibrate_every": 500,
+      "gradient_target": 0.05,
+      "gradient_cap": 0.1,
+      "method": "quantization_residual_v1",
+      "cell_fraction": 0.25,
+      "calibration_samples_per_q": 4,
+      "teacher_decay": 0.999
+    },
+    "calibration": "recompute on the uploaded 10K checkpoint; do not reuse the batch-16 alpha"
+  },
+  "pending": [
+    "Evaluate C+SF at 12K and compare with the user-provided external pure C results."
+  ],
+  "state_migration": [
+    {
+      "branch": "pure_c",
+      "path": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/pure_c/joint/0010000.pt",
+      "step": 10000,
+      "micro_seen": 10000,
+      "sha256": "f7fc938884c3305c57903bdf81de8c6c13dbf405fc3c17b2ff8dc2359ff55c70",
+      "bytes": 3750307432,
+      "readback_verified": true
+    },
+    {
+      "branch": "c_sf",
+      "path": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/c_sf/joint/0010000.pt",
+      "step": 10000,
+      "micro_seen": 10000,
+      "sha256": "e68b4c1287430e9bd0aac53eed312d198c40f74ea8bfc58df478d9143181c5e0",
+      "bytes": 3782198239,
+      "readback_verified": true
+    }
+  ],
+  "source_data_user_report": "Only directory/file layout changed",
+  "dataset_policy": "shared-local; identical local dataset for both continuations",
+  "updated_at": "2026-10-26T08:37:42.831883+00:00",
+  "schedule": "C+SF only on GPUs 0,1; per-GPU batch 4, accumulation 1, effective batch 8; no pure C scheduling",
+  "enabled_branches": [
+    "c_sf"
+  ],
+  "external_pure_c_baseline": true,
+  "local_pure_c_enabled": false,
+  "superseded_by": "/data2/ls/experiments/c_sf_weight1_20261026/CURRENT_RUN.md",
+  "paused_step": 13271,
+  "reason": "User requested fixed SF weight 1; continuation is running in the new root"
+}

@@ -1,0 +1,103 @@
+{
+  "date_local": "2026-10-27",
+  "status": "research_and_design_only_no_new_run_or_training_code_change",
+  "repository": "/data2/ls/code/DiT-IC-c-sf-ablation-b8-20261026",
+  "audited_commit": "bb9bab0",
+  "training_record_step": 19000,
+  "sf_diagnostics": {
+    "sf_loss": -1.4975608587265015,
+    "sf_target_rms": 0.0015217899344861507,
+    "sf_mean_rms": 0.0007189309690147638,
+    "sf_std": 0.05000080168247223,
+    "sf_valid": 0.5
+  },
+  "zero_residual_half_participation_nll_floor": -1.4978661367769954,
+  "nll_excess_over_floor": 0.0003052780504939623,
+  "same_step_18k_comparison": {
+    "same_q_mean_bpp_change_percent": 3.472022148402524,
+    "aggregate_RD_change_percent": 1.3872067772296992,
+    "matched_bpp": {
+      "method": "Piecewise linear interpolation in log(total bpp), 101 points inside measured overlap; no extrapolation, not significance testing",
+      "range": [
+        0.0179511159658432,
+        0.09524874885876973
+      ],
+      "mean_delta": {
+        "psnr": -0.1031468083958932,
+        "lpips": 0.002987029006833752,
+        "dists": 0.0008361523526126289,
+        "ms_ssim": -0.0041393638548226095
+      }
+    }
+  },
+  "old_target_injection_oracle": {
+    "baseline_d411": [
+      0.6030436307191849,
+      0.3289601281285286,
+      0.4192945063114166,
+      0.43572311103343964,
+      0.35533739253878593,
+      0.3253530040383339
+    ],
+    "privileged_d411": [
+      0.6038456335663795,
+      0.32942601293325424,
+      0.4197496175765991,
+      0.4360285699367523,
+      0.3555000498890877,
+      0.32543493807315826
+    ],
+    "privileged_win_fraction": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "privileged_gate_passed": false
+  },
+  "allocation_offset_counterexample": {
+    "native_all_4": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "native_all_0": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "one_erased_from_4": [
+      -0.8571428571428571,
+      0.2857142857142857,
+      0.2857142857142857,
+      0.2857142857142857
+    ],
+    "one_erased_from_0": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scope": "Algebraic property of allocation_from_codes and erasing codes to zero; not proof that this caused the observed rate drift."
+  },
+  "sources": {
+    "/data2/ls/experiments/c_sf_weight1_20261026/comparisons/same_step_18000_summary.json": "c962d7e3e693fc84848be09cde24bc6c376fa6a475f267ad2c94b0de56536379",
+    "/data2/ls/checkpoints/c_sf_weight1_20261026/joint/sf_transition.json": "0f44c2acf558104987ebee04b4739f81c2509d9dcb6f74f8ac505f249419cc88"
+  },
+  "limitations": [
+    "Source C BF16 vs current C+SF FP16; exact cross-host data order not verified.",
+    "No new GPU inference, functional prototype, memory test, or efficacy pilot was run for this proposal.",
+    "Full-network collapse and causal attribution of rate drift are not established.",
+    "New objective includes an auxiliary image reconstruction term; it is not a feature-loss-only ablation."
+  ],
+  "references": [
+    "https://arxiv.org/html/2603.06507v1",
+    "https://arxiv.org/html/2505.16687v2",
+    "https://www.eurecom.edu/en/publication/8851",
+    "https://arxiv.org/html/2603.13162v1"
+  ]
+}

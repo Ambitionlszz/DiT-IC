@@ -1,0 +1,18 @@
+{
+  "schema_version": 3,
+  "stage": "multirate_reconstruction",
+  "source_checkpoint": "V4_LIC_REQUIRED_AT_LAUNCH",
+  "source_config": "configs/multirate_plain_dit.yaml",
+  "dit_backbone_initialization": "pretrained_sana",
+  "dit_lora_initialization": "fresh",
+  "train_dit_lora": true,
+  "train_vae_decoder_lora": false,
+  "train_text_projection": true,
+  "freeze_codec": true,
+  "fixed_text_condition": true,
+  "decode_mode": "sana",
+  "removed_features_all_off": true,
+  "explicit_rate_embedding": false,
+  "quality_levels": 6,
+  "quality_semantics": "q0_lowest_bpp_q5_highest_bpp"
+}

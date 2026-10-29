@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "source_commit": "073f54eced8bff354f49f3233da9dca9aee8eccf",
+  "initialization": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_50k_20261022/backend_init.pt",
+  "initialization_sha256": "72021789824591baa47ce4913f754068d5c0b2ec858278ecd8d15659afe2d5c1",
+  "phase": "backend_init",
+  "codec_keys": 365,
+  "residual_parameters": 7971840,
+  "active": false,
+  "assets": {
+    "vae_config_sha256": "4e5669aa03caa77615b73b21c9347c384cb11124a9590683e32a510df0176eb4",
+    "vae_weights_bytes": 1249044836,
+    "vae_weights_sha256": "15a4b09e56d95b768a0ec9da50b702e21d920333fc9b3480d66bb5c7fad9d87f",
+    "transformer_config_sha256": "38916317861688918bee963c296ee0f9e939b6d2fd4f5e9f6908f2b9a9179fa6",
+    "transformer_weights_bytes": 2367054536,
+    "transformer_weights_sha256": "f9db5116ca285dd8a431dc8ee5123a9b74177640f6559c6fea4047c6e8ff5089",
+    "scheduler_config_sha256": "70e8603120cc387316aa3bc7f08cb2872f6b6eb6eff6f25df1b88b6b76389e81",
+    "text_sha256": "e9c904d6325303d0f058b00fa0235887de7e0ab0529797e614704eecbac52b9c"
+  },
+  "data_paths_exist": true,
+  "quality": {
+    "values": [
+      0.0,
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "rate_coefficients": [
+      16.0,
+      8.0,
+      4.0,
+      2.0,
+      1.0,
+      0.5
+    ]
+  }
+}

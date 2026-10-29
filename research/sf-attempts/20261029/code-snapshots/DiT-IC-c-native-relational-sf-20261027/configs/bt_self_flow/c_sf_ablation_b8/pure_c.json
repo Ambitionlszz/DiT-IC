@@ -1,0 +1,15 @@
+{
+  "base": "../precision_v2/c_joint.yaml",
+  "quality": {
+    "sampling": "independent"
+  },
+  "train": {
+    "output": "${C_SF_B8_ROOT:-/data2/ls/checkpoints/c_sf_ablation_b8_20261026}/pure_c/joint",
+    "batch_size": 4,
+    "accumulation_steps": 1,
+    "effective_batch": 8,
+    "amp_dtype": "fp16",
+    "save_every": 10000,
+    "log_every": 100
+  }
+}

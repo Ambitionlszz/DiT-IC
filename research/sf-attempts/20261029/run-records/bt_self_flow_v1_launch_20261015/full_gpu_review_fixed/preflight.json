@@ -1,0 +1,189 @@
+{
+  "python": "/data2/ls/code/venvs/ditic/bin/python",
+  "gpu_smoke_requested": true,
+  "packages": {
+    "torch": "2.12.0+cu126",
+    "diffusers": "0.35.2",
+    "peft": "0.18.1",
+    "compressai": "1.2.8",
+    "pyiqa": "0.1.16",
+    "lpips": "0.1.4"
+  },
+  "assets_exist": {
+    "/data2/ls/data/DIV2K_train_HR_clean": true,
+    "/data2/ls/data/Flickr2K/Flickr2K_png": true,
+    "/data2/ls/data/LSDIR": true,
+    "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png": true,
+    "/data2/ls/data/DIV2K_valid_HR": true,
+    "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt": true,
+    "/data2/ls/checkpoints/SANA/vae/diffusion_pytorch_model.safetensors": true,
+    "/data2/ls/checkpoints/SANA/transformer/diffusion_pytorch_model.safetensors": true
+  },
+  "cuda_available": true,
+  "gpus": [
+    {
+      "name": "Tesla V100S-PCIE-32GB",
+      "native_bf16": false,
+      "total_memory_bytes": 34079899648,
+      "free_memory_bytes": 34070331392,
+      "utilization_percent": 0
+    },
+    {
+      "name": "Tesla V100S-PCIE-32GB",
+      "native_bf16": false,
+      "total_memory_bytes": 34079899648,
+      "free_memory_bytes": 34070331392,
+      "utilization_percent": 0
+    }
+  ],
+  "commands": [
+    {
+      "name": "common",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/common.yaml"
+      ],
+      "returncode": 0,
+      "seconds": 169.1168663569988,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/common.log"
+    },
+    {
+      "name": "prepare",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_backend.yaml",
+        "--prepare-backend",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/common/complete.pt",
+        "--output",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/backend_init.pt"
+      ],
+      "returncode": 0,
+      "seconds": 72.97948622900003,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/prepare.log"
+    },
+    {
+      "name": "C_pause",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_backend.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/backend_init.pt",
+        "--max-updates",
+        "2"
+      ],
+      "returncode": 0,
+      "seconds": 173.30162777000078,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_pause.log"
+    },
+    {
+      "name": "D_pause",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_backend.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/backend_init.pt",
+        "--max-updates",
+        "2"
+      ],
+      "returncode": 0,
+      "seconds": 177.70259495500068,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_pause.log"
+    },
+    {
+      "name": "D_resume",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_backend.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_backend/paused.pt"
+      ],
+      "returncode": 0,
+      "seconds": 227.67508628099677,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_resume.log"
+    },
+    {
+      "name": "C_resume",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_backend.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_backend/paused.pt"
+      ],
+      "returncode": 0,
+      "seconds": 243.36789561499972,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_resume.log"
+    },
+    {
+      "name": "C_joint",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_joint.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_backend/complete.pt"
+      ],
+      "returncode": 0,
+      "seconds": 284.8120804950013,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/C_joint.log"
+    },
+    {
+      "name": "D_joint",
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_joint.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_backend/complete.pt"
+      ],
+      "returncode": 0,
+      "seconds": 300.443534222999,
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/D_joint.log"
+    }
+  ],
+  "throughput": {
+    "C": {
+      "backend": {
+        "seconds_per_effective_batch8_update": 5.754783358749592,
+        "peak_memory_bytes": 12461160448
+      },
+      "joint": {
+        "seconds_per_effective_batch8_update": 6.53937475299972,
+        "peak_memory_bytes": 13986419200
+      },
+      "nominal_5000_backend_25000_joint_days": 2.225211639105798,
+      "note": "short-run estimate; excludes validation/checkpoint time"
+    },
+    "D": {
+      "backend": {
+        "seconds_per_effective_batch8_update": 5.8852902132503,
+        "peak_memory_bytes": 13118708736
+      },
+      "joint": {
+        "seconds_per_effective_batch8_update": 6.492189941999641,
+        "peak_memory_bytes": 14637432832
+      },
+      "nominal_5000_backend_25000_joint_days": 2.2191111066694735,
+      "note": "short-run estimate; excludes validation/checkpoint time"
+    }
+  },
+  "smoke_output": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke",
+  "status": "passed"
+}

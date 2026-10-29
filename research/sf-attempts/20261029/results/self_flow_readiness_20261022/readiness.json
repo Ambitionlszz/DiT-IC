@@ -1,0 +1,216 @@
+{
+  "current": {
+    "C": {
+      "latest_step": 88000,
+      "best_validation_step": 86000,
+      "loss_60k": 0.3262548612223731,
+      "loss_80k": 0.3214141031106313,
+      "loss_latest": 0.3206484417120616,
+      "change_from_80k_percent": -0.23821649117437005,
+      "last_six_loss": {
+        "78000": 0.32171755697992116,
+        "80000": 0.3214141031106313,
+        "82000": 0.32114935252401566,
+        "84000": 0.3209520843293932,
+        "86000": 0.3201393650637732,
+        "88000": 0.3206484417120616
+      },
+      "last_six_fitted_loss_change_per_10k": -0.0013381512392135033,
+      "fixed_bpp_change_from_80k": {
+        "0.04": {
+          "before": {
+            "psnr": 23.221166370539823,
+            "lpips": 0.14445430677419469,
+            "dists": 0.08080794708423449
+          },
+          "latest": {
+            "psnr": 23.201617438083424,
+            "lpips": 0.1439371058710014,
+            "dists": 0.0792166209608188
+          },
+          "psnr_gain_dB": -0.01954893245639866,
+          "lpips_change_percent": -0.3580377177689553,
+          "dists_change_percent": -1.9692693365380043
+        },
+        "0.06": {
+          "before": {
+            "psnr": 24.180831514344558,
+            "lpips": 0.11606300384942084,
+            "dists": 0.06455064110007182
+          },
+          "latest": {
+            "psnr": 24.157468541974477,
+            "lpips": 0.11534343606236172,
+            "dists": 0.06405507938372368
+          },
+          "psnr_gain_dB": -0.023362972370080115,
+          "lpips_change_percent": -0.6199803237840307,
+          "dists_change_percent": -0.7677099838247603
+        },
+        "0.08": {
+          "before": {
+            "psnr": 24.79672348857824,
+            "lpips": 0.10071386316452517,
+            "dists": 0.05684206145373013
+          },
+          "latest": {
+            "psnr": 24.757205352562195,
+            "lpips": 0.10102867419722017,
+            "dists": 0.05694535792389243
+          },
+          "psnr_gain_dB": -0.0395181360160457,
+          "lpips_change_percent": 0.31257964177258124,
+          "dists_change_percent": 0.1817254116414979
+        },
+        "0.1": {
+          "before": {
+            "psnr": 25.146078654551097,
+            "lpips": 0.09302815038855665,
+            "dists": 0.05305291242700849
+          },
+          "latest": {
+            "psnr": 25.11143635790325,
+            "lpips": 0.09326971486044569,
+            "dists": 0.05286019429371518
+          },
+          "psnr_gain_dB": -0.03464229664784568,
+          "lpips_change_percent": 0.2596681444058335,
+          "dists_change_percent": -0.3632564631742996
+        }
+      }
+    },
+    "D": {
+      "latest_step": 90000,
+      "best_validation_step": 90000,
+      "loss_60k": 0.320048600435257,
+      "loss_80k": 0.31696156991852653,
+      "loss_latest": 0.3162594669395023,
+      "change_from_80k_percent": -0.22151044342842985,
+      "last_six_loss": {
+        "80000": 0.31696156991852653,
+        "82000": 0.31731676393085056,
+        "84000": 0.3171915974881914,
+        "86000": 0.3166223631964789,
+        "88000": 0.31639723976453143,
+        "90000": 0.3162594669395023
+      },
+      "last_six_fitted_loss_change_per_10k": -0.0009769030979701132,
+      "fixed_bpp_change_from_80k": {
+        "0.04": {
+          "before": {
+            "psnr": 23.24499812828511,
+            "lpips": 0.14001334979877655,
+            "dists": 0.07623406380009623
+          },
+          "latest": {
+            "psnr": 23.311174869993355,
+            "lpips": 0.1398984392817477,
+            "dists": 0.07667236567161816
+          },
+          "psnr_gain_dB": 0.06617674170824372,
+          "lpips_change_percent": -0.08207111478584217,
+          "dists_change_percent": 0.5749422891468292
+        },
+        "0.06": {
+          "before": {
+            "psnr": 24.132640245881138,
+            "lpips": 0.11325053716689874,
+            "dists": 0.06311067744558413
+          },
+          "latest": {
+            "psnr": 24.2099737990641,
+            "lpips": 0.11354066265653319,
+            "dists": 0.0624716855419288
+          },
+          "psnr_gain_dB": 0.07733355318296375,
+          "lpips_change_percent": 0.256180232687897,
+          "dists_change_percent": -1.0124941285985845
+        },
+        "0.08": {
+          "before": {
+            "psnr": 24.73177925674499,
+            "lpips": 0.09993415995818629,
+            "dists": 0.05590607339725123
+          },
+          "latest": {
+            "psnr": 24.80481463832572,
+            "lpips": 0.09970271784262447,
+            "dists": 0.0559632287390534
+          },
+          "psnr_gain_dB": 0.07303538158073053,
+          "lpips_change_percent": -0.23159459754168443,
+          "dists_change_percent": 0.10223458441811495
+        },
+        "0.1": {
+          "before": {
+            "psnr": 25.069818299421357,
+            "lpips": 0.09291982668124034,
+            "dists": 0.05232287006506791
+          },
+          "latest": {
+            "psnr": 25.1415352425003,
+            "lpips": 0.09252656087563511,
+            "dists": 0.052232855405891704
+          },
+          "psnr_gain_dB": 0.07171694307894327,
+          "lpips_change_percent": -0.4232313163414658,
+          "dists_change_percent": -0.17203692967199258
+        }
+      }
+    }
+  },
+  "historical_self_flow": {
+    "fixed": {
+      "psnr": {
+        "worst_step": 6000,
+        "worst_bd_rate_percent": 6.867595092872929,
+        "last_step": 50000,
+        "last_bd_rate_percent": -0.8702704837042756
+      },
+      "lpips": {
+        "worst_step": 6000,
+        "worst_bd_rate_percent": 1.3134006817659334,
+        "last_step": 50000,
+        "last_bd_rate_percent": -0.2055133791394808
+      },
+      "dists": {
+        "worst_step": 42000,
+        "worst_bd_rate_percent": 0.615625848395917,
+        "last_step": 50000,
+        "last_bd_rate_percent": -0.12803692968024388
+      }
+    },
+    "mixed": {
+      "psnr": {
+        "worst_step": 8000,
+        "worst_bd_rate_percent": 5.457634915901132,
+        "last_step": 36000,
+        "last_bd_rate_percent": -0.5769626153838241
+      },
+      "lpips": {
+        "worst_step": 8000,
+        "worst_bd_rate_percent": 1.1983782758028574,
+        "last_step": 36000,
+        "last_bd_rate_percent": -0.20169489842448252
+      },
+      "dists": {
+        "worst_step": 10000,
+        "worst_bd_rate_percent": 0.10216154268202843,
+        "last_step": 36000,
+        "last_bd_rate_percent": -0.5980564207588531
+      }
+    }
+  },
+  "protocol": {
+    "current": "Saved Kodak24 full-image deployment-EMA validation; six qualities; all actual packet bytes counted; two decoded checks per quality.",
+    "historical": "Archived A/B Self-Flow BD-rate relative to their own original baseline, not relative to RD-only continuation.",
+    "source_history_sha256": "046e6fd3a0de8310ed149824979214372019c8bd7e326e90d7a8c58c78ab7917",
+    "limitations": "No new GPU inference, training, independent test set, or statistical significance estimate."
+  },
+  "proposed_common_main_learning_rates": {
+    "rule": "0.2 times source D learning rate at 90k; proposed, not trained",
+    "codec_router": 6.223195833336706e-06,
+    "backend": 1.2446391666673412e-05,
+    "vae_decoder": 1.2446391666673414e-06
+  }
+}

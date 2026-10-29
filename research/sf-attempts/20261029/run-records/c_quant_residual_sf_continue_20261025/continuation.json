@@ -1,0 +1,11 @@
+{
+  "created_at": "2026-10-25T12:21:12.500520+00:00",
+  "source_run": "/data2/ls/checkpoints/c_quant_residual_sf_20261025",
+  "source_checkpoint": "/data2/ls/checkpoints/c_quant_residual_sf_20261025/joint/pre_sf.pt",
+  "resume_step": 10000,
+  "optimizer_scheduler_rng": "restore_from_checkpoint",
+  "diagnostic_policy": "warn_and_continue_original_2000_update_ramp",
+  "batch_per_gpu": 4,
+  "accumulation_steps": 2,
+  "world_size": 2
+}

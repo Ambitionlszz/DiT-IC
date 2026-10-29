@@ -1,0 +1,41 @@
+{
+  "python": "/data2/ls/code/venvs/ditic/bin/python",
+  "gpu_smoke_requested": false,
+  "packages": {
+    "torch": "2.12.0+cu126",
+    "diffusers": "0.35.2",
+    "peft": "0.18.1",
+    "compressai": "1.2.8",
+    "pyiqa": "0.1.16",
+    "lpips": "0.1.4"
+  },
+  "assets_exist": {
+    "/data2/ls/data/DIV2K_train_HR_clean": true,
+    "/data2/ls/data/Flickr2K/Flickr2K_png": true,
+    "/data2/ls/data/LSDIR": true,
+    "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png": true,
+    "/data2/ls/data/DIV2K_valid_HR": true,
+    "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt": true,
+    "/data2/ls/checkpoints/SANA/vae/diffusion_pytorch_model.safetensors": true,
+    "/data2/ls/checkpoints/SANA/transformer/diffusion_pytorch_model.safetensors": true
+  },
+  "cuda_available": true,
+  "gpus": [
+    {
+      "name": "Tesla V100S-PCIE-32GB",
+      "native_bf16": false,
+      "total_memory_bytes": 34079899648,
+      "free_memory_bytes": 5878317056,
+      "utilization_percent": 98
+    },
+    {
+      "name": "Tesla V100S-PCIE-32GB",
+      "native_bf16": false,
+      "total_memory_bytes": 34079899648,
+      "free_memory_bytes": 5888802816,
+      "utilization_percent": 98
+    }
+  ],
+  "status": "blocked",
+  "reason": "selected GPUs have less than 24 GiB free; existing workloads were left running"
+}

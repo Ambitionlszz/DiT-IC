@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "scope": "injected_nonfinite_forward_full_public_model_not_research_result",
+  "backend": "C",
+  "updates": 2,
+  "micro_seen": 8,
+  "same_batches_replayed": true,
+  "saves": [
+    {
+      "step": 0,
+      "micro_seen": 0,
+      "full_precision_retry": true
+    },
+    {
+      "step": 2,
+      "micro_seen": 8,
+      "full_precision_retry": false
+    }
+  ],
+  "max_memory_bytes": 24228594176,
+  "flags_restored": true,
+  "source": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+  "precision": "normal_fp16_with_one_fp32_update",
+  "calls": 10
+}

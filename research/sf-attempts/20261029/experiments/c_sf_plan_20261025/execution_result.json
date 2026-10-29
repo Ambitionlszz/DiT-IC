@@ -1,0 +1,43 @@
+{
+  "status": "running_verified",
+  "repository": "/data2/ls/code/DiT-IC-c-sf-residual-20261025",
+  "github_branch": "https://github.com/Ambitionlszz/DiT-IC/tree/codex/c-quant-residual-self-flow-20261025",
+  "commit": "a9d96a53e1e5d7c503e2892e970037f607466313",
+  "base_commit": "073f54eced8bff354f49f3233da9dca9aee8eccf",
+  "old_run_saved_step": 33024,
+  "new_run": "/data2/ls/checkpoints/c_quant_residual_sf_20261025",
+  "gpus": [
+    0,
+    1
+  ],
+  "batch_per_gpu": 4,
+  "accumulation": 2,
+  "effective_batch": 16,
+  "crop": 512,
+  "rd_prefix": 10000,
+  "self_flow_ramp": 2000,
+  "loss": {
+    "mse": 4,
+    "lpips": 1,
+    "dists": 1,
+    "base": 0.1,
+    "repaired": 0
+  },
+  "preflight": {
+    "passed": true,
+    "b8a1": "OOM after SF activation",
+    "b4a2_peak_allocated_gib": 22.13748788833618,
+    "packet_error": 0.0,
+    "full_two_rank_calibration": true,
+    "one_step_privileged_task_gate": false,
+    "weights_and_alpha_discarded": true
+  },
+  "log": "/data2/ls/checkpoints/c_quant_residual_sf_20261025/logs/joint.log",
+  "verified_at": "2026-10-25T03:46:32.418448+08:00",
+  "supervisor_pid": 64450,
+  "torchrun_pid": 64530,
+  "last_logged_update": 1,
+  "first_update_attempts": 1,
+  "first_update_gradient_norm": 36.443172454833984,
+  "first_update_peak_allocated_gib": 17.342429161071777
+}

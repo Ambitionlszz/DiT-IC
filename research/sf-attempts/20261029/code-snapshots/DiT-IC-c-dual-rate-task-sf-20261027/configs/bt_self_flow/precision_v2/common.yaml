@@ -1,0 +1,66 @@
+# Full precision-conditioned C frontend. Two training stages; no curriculum.
+base: ../common.yaml
+data:
+  train:
+    - ${DITIC_DATA_ROOT:-/data2/ls/data}/DIV2K_train_HR_clean
+    - ${DITIC_DATA_ROOT:-/data2/ls/data}/Flickr2K/Flickr2K_png
+    - ${DITIC_DATA_ROOT:-/data2/ls/data}/LSDIR
+    - ${DITIC_DATA_ROOT:-/data2/ls/data}/clic_professional_train_2020/clic_professional_train_2020_png
+  valid: ["${DITIC_DATA_ROOT:-/data2/ls/data}/Kodak"]
+  crop: 512
+  valid_crop: 0
+  valid_limit: 24
+  workers: 8
+model:
+  sana_path: ${DITIC_SANA_PATH:-/data2/ls/checkpoints/SANA}
+  text_path: ${DITIC_TEXT_PATH:-/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt}
+  backend: C
+  checkpoint_blocks: true
+  codec:
+    precision_conditioning: true
+    rate_likelihood: noise
+    delta_coarse: 4.0
+    delta_fine: 0.5
+quality:
+  values: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  rate_coefficients: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+objective:
+  base_weight: 1.0
+  repaired_weight: 0.0
+optimizer:
+  codec_lr: 0.0001
+  joint_codec_lr: 0.0001
+  backend_lr: 0.0001
+  vae_lr: 0.0001
+  aux_lr: 0.001
+  max_grad_norm: 4.0
+  warmup: 0
+  schedule: constant
+image_loss:
+  mse_weight: 4.0
+  lpips_weight: 1.0
+  dists_weight: 1.0
+self_flow:
+  enabled: false
+  mixed_sampling: false
+train:
+  phase: codec
+  steps: 50000
+  output: ${BT_RUN_ROOT:-checkpoints/c_precision_v2}/common
+  batch_size: 8
+  accumulation_steps: 1
+  effective_batch: 16
+  seed: 903
+  router_uniform_steps: 0
+  router_ramp_steps: 0
+  data_scale_samples: 512
+  calibration_samples: 512
+  validation_actual_bpp: true
+  packet_samples: 2
+  eval_every: 2000
+  full_decode_every: 10000
+  save_every: 10000
+  keep_last_checkpoints: 2
+  log_every: 100
+  tensorboard: true
+  require_quality_span: true

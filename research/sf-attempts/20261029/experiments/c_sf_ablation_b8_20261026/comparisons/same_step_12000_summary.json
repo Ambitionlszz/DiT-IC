@@ -1,0 +1,158 @@
+{
+  "source_C": "/home/ls/.codex/attachments/9c35c1ef-9239-4a1b-8838-a7fe0be8e577/all_quality_points.csv",
+  "source_SF": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/c_sf/joint/validation_0012000.json",
+  "step": 12000,
+  "same_q": [
+    {
+      "q": 0.0,
+      "C_bpp": 0.017534044881661732,
+      "SF_bpp": 0.0177747942507267,
+      "bpp_change_percent": 1.3730395393065198,
+      "C_psnr": 21.744349161783855,
+      "SF_psnr": 21.751602172851562,
+      "C_lpips": 0.2227988044420878,
+      "SF_lpips": 0.22160164515177408,
+      "C_dists": 0.11831468343734741,
+      "SF_dists": 0.11958066622416179,
+      "C_RD": 0.7746251424153646,
+      "SF_RD": 0.7778549989064535,
+      "RD_change_percent": 0.4169573532067261,
+      "delta_psnr": 0.007253011067707149,
+      "delta_lpips": -0.0011971592903137207,
+      "delta_dists": 0.0012659827868143764,
+      "delta_ms_ssim": 0.0011152426401774829
+    },
+    {
+      "q": 0.2,
+      "C_bpp": 0.030147974689801533,
+      "SF_bpp": 0.030327690144379933,
+      "bpp_change_percent": 0.5961112029167159,
+      "C_psnr": 22.876708984375,
+      "SF_psnr": 22.873565673828125,
+      "C_lpips": 0.1688587268193563,
+      "SF_lpips": 0.16807103157043457,
+      "C_dists": 0.09020118912061055,
+      "SF_dists": 0.09125501910845439,
+      "C_RD": 0.6156049172083536,
+      "SF_RD": 0.6173998912175497,
+      "RD_change_percent": 0.2915788940309083,
+      "delta_psnr": -0.003143310546875,
+      "delta_lpips": -0.0007876952489217215,
+      "delta_dists": 0.0010538299878438406,
+      "delta_ms_ssim": 0.00033815701802564213
+    },
+    {
+      "q": 0.4,
+      "C_bpp": 0.045545791586240135,
+      "SF_bpp": 0.04570176204045614,
+      "bpp_change_percent": 0.3424475649318248,
+      "C_psnr": 23.851707458496094,
+      "SF_psnr": 23.85352834065755,
+      "C_lpips": 0.13400036096572876,
+      "SF_lpips": 0.13322097063064575,
+      "C_dists": 0.07302282253901164,
+      "SF_dists": 0.07277088363965352,
+      "C_RD": 0.4793018102645874,
+      "SF_RD": 0.47884217898050946,
+      "RD_change_percent": -0.09589600419498412,
+      "delta_psnr": 0.001820882161457149,
+      "delta_lpips": -0.0007793903350830078,
+      "delta_dists": -0.00025193889935812286,
+      "delta_ms_ssim": 0.00040260950724280153
+    },
+    {
+      "q": 0.6,
+      "C_bpp": 0.061709935466448464,
+      "SF_bpp": 0.06192017594973246,
+      "bpp_change_percent": 0.34069146515038895,
+      "C_psnr": 24.559036254882812,
+      "SF_psnr": 24.545392354329426,
+      "C_lpips": 0.11221480369567871,
+      "SF_lpips": 0.11240196228027344,
+      "C_dists": 0.06287424763043721,
+      "SF_dists": 0.06222768624623617,
+      "C_RD": 0.37330520153045654,
+      "SF_RD": 0.3733810583750407,
+      "RD_change_percent": 0.020320328855105707,
+      "delta_psnr": -0.013643900553386601,
+      "delta_lpips": 0.00018715858459472656,
+      "delta_dists": -0.0006465613842010429,
+      "delta_ms_ssim": 0.00028967857360839844
+    },
+    {
+      "q": 0.8,
+      "C_bpp": 0.07811482747395833,
+      "SF_bpp": 0.07830810050169627,
+      "bpp_change_percent": 0.2474216918707084,
+      "C_psnr": 25.014912923177082,
+      "SF_psnr": 24.993573506673176,
+      "C_lpips": 0.1011741856733958,
+      "SF_lpips": 0.10164568821589152,
+      "C_dists": 0.057137876749038696,
+      "SF_dists": 0.05662481486797333,
+      "C_RD": 0.3031298716862996,
+      "SF_RD": 0.30345286925633747,
+      "RD_change_percent": 0.10655418690379559,
+      "delta_psnr": -0.02133941650390625,
+      "delta_lpips": 0.00047150254249572754,
+      "delta_dists": -0.0005130618810653687,
+      "delta_ms_ssim": 0.00010021527608228276
+    },
+    {
+      "q": 1.0,
+      "C_bpp": 0.09494019548098247,
+      "SF_bpp": 0.09516399105389912,
+      "bpp_change_percent": 0.23572267971734284,
+      "C_psnr": 25.28473409016927,
+      "SF_psnr": 25.283421834309895,
+      "C_lpips": 0.095551202694575,
+      "SF_lpips": 0.0955355962117513,
+      "C_dists": 0.053567747275034584,
+      "SF_dists": 0.05351298054059347,
+      "C_RD": 0.2590211828549703,
+      "SF_RD": 0.25909386078516644,
+      "RD_change_percent": 0.028058682071896435,
+      "delta_psnr": -0.001312255859375,
+      "delta_lpips": -1.560648282369903e-05,
+      "delta_dists": -5.476673444111679e-05,
+      "delta_ms_ssim": 0.00018111864725744997
+    }
+  ],
+  "matched_bpp": {
+    "method": "Piecewise linear interpolation in log(total bpp), 101 evenly spaced log-rate points within measured overlap; no extrapolation. This is a curve comparison, not a significance test.",
+    "range_bpp": [
+      0.0177747942507267,
+      0.09494019548098247
+    ],
+    "mean_delta": {
+      "psnr": -0.016167610015279662,
+      "lpips": -9.261282880608059e-06,
+      "dists": 0.0005222111061064803,
+      "ms_ssim": -0.00014548208880280544
+    },
+    "delta_range": {
+      "psnr": [
+        -0.025905811767003684,
+        -0.0048128058968544
+      ],
+      "lpips": [
+        -0.000500299579724417,
+        0.000578563697781434
+      ],
+      "dists": [
+        -0.0005597685938277253,
+        0.0019733669854851144
+      ],
+      "ms_ssim": [
+        -0.0004359710652432902,
+        9.03404932043328e-05
+      ]
+    }
+  },
+  "notes": [
+    "SF ramp ended at 12K; SF began after 10K checkpoint.",
+    "Both have effective batch 8; source C used BF16 and new C+SF uses FP16 with GradScaler on V100.",
+    "User reports unchanged training images with only path/file layout changes; exact continuation data order across servers is not established.",
+    "rate_actual is the 24-image total rate including hyperlatents, allocation and header. packet_bpp at 12K only covers the two packet-decode check samples."
+  ]
+}

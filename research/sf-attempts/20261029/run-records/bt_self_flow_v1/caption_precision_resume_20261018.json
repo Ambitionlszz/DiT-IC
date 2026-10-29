@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-10-18T01:32:26.610261+00:00",
+  "old_commit": "9ca4514b4161621bed0528953f80de2848ed8b67",
+  "new_commit": "552c3fb8e75e5444b6c978f57b5f63b56e84584c",
+  "reason": "caption_projection_linear_2_fp16_overflow_confirmed_in_both_models",
+  "config_changes": {},
+  "resume_state": {
+    "C": {
+      "step": 15727,
+      "micro_seen": 62908,
+      "scheduler_epoch": 15727,
+      "full_precision_retry": false,
+      "raw_finite": true
+    },
+    "D": {
+      "step": 18079,
+      "micro_seen": 72316,
+      "scheduler_epoch": 18079,
+      "full_precision_retry": false,
+      "raw_finite": true
+    }
+  },
+  "preserve_optimizer_ema_rng_and_data": true,
+  "reset_to_shared_initialization": false,
+  "archived_metadata": "/data2/ls/checkpoints/bt_self_flow_v1/history_caption_fix_20261018",
+  "acceptance": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261018/acceptance.json",
+  "previous_nonfinite_counts": {
+    "C": 107,
+    "D": 25
+  }
+}

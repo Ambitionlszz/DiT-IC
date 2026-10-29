@@ -1,0 +1,27 @@
+{
+  "scope": "actual LPIPS alex/DISTS weights and differentiable image-loss path",
+  "devices": {
+    "cpu": {
+      "metrics": {
+        "mse": 0.6695898175239563,
+        "lpips": 0.10460951179265976,
+        "dists": 0.20347702503204346,
+        "psnr": 7.762511253356934
+      },
+      "loss": 1.545527696609497,
+      "gradient_finite": true,
+      "gradient_abs_sum": 4.883583068847656
+    },
+    "cuda:1": {
+      "metrics": {
+        "mse": 0.6653165221214294,
+        "lpips": 0.11673920601606369,
+        "dists": 0.20204311609268188,
+        "psnr": 7.790317058563232
+      },
+      "loss": 1.548393726348877,
+      "gradient_finite": true,
+      "gradient_abs_sum": 8.500438690185547
+    }
+  }
+}

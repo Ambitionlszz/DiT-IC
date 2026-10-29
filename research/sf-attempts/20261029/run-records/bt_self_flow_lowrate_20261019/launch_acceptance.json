@@ -1,0 +1,21 @@
+{
+  "verified_at_unix": 1792403869.9781394,
+  "supervisor_pid": 30942,
+  "torchrun_pid": 30957,
+  "gpu_trainers": [
+    30963,
+    30964
+  ],
+  "initialization": "fresh_codec",
+  "warmup": "two_gpu_ddp_50k",
+  "batch_per_gpu": 32,
+  "effective_batch": 64,
+  "joint_jobs_after_warmup": {
+    "GPU0": "C_aux_200k",
+    "GPU1": "C_no_latent_200k"
+  },
+  "commit": "5ccc75e5135cd4b3dd18891b136b42b2fe737c83",
+  "tmux": "bt-self-flow-lowrate-c",
+  "old_C_paused_step": 36944,
+  "old_D_retired_step": 38403
+}

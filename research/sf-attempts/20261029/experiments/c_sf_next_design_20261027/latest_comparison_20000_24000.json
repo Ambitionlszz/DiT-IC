@@ -1,0 +1,92 @@
+[
+  {
+    "step": 20000,
+    "same_q_mean_bpp_change_percent": 0.2866863197064455,
+    "aggregate_RD_change_percent": 0.16576678309645487,
+    "matched_bpp": {
+      "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+      "range": [
+        0.0171949602663517,
+        0.09546575943628947
+      ],
+      "mean_delta": {
+        "psnr": -0.003576588855042759,
+        "lpips": 0.000336094526821334,
+        "dists": 0.0005537809814513785,
+        "ms_ssim": -0.00023767885725074861
+      },
+      "low_third_mean_delta": {
+        "psnr": 0.005623869302395857,
+        "lpips": 0.0007616523707805761,
+        "dists": 0.000590280689915691,
+        "ms_ssim": -0.0008227764755731582
+      },
+      "high_third_mean_delta": {
+        "psnr": -0.006026760932496407,
+        "lpips": -0.00012115842951378675,
+        "dists": 0.0005730870074034123,
+        "ms_ssim": 0.0002725349751559143
+      }
+    }
+  },
+  {
+    "step": 22000,
+    "same_q_mean_bpp_change_percent": -3.0076907659997785,
+    "aggregate_RD_change_percent": -0.9552633010359246,
+    "matched_bpp": {
+      "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+      "range": [
+        0.0175204798579216,
+        0.09576754768689473
+      ],
+      "mean_delta": {
+        "psnr": 0.07857714320617701,
+        "lpips": -0.001930693785474061,
+        "dists": -0.0006684466916907283,
+        "ms_ssim": 0.0029995941902176276
+      },
+      "low_third_mean_delta": {
+        "psnr": 0.09804452332870503,
+        "lpips": -0.003242352223982904,
+        "dists": -0.0005857573583342794,
+        "ms_ssim": 0.0039250532522485835
+      },
+      "high_third_mean_delta": {
+        "psnr": 0.05992822530526814,
+        "lpips": -0.000750129479384469,
+        "dists": -0.0004127900008600403,
+        "ms_ssim": 0.0022145313729230063
+      }
+    }
+  },
+  {
+    "step": 24000,
+    "same_q_mean_bpp_change_percent": -0.19611149115476198,
+    "aggregate_RD_change_percent": -0.014659066866085091,
+    "matched_bpp": {
+      "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+      "range": [
+        0.017120361328125,
+        0.0958726704120636
+      ],
+      "mean_delta": {
+        "psnr": 0.008084533350097543,
+        "lpips": -0.00023768015400437486,
+        "dists": -6.329528585847255e-05,
+        "ms_ssim": 0.00037763992075983197
+      },
+      "low_third_mean_delta": {
+        "psnr": 0.004376821105387788,
+        "lpips": -0.00027250720261179606,
+        "dists": -0.000648083115810053,
+        "ms_ssim": 0.0003816739952344315
+      },
+      "high_third_mean_delta": {
+        "psnr": 0.013123750728956655,
+        "lpips": 0.00025064626587103535,
+        "dists": 0.0004924126785287128,
+        "ms_ssim": 0.0003211382321792973
+      }
+    }
+  }
+]

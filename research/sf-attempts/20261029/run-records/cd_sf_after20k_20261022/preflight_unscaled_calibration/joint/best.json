@@ -1,0 +1,13 @@
+{
+  "step": 6,
+  "score": 0.861804336309433,
+  "metric": "mean_six_quality_validation_rd_loss",
+  "weights": "deployment_ema",
+  "checkpoint": "0000006.pt",
+  "validation_identity": {
+    "dataset_fingerprint": "edfd1af58b91644fd617856965eda5649038cc63a6a4835c6d3c32aee87298ba",
+    "images": 1,
+    "crop": 512,
+    "actual_rate": true
+  }
+}

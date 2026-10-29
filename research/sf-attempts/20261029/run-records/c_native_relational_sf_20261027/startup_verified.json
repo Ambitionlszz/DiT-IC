@@ -1,0 +1,122 @@
+{
+  "verified_at": "2026-10-27T23:14:06.840276+08:00",
+  "status": "training",
+  "commit": "279867bed45cdb6abbbc93f9d22bf6321b148671",
+  "github": "https://github.com/Ambitionlszz/DiT-IC/commit/279867bed45cdb6abbbc93f9d22bf6321b148671",
+  "supervisor_pid": 827987,
+  "torchrun_pid": 828052,
+  "trainer_pids": [
+    828062,
+    828063
+  ],
+  "gpus": [
+    {
+      "index": 0,
+      "name": "Tesla V100S-PCIE-32GB",
+      "used_MiB": 22026,
+      "total_MiB": 32768,
+      "utilization_percent": 100
+    },
+    {
+      "index": 1,
+      "name": "Tesla V100S-PCIE-32GB",
+      "used_MiB": 22024,
+      "total_MiB": 32768,
+      "utilization_percent": 97
+    }
+  ],
+  "latest_logged_step": 10009,
+  "latest_update": {
+    "step": 10009,
+    "attempts": 10009,
+    "lambda_low": 0.8,
+    "mixed": false,
+    "transition": 1.0,
+    "grad_norm": 1.000605821609497,
+    "seconds_per_update": 13.41854763601441,
+    "data_wait_seconds": 0.18033447995549068,
+    "steady_seconds_per_update": 13.41854763601441,
+    "max_memory_bytes": 20604473344,
+    "q": 0.8,
+    "rate_coefficient": 1.0,
+    "learning_rates": {
+      "vae": 0.0001,
+      "backend": 0.0001,
+      "codec": 0.0001
+    },
+    "mse": 0.026319226250052452,
+    "lpips": 0.113305002450943,
+    "dists": 0.0780046209692955,
+    "psnr": 21.95587158203125,
+    "base": 0.050086043775081635,
+    "latent": 0.05392080917954445,
+    "rate_est": 0.09062883257865906,
+    "weighted_base": 0.0050086043775081635,
+    "weighted_repaired": 0.0,
+    "weighted_rate": 0.09062883257865906,
+    "weighted_mse": 0.10527690500020981,
+    "weighted_lpips": 0.113305002450943,
+    "weighted_dists": 0.0780046209692955,
+    "sf_native": 0.03482819348573685,
+    "sf_loss": 0.03488181158900261,
+    "sf_mixed": 0.03493542969226837,
+    "sf_weight": 0.0044999998062849045,
+    "sf_native_view_weight": 0.5,
+    "sf_q_b": 0.20000000298023224,
+    "sf_mixed_fraction": 0.25,
+    "sf_teacher_spatial_std": 5.885457515716553,
+    "sf_native_spatial_std": 3.2647790908813477,
+    "precision": {
+      "min_step": 0.5131669044494629,
+      "max_step": 1.1651661396026611,
+      "geometric_mean_step": 0.7578582763671875,
+      "last_micro_allocation_histogram": [
+        0,
+        0,
+        37,
+        35,
+        81,
+        93,
+        10,
+        0
+      ]
+    },
+    "gradient_norms_after_clip": {
+      "vae": 0.11685141175985336,
+      "DiT": 0.06383836269378662,
+      "g_a": 0.4575090706348419,
+      "g_s": 0.864035427570343,
+      "h_a": 0.00578799843788147,
+      "h_s": 0.0021427148021757603,
+      "adapter_in": 0.005316948052495718,
+      "g_c": 0.0036482035648077726,
+      "adapter_out": 0.007494875695556402,
+      "LRP": 0.0088505195453763,
+      "entropy_bottleneck": 536.7644653320312,
+      "router": 0.012726802378892899,
+      "precision_embedding": 0.054649706929922104,
+      "analysis_precision": 0.09727388620376587,
+      "synthesis_precision": 0.12159550189971924,
+      "text_proj": 0.0001593675115145743
+    }
+  },
+  "segment_target": 20000,
+  "local_batch": 4,
+  "accumulation": 1,
+  "effective_batch": 8,
+  "crop": 512,
+  "teacher": "one frozen EMA DiT prefix20 per rank",
+  "source_step": 10000,
+  "resume_verified_from_step": 10008,
+  "full_sf_weight_at_step": 12000,
+  "related_checks_passed": 62,
+  "gpu_full_weight_preflight_passed": true,
+  "numerical_issues": {
+    "Traceback": 0,
+    "CUDA out of memory": 0,
+    "\"nonfinite_forward\"": 0,
+    "\"amp_skipped_update\"": 0
+  },
+  "checkpoint_verification": "/data2/ls/checkpoints/c_native_relational_sf_20261027/smoke_checkpoint_verified.json",
+  "previous_run_saved_step": 30662
+}

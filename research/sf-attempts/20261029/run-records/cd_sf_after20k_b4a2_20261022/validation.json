@@ -1,0 +1,64 @@
+{
+  "updated_at": "2026-10-22T14:48:40.155842+00:00",
+  "batch_migration_unit_checks_passed": 4,
+  "previous_method_checks": "/data2/ls/checkpoints/cd_sf_after20k_20261022/validation.json",
+  "gpu_b4_preflight": "passed",
+  "source": "/data2/ls/code/DiT-IC-self-flow-b4-20261022",
+  "previous_run": "/data2/ls/checkpoints/cd_sf_after20k_20261022",
+  "migration_verification": {
+    "passed": true,
+    "step": 472,
+    "tensor_values_compared": 5200,
+    "preserved_fields": [
+      "raw",
+      "ema",
+      "optimizer",
+      "aux_optimizer",
+      "scheduler",
+      "scaler",
+      "rng_by_rank",
+      "step",
+      "attempts",
+      "rep_weight",
+      "calibration",
+      "assets",
+      "source_sha256",
+      "validation_best",
+      "full_precision_retry",
+      "teacher_initialized_step"
+    ],
+    "old_micro_seen": 944,
+    "new_micro_seen": 472,
+    "global_images_seen": 3776,
+    "effective_batch": 16
+  },
+  "sf_active_memory_observed_mib": [
+    28386,
+    28344
+  ],
+  "preflight_verification": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/preflight/verification.json",
+  "peak_memory_bytes": 27843873280,
+  "preflight_successful_updates": 6,
+  "preflight_amp_skips": 3,
+  "production_launch_verified": {
+    "checked_at": "2026-10-22T14:51:17.030601+00:00",
+    "supervisor_pid": 682443,
+    "torchrun_pid": 682514,
+    "first_resumed_step": 473,
+    "first_step_amp_skips": 0,
+    "batch_size_per_gpu": 4,
+    "accumulation_steps": 2,
+    "world_size": 2,
+    "effective_batch": 16,
+    "crop": 512,
+    "gpu_memory_mib_observed": [
+      21758,
+      21758
+    ],
+    "gpu_utilization_observed": [
+      100,
+      100
+    ],
+    "finite_loss_and_gradient": true
+  }
+}

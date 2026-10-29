@@ -1,0 +1,50 @@
+{
+  "requested_at": "2026-10-20T16:22:13.193909+08:00",
+  "old_pipeline": {
+    "supervisor_pid": 58928,
+    "started_at": "2026-10-19T13:47:29.761501+00:00",
+    "status": "paired_training",
+    "jobs": {
+      "c_joint": {
+        "pid": 58984,
+        "gpus": [
+          "0"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+        "started_at": "2026-10-19T13:47:29.767286+00:00",
+        "status": "running"
+      },
+      "d_joint": {
+        "pid": 58985,
+        "gpus": [
+          "1"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+        "started_at": "2026-10-19T13:47:29.771876+00:00",
+        "status": "running"
+      }
+    },
+    "updated_at": "2026-10-19T13:47:29.771895+00:00"
+  },
+  "signal": "SIGTERM to verified supervisor; trainers save at completed update boundaries",
+  "cpu_tests_passed": 24,
+  "cuda_tests_passed": 6,
+  "new_commit": "e86a8fa",
+  "production_start_requires_exact_continuation_test": true
+}

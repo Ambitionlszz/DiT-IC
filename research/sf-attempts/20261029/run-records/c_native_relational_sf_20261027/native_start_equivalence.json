@@ -1,0 +1,15 @@
+{
+  "reference": "old experiment native C at source10K before training",
+  "maximum_absolute_difference": {
+    "psnr": 0.0,
+    "lpips": 9.934107481068821e-09,
+    "dists": 1.986821492050428e-08,
+    "rate_actual": 0.0
+  },
+  "external_pure_c_csv_at10k": {
+    "psnr": 0.0087890625,
+    "lpips": 0.00029702981313070587,
+    "dists": 0.0006041725476582799,
+    "rate_actual": 1.3563781976699829e-05
+  }
+}

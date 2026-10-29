@@ -1,0 +1,9 @@
+{
+  "archive": "/data2/ls/checkpoints/bt_self_flow_stopped_eval_20261022/real_packet_results.tar.gz",
+  "bytes": 5378160,
+  "sha256": "117c660e48a01f0b42e4e3ff102458f61e04be5a441de83d8b0456ee52770474",
+  "packets": 288,
+  "representative_decoded_pngs": 6,
+  "float_image_metric_rows": 288,
+  "full_png_archive_local": "/tmp/bt-stopped-real-packet-results-20261022.tar.gz"
+}

@@ -1,0 +1,17 @@
+{
+  "scope": "CPU toy algebra/autograd checks only. No real C/SANA forward, GPU memory measurement, DDP or training test.",
+  "checks": {
+    "precision_views": "PASS at all 6 q: both coarse/fine regions exist; min-step teacher never uses a coarser step than student, and preserves student precision outside the changed mask. Step ordering is not a proof of nested information or improved images.",
+    "recentring_caveat": "CONFIRMED: some selected cells need not become coarser after mean subtraction; the actual step map determines changes. Geometric mean preserved, actual bitrate not guaranteed.",
+    "student_packet_codes": "PASS: exact integer 0..7 codes, existing 3-bit field, no added mask field",
+    "loss_specific_gradients": "PASS: detached coarse AND precision in SF path give no codec gradient; shared prefix, mean predictor and precision embedding receive SF gradients. Actual reconstruction gives codec and consumed-mean-head gradients.",
+    "zero_initialization": "PASS in toy model: zero residual mean reproduces original output exactly",
+    "variance_numerics": "PASS in toy FP32 calculation: NLL finite at floor; large variance penalized. Not evidence of calibrated uncertainty or RD benefit."
+  },
+  "mask_example": {
+    "selected_cells": 32,
+    "actually_coarsened_selected_cells": 27,
+    "selected_cells_not_coarsened": 5
+  },
+  "teacher_views_share_one_parameter_copy": true
+}

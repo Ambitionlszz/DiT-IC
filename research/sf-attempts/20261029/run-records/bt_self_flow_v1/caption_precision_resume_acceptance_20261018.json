@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-10-18T01:34:04.021668+00:00",
+  "commit": "552c3fb8e75e5444b6c978f57b5f63b56e84584c",
+  "status": "paired_training",
+  "backends": {
+    "C": {
+      "resumed_from": 15727,
+      "first_completed_update": {
+        "step": 15728,
+        "attempts": 15838,
+        "lambda_low": 0.2819409475852598,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.4696866273880005,
+        "seconds_per_update": 13.397401266003726,
+        "steady_seconds_per_update": 13.397401266003726,
+        "max_memory_bytes": 23943188480,
+        "mse": 0.038674235343933105,
+        "lpips": 0.1444680392742157,
+        "dists": 0.09123188257217407,
+        "psnr": 21.773086547851562,
+        "base": 0.08551158756017685,
+        "latent": 0.08429187536239624,
+        "rate_est": 0.05962646007537842
+      },
+      "latest_logged_update": 15728,
+      "new_nonfinite_forwards": 0,
+      "pid": 22922,
+      "gpu": "0"
+    },
+    "D": {
+      "resumed_from": 18079,
+      "first_completed_update": {
+        "step": 18080,
+        "attempts": 18109,
+        "lambda_low": 0.21174944686045624,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.1329584121704102,
+        "seconds_per_update": 13.40687856200384,
+        "steady_seconds_per_update": 13.40687856200384,
+        "max_memory_bytes": 24941327360,
+        "mse": 0.040923938155174255,
+        "lpips": 0.14136040210723877,
+        "dists": 0.08862683922052383,
+        "psnr": 20.961402893066406,
+        "base": 0.10630999505519867,
+        "latent": 0.10773473232984543,
+        "rate_est": 0.05619499087333679
+      },
+      "latest_logged_update": 18080,
+      "new_nonfinite_forwards": 0,
+      "pid": 22923,
+      "gpu": "1"
+    }
+  }
+}

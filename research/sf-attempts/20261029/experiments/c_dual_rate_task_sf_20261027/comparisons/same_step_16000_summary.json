@@ -1,0 +1,172 @@
+{
+  "step": 16000,
+  "source_C": "/home/ls/.codex/attachments/9c35c1ef-9239-4a1b-8838-a7fe0be8e577/all_quality_points.csv",
+  "source_SF": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/validation_0016000.json",
+  "same_q": [
+    {
+      "q": 0.0,
+      "C_bpp": 0.0173916295170784,
+      "SF_bpp": 0.017252602924903233,
+      "bpp_change_percent": -0.7993879586650876,
+      "C_psnr": 21.784937540690105,
+      "C_lpips": 0.220689594745636,
+      "C_dists": 0.11850494146347046,
+      "C_ms_ssim": 0.7165926297505697,
+      "SF_psnr": 21.77757517496745,
+      "SF_lpips": 0.2203355630238851,
+      "SF_dists": 0.11799450715382893,
+      "SF_ms_ssim": 0.7154171466827393,
+      "delta_psnr": -0.00736236572265625,
+      "delta_lpips": -0.00035403172175088593,
+      "delta_dists": -0.0005104343096415248,
+      "delta_ms_ssim": -0.0011754830678304407,
+      "C_RD": 0.7696402867635092,
+      "SF_RD": 0.7664945125579834
+    },
+    {
+      "q": 0.2,
+      "C_bpp": 0.029832623898983,
+      "SF_bpp": 0.0297003835439682,
+      "bpp_change_percent": -0.4432743008546014,
+      "C_psnr": 22.914655049641926,
+      "C_lpips": 0.16664047042528787,
+      "C_dists": 0.0898822546005249,
+      "C_ms_ssim": 0.7783563137054443,
+      "SF_psnr": 22.90704854329427,
+      "SF_lpips": 0.16677614053090414,
+      "SF_dists": 0.09128313263257344,
+      "SF_ms_ssim": 0.7787307103474935,
+      "delta_psnr": -0.00760650634765625,
+      "delta_lpips": 0.00013567010561627013,
+      "delta_dists": 0.0014008780320485387,
+      "delta_ms_ssim": 0.00037439664204919065,
+      "C_RD": 0.6102362473805746,
+      "SF_RD": 0.6108638445536295
+    },
+    {
+      "q": 0.4,
+      "C_bpp": 0.0452406108379364,
+      "SF_bpp": 0.0452033132314682,
+      "bpp_change_percent": -0.08244275613742413,
+      "C_psnr": 23.883402506510418,
+      "C_lpips": 0.1325577199459076,
+      "C_dists": 0.07312002778053284,
+      "C_ms_ssim": 0.8228878974914551,
+      "SF_psnr": 23.889536539713543,
+      "SF_lpips": 0.1330775519212087,
+      "SF_dists": 0.07295785347620647,
+      "SF_ms_ssim": 0.8231306870778402,
+      "delta_psnr": 0.006134033203125,
+      "delta_lpips": 0.000519831975301116,
+      "delta_dists": -0.0001621743043263707,
+      "delta_ms_ssim": 0.00024278958638512815,
+      "C_RD": 0.4764030377070109,
+      "SF_RD": 0.4766181707382202
+    },
+    {
+      "q": 0.6,
+      "C_bpp": 0.061564127604166664,
+      "SF_bpp": 0.06160821517308553,
+      "bpp_change_percent": 0.07161243184072852,
+      "C_psnr": 24.577423095703125,
+      "C_lpips": 0.11135469873746236,
+      "C_dists": 0.061926970879236855,
+      "C_ms_ssim": 0.8508625825246176,
+      "SF_psnr": 24.565383911132812,
+      "SF_lpips": 0.11193933089574178,
+      "SF_dists": 0.06235915422439575,
+      "SF_ms_ssim": 0.8504823048909506,
+      "delta_psnr": -0.0120391845703125,
+      "delta_lpips": 0.0005846321582794189,
+      "delta_dists": 0.00043218334515889717,
+      "delta_ms_ssim": -0.0003802776336669922,
+      "C_RD": 0.3711607853571574,
+      "SF_RD": 0.372208833694458
+    },
+    {
+      "q": 0.8,
+      "C_bpp": 0.07816908260186513,
+      "SF_bpp": 0.07823011775811513,
+      "bpp_change_percent": 0.07808094225802975,
+      "C_psnr": 25.045618693033855,
+      "C_lpips": 0.10052407781283061,
+      "C_dists": 0.056476473808288574,
+      "C_ms_ssim": 0.8665216763814291,
+      "SF_psnr": 25.02930196126302,
+      "SF_lpips": 0.10042637586593628,
+      "SF_dists": 0.05614130695660909,
+      "SF_ms_ssim": 0.8664049307505289,
+      "delta_psnr": -0.016316731770835702,
+      "delta_lpips": -9.770194689433243e-05,
+      "delta_dists": -0.00033516685167948174,
+      "delta_ms_ssim": -0.00011674563090013912,
+      "C_RD": 0.30147188901901245,
+      "SF_RD": 0.30093705654144287
+    },
+    {
+      "q": 1.0,
+      "C_bpp": 0.09513347347577412,
+      "SF_bpp": 0.09521484375,
+      "bpp_change_percent": 0.08553274809901534,
+      "C_psnr": 25.324920654296875,
+      "C_lpips": 0.0943222443262736,
+      "C_dists": 0.05395327011744181,
+      "C_ms_ssim": 0.8751842975616455,
+      "SF_psnr": 25.311808268229168,
+      "SF_lpips": 0.09424078464508057,
+      "SF_dists": 0.053265586495399475,
+      "SF_ms_ssim": 0.8751502831776937,
+      "delta_psnr": -0.013112386067707149,
+      "delta_lpips": -8.145968119303848e-05,
+      "delta_dists": -0.0006876836220423357,
+      "delta_ms_ssim": -3.401438395178591e-05,
+      "C_RD": 0.25778770446777344,
+      "SF_RD": 0.2569281856218974
+    }
+  ],
+  "same_q_mean_bpp_change_percent": -0.18164648224322325,
+  "same_q_bpp_change_range_percent": [
+    -0.7993879586650876,
+    0.08553274809901534
+  ],
+  "same_q_mean_delta": {
+    "psnr": -0.008383856879340476,
+    "lpips": 0.00011782348155975804,
+    "dists": 2.2933714919620474e-05,
+    "ms_ssim": -0.00018155574798583984
+  },
+  "C_mean_RD": 0.46444999178250634,
+  "SF_mean_RD": 0.4640084339512719,
+  "aggregate_RD_change_percent": -0.09507112478133184,
+  "matched_bpp": {
+    "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+    "range": [
+      0.0173916295170784,
+      0.09513347347577412
+    ],
+    "mean_delta": {
+      "psnr": -0.0014845815188862031,
+      "lpips": -7.505361556028754e-05,
+      "dists": 0.0001343116180496007,
+      "ms_ssim": 0.00017748794906827649
+    },
+    "low_third_mean_delta": {
+      "psnr": 0.0054157343914696884,
+      "lpips": -0.0007025190497542133,
+      "dists": 0.00017562561308434588,
+      "ms_ssim": 0.0003429855676339806
+    },
+    "high_third_mean_delta": {
+      "psnr": -0.014142573163411812,
+      "lpips": 0.00023152663466301647,
+      "dists": -7.838073176603076e-05,
+      "ms_ssim": -0.0002270356174408856
+    }
+  },
+  "limitations": [
+    "One run and Kodak24 mean curves; no statistical significance established.",
+    "C BF16 versus SF FP16+GradScaler on V100; user confirmed same image set but directory layout differs.",
+    "New SF also adds a zero-initialized quality conditioner and auxiliary image supervision; gains cannot be attributed to alignment alone.",
+    "Use rate_actual on all24 images with side information; packet_bpp may cover only two decoded examples."
+  ]
+}

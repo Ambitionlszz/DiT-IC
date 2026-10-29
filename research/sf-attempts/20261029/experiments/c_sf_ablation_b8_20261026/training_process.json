@@ -1,0 +1,16 @@
+{
+  "pid": 306746,
+  "started_at": 1793001778.00702,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_c_sf_ablation.py",
+    "--checkpoint",
+    "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+    "--root",
+    "/data2/ls/checkpoints/c_sf_ablation_b8_20261026",
+    "--gpus",
+    "0,1"
+  ],
+  "repository": "/data2/ls/code/DiT-IC-c-sf-ablation-b8-20261026",
+  "commit": "2a59bac"
+}

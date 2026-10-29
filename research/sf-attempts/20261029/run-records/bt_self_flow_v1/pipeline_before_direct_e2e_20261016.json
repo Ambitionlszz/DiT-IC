@@ -1,0 +1,30 @@
+{
+  "supervisor_pid": 27456,
+  "started_at": "2026-10-16T04:58:34.237885+00:00",
+  "status": "common_frontend",
+  "jobs": {
+    "common": {
+      "pid": 27577,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/common.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/common/0040000.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/common.log",
+      "started_at": "2026-10-16T04:58:34.243818+00:00",
+      "status": "running"
+    }
+  },
+  "updated_at": "2026-10-16T04:58:34.243830+00:00"
+}

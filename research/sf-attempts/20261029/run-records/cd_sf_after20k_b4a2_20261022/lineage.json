@@ -1,0 +1,6 @@
+{
+  "previous_run": "/data2/ls/checkpoints/cd_sf_after20k_20261022",
+  "source_checkpoint": "/data2/ls/checkpoints/cd_sf_after20k_20261022/joint/paused.pt",
+  "continued_step": 472,
+  "global_images_seen": 3776
+}

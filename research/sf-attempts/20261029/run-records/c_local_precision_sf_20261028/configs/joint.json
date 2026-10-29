@@ -1,0 +1,120 @@
+{
+  "data": {
+    "train": [
+      "/data2/ls/data/DIV2K_train_HR_clean",
+      "/data2/ls/data/Flickr2K/Flickr2K_png",
+      "/data2/ls/data/LSDIR",
+      "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+    ],
+    "valid": [
+      "/data2/ls/data/Kodak"
+    ],
+    "crop": 512,
+    "valid_crop": 0,
+    "workers": 8,
+    "valid_limit": 24
+  },
+  "model": {
+    "sana_path": "/data2/ls/checkpoints/SANA",
+    "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+    "backend": "C",
+    "dit_rank": 128,
+    "vae_rank": 32,
+    "checkpoint_blocks": true,
+    "codec": {
+      "ch_emd": 32,
+      "channel": 320,
+      "channel_out": 32,
+      "delta_coarse": 4.0,
+      "delta_fine": 0.5,
+      "kappa": 0.6931471805599453,
+      "precision_conditioning": true,
+      "rate_likelihood": "noise",
+      "local_precision_protocol": true
+    }
+  },
+  "optimizer": {
+    "codec_lr": 0.0001,
+    "joint_codec_lr": 0.0001,
+    "backend_lr": 0.0001,
+    "vae_lr": 0.0001,
+    "aux_lr": 0.001,
+    "max_grad_norm": 4.0,
+    "warmup": 0,
+    "schedule": "milestone",
+    "milestones": [
+      100000,
+      160000,
+      190000
+    ],
+    "factors": [
+      0.5,
+      0.2,
+      0.1
+    ]
+  },
+  "image_loss": {
+    "mse_weight": 4.0,
+    "lpips_weight": 1.0,
+    "dists_weight": 1.0
+  },
+  "self_flow": {
+    "enabled": true,
+    "method": "local_precision_v1",
+    "mixed_sampling": false,
+    "student_layer": 8,
+    "teacher_layer": 20,
+    "warmup": 10000,
+    "ramp": 2000,
+    "weight": 1.0,
+    "cell_fraction": 0.25,
+    "teacher_decay": 0.999,
+    "teacher_batch_size": 4
+  },
+  "train": {
+    "phase": "joint",
+    "steps": 200000,
+    "output": "/data2/ls/checkpoints/c_local_precision_sf_20261028/joint",
+    "batch_size": 4,
+    "effective_batch": 8,
+    "accumulation_steps": 1,
+    "seed": 903,
+    "eval_every": 2000,
+    "save_every": 10000,
+    "validation_actual_bpp": true,
+    "log_every": 100,
+    "packet_samples": 24,
+    "data_scale_samples": 512,
+    "calibration_samples": 512,
+    "require_quality_span": true,
+    "router_uniform_steps": 0,
+    "router_ramp_steps": 0,
+    "full_decode_every": 2000,
+    "keep_last_checkpoints": 2,
+    "tensorboard": true,
+    "amp_dtype": "fp16"
+  },
+  "quality": {
+    "values": [
+      0.0,
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "rate_coefficients": [
+      16.0,
+      8.0,
+      4.0,
+      2.0,
+      1.0,
+      0.5
+    ],
+    "sampling": "independent"
+  },
+  "objective": {
+    "base_weight": 0.1,
+    "repaired_weight": 0.0
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "kodim01": {
+    "target_bpp": 0.058756510416666664,
+    "bpp": 0.05865478515625,
+    "relative_rate_error": 0.0017313019390581324,
+    "lambda": 0.2578125,
+    "iterations": 9,
+    "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/C/kodim01.png",
+    "nfe": 1,
+    "psnr": 21.29753303527832,
+    "lpips": 0.15618114173412323,
+    "dists": 0.07898318767547607
+  },
+  "kodim13": {
+    "target_bpp": 0.051920572916666664,
+    "bpp": 0.052144368489583336,
+    "relative_rate_error": 0.004310344827586296,
+    "lambda": 0.25,
+    "iterations": 4,
+    "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/C/kodim13.png",
+    "nfe": 1,
+    "psnr": 18.573522567749023,
+    "lpips": 0.23887744545936584,
+    "dists": 0.1009475588798523
+  },
+  "kodim23": {
+    "target_bpp": 0.046061197916666664,
+    "bpp": 0.046122233072916664,
+    "relative_rate_error": 0.001325088339222615,
+    "lambda": 0.15625,
+    "iterations": 7,
+    "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/C/kodim23.png",
+    "nfe": 1,
+    "psnr": 26.020143508911133,
+    "lpips": 0.08022063970565796,
+    "dists": 0.0542600154876709
+  }
+}

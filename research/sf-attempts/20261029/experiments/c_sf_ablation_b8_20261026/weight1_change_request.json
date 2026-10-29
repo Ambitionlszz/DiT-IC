@@ -1,0 +1,14 @@
+{
+  "status": "training",
+  "requested_at": "2026-10-26T10:47:40.956926+00:00",
+  "source_run": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/c_sf",
+  "target_run": "/data2/ls/checkpoints/c_sf_weight1_20261026",
+  "source_supervisor_pid": 310478,
+  "previous_weight": 0.641302792947235,
+  "weight": 1.0,
+  "reason": "User requested fixed SF weight 1 instead of gradient calibration",
+  "normalization": "Retain whole-batch sf_loss / 0.5; displayed alpha 1 and raw-loss multiplier 2",
+  "updated_at": "2026-10-26T10:59:40.793117+00:00",
+  "verified_step": 13300,
+  "supervisor_pid": 326558
+}

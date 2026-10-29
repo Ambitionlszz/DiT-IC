@@ -1,0 +1,13 @@
+{
+  "source": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/c_sf/joint/paused.pt",
+  "source_sha256": "93c7bf53652aac5efdddecedf12fc5ac2b546c849bcf22520e865845a170c4c7",
+  "changed_at": "2026-10-26T10:51:58.286224+00:00",
+  "step": 13271,
+  "first_fixed_weight_update": 13272,
+  "previous_weight": 0.641302792947235,
+  "weight": 1.0,
+  "config": "/data2/ls/checkpoints/c_sf_weight1_20261026/configs/joint.json",
+  "checkpoint": "/data2/ls/checkpoints/c_sf_weight1_20261026/joint/paused.pt",
+  "normalization": "sf_weight multiplies whole-batch sf_loss / 0.5",
+  "state_policy": "preserve raw/EMA/teacher, main and auxiliary optimizer, scaler, scheduler, rank RNG, data counter and validation best"
+}

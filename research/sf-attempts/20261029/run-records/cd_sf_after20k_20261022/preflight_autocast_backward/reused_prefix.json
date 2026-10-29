@@ -1,0 +1,5 @@
+{
+  "source": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight_probe_overflow/joint/paused.pt",
+  "step": 2,
+  "reason": "Reuse unchanged RD-only prefix to verify SF calibration and updates"
+}

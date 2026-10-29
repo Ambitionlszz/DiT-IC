@@ -1,0 +1,35 @@
+[
+  {
+    "reason": "amp_nonfinite_forward",
+    "step": 13640,
+    "attempts": 13641,
+    "world_size": 2,
+    "checkpoint": "paused.pt",
+    "checkpoint_size": 4072531222,
+    "checkpoint_mtime_ns": 1793123975522908500,
+    "checkpoint_path": "/data2/ls/checkpoints/c_native_relational_sf_20261027/joint/paused.pt",
+    "restarted_at": "2026-10-27T18:00:55.928137+00:00"
+  },
+  {
+    "reason": "amp_nonfinite_forward",
+    "step": 13641,
+    "attempts": 13643,
+    "world_size": 2,
+    "checkpoint": "paused.pt",
+    "checkpoint_size": 4072531222,
+    "checkpoint_mtime_ns": 1793124168055110000,
+    "checkpoint_path": "/data2/ls/checkpoints/c_native_relational_sf_20261027/joint/paused.pt",
+    "restarted_at": "2026-10-27T18:04:28.810676+00:00"
+  },
+  {
+    "reason": "amp_nonfinite_forward",
+    "step": 13642,
+    "attempts": 13645,
+    "world_size": 2,
+    "checkpoint": "paused.pt",
+    "checkpoint_size": 4072531222,
+    "checkpoint_mtime_ns": 1793124369609155400,
+    "checkpoint_path": "/data2/ls/checkpoints/c_native_relational_sf_20261027/joint/paused.pt",
+    "restarted_at": "2026-10-27T18:07:31.615519+00:00"
+  }
+]

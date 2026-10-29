@@ -1,0 +1,109 @@
+{
+  "status": "passed",
+  "tests": {
+    "cuda": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "5",
+      "time": "30.698",
+      "timestamp": "2026-10-18T09:28:56.373252+08:00",
+      "hostname": "ubuntu-PowerEdge-T640"
+    },
+    "host": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "22",
+      "time": "130.515",
+      "timestamp": "2026-10-18T09:29:02.338076+08:00",
+      "hostname": "ubuntu-PowerEdge-T640"
+    },
+    "supervisor": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "5",
+      "time": "17.023",
+      "timestamp": "2026-10-18T09:30:00.630800+08:00",
+      "hostname": "ubuntu-PowerEdge-T640"
+    },
+    "resume_log": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "1",
+      "time": "22.432",
+      "timestamp": "2026-10-18T09:31:07.601479+08:00",
+      "hostname": "ubuntu-PowerEdge-T640"
+    }
+  },
+  "scope": "engineering_acceptance_not_research_results",
+  "original_failures": {
+    "C": {
+      "step": 15726,
+      "micro": 0,
+      "first_nonfinite": "caption_projection.linear_2",
+      "after_finite": true,
+      "backward": {
+        "attempts": [
+          {
+            "scale": 1048576.0,
+            "gradients_finite": true
+          }
+        ],
+        "loss": 0.5800018906593323,
+        "metrics": {
+          "mse": 0.04703621566295624,
+          "lpips": 0.18932296335697174,
+          "dists": 0.12072819471359253,
+          "psnr": 19.29627799987793,
+          "base": 0.10987740010023117,
+          "latent": 0.10814672708511353,
+          "rate_est": 0.05513385683298111
+        },
+        "gradient_norms": {
+          "router": 0.01488432101905346,
+          "ga": 1.1886571645736694
+        },
+        "encoder_frozen": true,
+        "peak_memory_bytes": 20089065984
+      }
+    },
+    "D": {
+      "step": 18078,
+      "micro": 0,
+      "first_nonfinite": "caption_projection.linear_2",
+      "after_finite": true,
+      "backward": {
+        "attempts": [
+          {
+            "scale": 1048576.0,
+            "gradients_finite": true
+          }
+        ],
+        "loss": 0.47352904081344604,
+        "metrics": {
+          "mse": 0.014242572709918022,
+          "lpips": 0.13306650519371033,
+          "dists": 0.0842621922492981,
+          "psnr": 24.48471450805664,
+          "base": 0.1615394651889801,
+          "latent": 0.1683066189289093,
+          "rate_est": 0.037386324256658554
+        },
+        "gradient_norms": {
+          "router": 0.011141202412545681,
+          "ga": 0.756514847278595
+        },
+        "encoder_frozen": true,
+        "peak_memory_bytes": 20916706304
+      }
+    }
+  },
+  "resume_policy": "preserve_all_state_no_reset_no_hyperparameter_change"
+}

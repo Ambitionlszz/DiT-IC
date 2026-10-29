@@ -1,0 +1,8 @@
+{
+  "tests_passed": 62,
+  "details": "57 single-process checks passed; four distributed checks could not bind inside sandbox and passed in host namespace; one additional two-rank sequential gradient reduction check passed.",
+  "new_method_tests": 7,
+  "source_migration": "/data2/ls/checkpoints/c_native_relational_sf_20261027/migration.json",
+  "gpu_preflight": "passed",
+  "old_run_saved_step": 30662
+}

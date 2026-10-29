@@ -1,0 +1,35 @@
+{
+  "status": "research_only_no_training_changes",
+  "audited_training_commit": "29dc767e7f2da39d8445d9a2af48e9d9a579d332",
+  "last_available_evaluation_step": 18000,
+  "hypotheses_not_measurements": [
+    "Teacher common component dominates raw cosine.",
+    "Centered teacher spatial relations contain useful, additional image information.",
+    "Native SF gradients into codec improve actual RD."
+  ],
+  "sources": [
+    {
+      "path": "/data2/ls/experiments/c_sf_redesign_20261027/evidence.json",
+      "sha256": "3e76f0159edd27b0a553d7f84dfccc77bff6c72db31bfa11078b60fb64e18df7"
+    },
+    {
+      "path": "/data2/ls/experiments/c_dual_rate_task_sf_20261027/gpu_preflight.json",
+      "sha256": "5633b896bc732f4ffef2c5c176fdd159a514f2df0f4899028954f6221186c660"
+    },
+    {
+      "path": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/head_preparation.json",
+      "sha256": "ca82f0f1016d255128f3216ee1000086e0726f7c433acc4ae94f77162c7bd143"
+    },
+    {
+      "path": "/data2/ls/experiments/c_dual_rate_task_sf_20261027/comparisons/same_step_18000_summary.json",
+      "sha256": "b899dcde183406991205f614cacc2a10790ee334dc01ecb11df57c2a1188620a"
+    }
+  ],
+  "synthetic_example": {
+    "scope": "Synthetic algebra example only; no model feature or GPU measurement. Does not establish useful teacher structure or RD gains.",
+    "raw_cosine_loss_spatial_permutation": 2.090934517008647e-06,
+    "centered_relative_relation_error_same_permutation": 1.4057626161388408,
+    "relation_error_orthogonal_channel_permutation": 1.9071313089462434e-32,
+    "relation_error_positive_scale_and_common_shift": 2.677607499936314e-26
+  }
+}

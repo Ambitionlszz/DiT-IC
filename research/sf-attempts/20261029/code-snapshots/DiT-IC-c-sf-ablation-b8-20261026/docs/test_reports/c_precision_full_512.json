@@ -1,0 +1,90 @@
+{
+  "device": "cpu",
+  "crop": 512,
+  "research_training": false,
+  "torch": "2.12.0+cu126",
+  "assets": {
+    "vae_config_sha256": "4e5669aa03caa77615b73b21c9347c384cb11124a9590683e32a510df0176eb4",
+    "vae_weights_bytes": 1249044836,
+    "vae_weights_sha256": "15a4b09e56d95b768a0ec9da50b702e21d920333fc9b3480d66bb5c7fad9d87f",
+    "transformer_config_sha256": "38916317861688918bee963c296ee0f9e939b6d2fd4f5e9f6908f2b9a9179fa6",
+    "transformer_weights_bytes": 2367054536,
+    "transformer_weights_sha256": "f9db5116ca285dd8a431dc8ee5123a9b74177640f6559c6fea4047c6e8ff5089",
+    "scheduler_config_sha256": "70e8603120cc387316aa3bc7f08cb2872f6b6eb6eff6f25df1b88b6b76389e81",
+    "text_sha256": "e9c904d6325303d0f058b00fa0235887de7e0ab0529797e614704eecbac52b9c"
+  },
+  "branches": {
+    "C": {
+      "seconds": 155.7884231649805,
+      "loss": 2.7840981483459473,
+      "grad_norm": 12.710437774658203,
+      "gradient_norms_after_clip": {
+        "vae": 0.1682124137878418,
+        "DiT": 0.035594698041677475,
+        "g_a": 1.49686861038208,
+        "g_s": 3.489616870880127,
+        "h_a": 0.015537985600531101,
+        "h_s": 0.013952916488051414,
+        "adapter_in": 0.00022566807456314564,
+        "g_c": 0.001078360015526414,
+        "adapter_out": 0.005115539766848087,
+        "LRP": 0.09230545163154602,
+        "entropy_bottleneck": 0.0009768722811713815,
+        "router": 0.020961089059710503,
+        "precision_embedding": 0.0,
+        "analysis_precision": 0.07564317435026169,
+        "synthesis_precision": 1.1299667358398438,
+        "text_proj": 0.5103166699409485
+      },
+      "forward_packet_max_error": 0.0,
+      "nfe": 1,
+      "bytes_by_component": {
+        "hyper": 440,
+        "main": 1220,
+        "allocation": 24,
+        "scales": 0,
+        "mask": 0,
+        "header": 55
+      },
+      "total_bpp": 0.053070068359375,
+      "trainable": 233350401
+    },
+    "D": {
+      "seconds": 141.91484233300434,
+      "loss": 2.7723727226257324,
+      "grad_norm": 13.608841896057129,
+      "gradient_norms_after_clip": {
+        "vae": 0.14629937708377838,
+        "DiT": 0.024789126589894295,
+        "g_a": 0.8507442474365234,
+        "g_s": 1.9624195098876953,
+        "h_a": 0.008873265236616135,
+        "h_s": 0.007775971200317144,
+        "adapter_in": 0.0002107708714902401,
+        "g_c": 0.0010071712313219905,
+        "adapter_out": 0.004777872934937477,
+        "LRP": 0.05169092118740082,
+        "entropy_bottleneck": 0.0009123828494921327,
+        "router": 0.010168670676648617,
+        "precision_embedding": 0.0,
+        "analysis_precision": 0.04323721304535866,
+        "synthesis_precision": 0.6371486783027649,
+        "text_proj": 0.4232264757156372,
+        "quality_conditioner": 3.2882704734802246
+      },
+      "forward_packet_max_error": 0.0,
+      "nfe": 1,
+      "bytes_by_component": {
+        "hyper": 440,
+        "main": 1208,
+        "allocation": 24,
+        "scales": 32,
+        "mask": 0,
+        "header": 55
+      },
+      "total_bpp": 0.053680419921875,
+      "trainable": 244125225
+    }
+  },
+  "status": "passed"
+}

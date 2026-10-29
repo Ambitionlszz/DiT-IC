@@ -1,0 +1,1362 @@
+{
+  "curves": {
+    "baseline_30k": [
+      {
+        "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+        "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+        "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+        "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+        "checkpoint_step": 30000,
+        "use_ema": true,
+        "distortion_weights": {
+          "pixel": 4,
+          "perceptual": 1,
+          "dists": 1
+        },
+        "training_contract": {
+          "version": "phase1_warmup_e2e_nogan_gan_v1",
+          "phase": "nogan",
+          "rate_weights": [
+            8.0,
+            4.0,
+            2.0,
+            1.0,
+            0.5,
+            0.25
+          ],
+          "freeze_codec": false,
+          "loss_form": "pixel_perceptual_plus_quality_rate",
+          "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+          "distortion_weights": {
+            "pixel": 4.0,
+            "perceptual": 1.0,
+            "dists": 1.0
+          },
+          "training_mode": "phase1_warmup_e2e",
+          "freeze_quality_endpoints": true,
+          "window_training": false,
+          "eval_window": true,
+          "training_crop": [
+            512,
+            512
+          ],
+          "window_rule": "latent_8x8_stride4_triangular_v1"
+        },
+        "dataset": "/data2/ls/data/Kodak",
+        "image_names": [
+          "kodim01.png",
+          "kodim02.png",
+          "kodim03.png",
+          "kodim04.png",
+          "kodim05.png",
+          "kodim06.png",
+          "kodim07.png",
+          "kodim08.png",
+          "kodim09.png",
+          "kodim10.png",
+          "kodim11.png",
+          "kodim12.png",
+          "kodim13.png",
+          "kodim14.png",
+          "kodim15.png",
+          "kodim16.png",
+          "kodim17.png",
+          "kodim18.png",
+          "kodim19.png",
+          "kodim20.png",
+          "kodim21.png",
+          "kodim22.png",
+          "kodim23.png",
+          "kodim24.png"
+        ],
+        "qualities": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "entropy_estimation": false,
+        "eval_crop": "none; original full image",
+        "padding": "reflect bottom/right to multiple of 256",
+        "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+        "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+        "window_width": 8,
+        "window_stride": 4,
+        "decoder_variants": [
+          "global"
+        ],
+        "variant": "global",
+        "quality_index": 0,
+        "num_images": 24,
+        "avg_bpp": 0.027642144097222224,
+        "psnr": 22.46532368659973,
+        "ms_ssim": 0.7759868358810756,
+        "dists": 0.09935195495684941,
+        "lpips": 0.18059202376753092,
+        "encode_seconds": 0.7036449373749841,
+        "decode_seconds": 0.4187191048749905,
+        "image_to_image_seconds": 1.1223640422499745,
+        "peak_allocated_gib": 5.59385347366333
+      },
+      {
+        "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+        "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+        "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+        "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+        "checkpoint_step": 30000,
+        "use_ema": true,
+        "distortion_weights": {
+          "pixel": 4,
+          "perceptual": 1,
+          "dists": 1
+        },
+        "training_contract": {
+          "version": "phase1_warmup_e2e_nogan_gan_v1",
+          "phase": "nogan",
+          "rate_weights": [
+            8.0,
+            4.0,
+            2.0,
+            1.0,
+            0.5,
+            0.25
+          ],
+          "freeze_codec": false,
+          "loss_form": "pixel_perceptual_plus_quality_rate",
+          "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+          "distortion_weights": {
+            "pixel": 4.0,
+            "perceptual": 1.0,
+            "dists": 1.0
+          },
+          "training_mode": "phase1_warmup_e2e",
+          "freeze_quality_endpoints": true,
+          "window_training": false,
+          "eval_window": true,
+          "training_crop": [
+            512,
+            512
+          ],
+          "window_rule": "latent_8x8_stride4_triangular_v1"
+        },
+        "dataset": "/data2/ls/data/Kodak",
+        "image_names": [
+          "kodim01.png",
+          "kodim02.png",
+          "kodim03.png",
+          "kodim04.png",
+          "kodim05.png",
+          "kodim06.png",
+          "kodim07.png",
+          "kodim08.png",
+          "kodim09.png",
+          "kodim10.png",
+          "kodim11.png",
+          "kodim12.png",
+          "kodim13.png",
+          "kodim14.png",
+          "kodim15.png",
+          "kodim16.png",
+          "kodim17.png",
+          "kodim18.png",
+          "kodim19.png",
+          "kodim20.png",
+          "kodim21.png",
+          "kodim22.png",
+          "kodim23.png",
+          "kodim24.png"
+        ],
+        "qualities": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "entropy_estimation": false,
+        "eval_crop": "none; original full image",
+        "padding": "reflect bottom/right to multiple of 256",
+        "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+        "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+        "window_width": 8,
+        "window_stride": 4,
+        "decoder_variants": [
+          "global"
+        ],
+        "variant": "global",
+        "quality_index": 1,
+        "num_images": 24,
+        "avg_bpp": 0.038811577690972224,
+        "psnr": 23.195265611012776,
+        "ms_ssim": 0.8112744240720273,
+        "dists": 0.08464103688796361,
+        "lpips": 0.1512501019363602,
+        "encode_seconds": 0.1803811830833316,
+        "decode_seconds": 0.3778029239166661,
+        "image_to_image_seconds": 0.5581841069999977,
+        "peak_allocated_gib": 5.5939106941223145
+      },
+      {
+        "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+        "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+        "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+        "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+        "checkpoint_step": 30000,
+        "use_ema": true,
+        "distortion_weights": {
+          "pixel": 4,
+          "perceptual": 1,
+          "dists": 1
+        },
+        "training_contract": {
+          "version": "phase1_warmup_e2e_nogan_gan_v1",
+          "phase": "nogan",
+          "rate_weights": [
+            8.0,
+            4.0,
+            2.0,
+            1.0,
+            0.5,
+            0.25
+          ],
+          "freeze_codec": false,
+          "loss_form": "pixel_perceptual_plus_quality_rate",
+          "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+          "distortion_weights": {
+            "pixel": 4.0,
+            "perceptual": 1.0,
+            "dists": 1.0
+          },
+          "training_mode": "phase1_warmup_e2e",
+          "freeze_quality_endpoints": true,
+          "window_training": false,
+          "eval_window": true,
+          "training_crop": [
+            512,
+            512
+          ],
+          "window_rule": "latent_8x8_stride4_triangular_v1"
+        },
+        "dataset": "/data2/ls/data/Kodak",
+        "image_names": [
+          "kodim01.png",
+          "kodim02.png",
+          "kodim03.png",
+          "kodim04.png",
+          "kodim05.png",
+          "kodim06.png",
+          "kodim07.png",
+          "kodim08.png",
+          "kodim09.png",
+          "kodim10.png",
+          "kodim11.png",
+          "kodim12.png",
+          "kodim13.png",
+          "kodim14.png",
+          "kodim15.png",
+          "kodim16.png",
+          "kodim17.png",
+          "kodim18.png",
+          "kodim19.png",
+          "kodim20.png",
+          "kodim21.png",
+          "kodim22.png",
+          "kodim23.png",
+          "kodim24.png"
+        ],
+        "qualities": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "entropy_estimation": false,
+        "eval_crop": "none; original full image",
+        "padding": "reflect bottom/right to multiple of 256",
+        "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+        "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+        "window_width": 8,
+        "window_stride": 4,
+        "decoder_variants": [
+          "global"
+        ],
+        "variant": "global",
+        "quality_index": 2,
+        "num_images": 24,
+        "avg_bpp": 0.05085584852430555,
+        "psnr": 23.717658201853435,
+        "ms_ssim": 0.8335530311738656,
+        "dists": 0.07621141771475475,
+        "lpips": 0.1320911512399713,
+        "encode_seconds": 0.18260149362502412,
+        "decode_seconds": 0.38195157725002105,
+        "image_to_image_seconds": 0.5645530708750451,
+        "peak_allocated_gib": 5.5939106941223145
+      },
+      {
+        "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+        "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+        "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+        "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+        "checkpoint_step": 30000,
+        "use_ema": true,
+        "distortion_weights": {
+          "pixel": 4,
+          "perceptual": 1,
+          "dists": 1
+        },
+        "training_contract": {
+          "version": "phase1_warmup_e2e_nogan_gan_v1",
+          "phase": "nogan",
+          "rate_weights": [
+            8.0,
+            4.0,
+            2.0,
+            1.0,
+            0.5,
+            0.25
+          ],
+          "freeze_codec": false,
+          "loss_form": "pixel_perceptual_plus_quality_rate",
+          "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+          "distortion_weights": {
+            "pixel": 4.0,
+            "perceptual": 1.0,
+            "dists": 1.0
+          },
+          "training_mode": "phase1_warmup_e2e",
+          "freeze_quality_endpoints": true,
+          "window_training": false,
+          "eval_window": true,
+          "training_crop": [
+            512,
+            512
+          ],
+          "window_rule": "latent_8x8_stride4_triangular_v1"
+        },
+        "dataset": "/data2/ls/data/Kodak",
+        "image_names": [
+          "kodim01.png",
+          "kodim02.png",
+          "kodim03.png",
+          "kodim04.png",
+          "kodim05.png",
+          "kodim06.png",
+          "kodim07.png",
+          "kodim08.png",
+          "kodim09.png",
+          "kodim10.png",
+          "kodim11.png",
+          "kodim12.png",
+          "kodim13.png",
+          "kodim14.png",
+          "kodim15.png",
+          "kodim16.png",
+          "kodim17.png",
+          "kodim18.png",
+          "kodim19.png",
+          "kodim20.png",
+          "kodim21.png",
+          "kodim22.png",
+          "kodim23.png",
+          "kodim24.png"
+        ],
+        "qualities": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "entropy_estimation": false,
+        "eval_crop": "none; original full image",
+        "padding": "reflect bottom/right to multiple of 256",
+        "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+        "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+        "window_width": 8,
+        "window_stride": 4,
+        "decoder_variants": [
+          "global"
+        ],
+        "variant": "global",
+        "quality_index": 3,
+        "num_images": 24,
+        "avg_bpp": 0.062388102213541664,
+        "psnr": 24.02470588684082,
+        "ms_ssim": 0.8456327206994024,
+        "dists": 0.07130470126867294,
+        "lpips": 0.12280658756693204,
+        "encode_seconds": 0.18062369037500994,
+        "decode_seconds": 0.3952635521666821,
+        "image_to_image_seconds": 0.575887242541692,
+        "peak_allocated_gib": 5.5939106941223145
+      },
+      {
+        "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+        "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+        "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+        "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+        "checkpoint_step": 30000,
+        "use_ema": true,
+        "distortion_weights": {
+          "pixel": 4,
+          "perceptual": 1,
+          "dists": 1
+        },
+        "training_contract": {
+          "version": "phase1_warmup_e2e_nogan_gan_v1",
+          "phase": "nogan",
+          "rate_weights": [
+            8.0,
+            4.0,
+            2.0,
+            1.0,
+            0.5,
+            0.25
+          ],
+          "freeze_codec": false,
+          "loss_form": "pixel_perceptual_plus_quality_rate",
+          "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+          "distortion_weights": {
+            "pixel": 4.0,
+            "perceptual": 1.0,
+            "dists": 1.0
+          },
+          "training_mode": "phase1_warmup_e2e",
+          "freeze_quality_endpoints": true,
+          "window_training": false,
+          "eval_window": true,
+          "training_crop": [
+            512,
+            512
+          ],
+          "window_rule": "latent_8x8_stride4_triangular_v1"
+        },
+        "dataset": "/data2/ls/data/Kodak",
+        "image_names": [
+          "kodim01.png",
+          "kodim02.png",
+          "kodim03.png",
+          "kodim04.png",
+          "kodim05.png",
+          "kodim06.png",
+          "kodim07.png",
+          "kodim08.png",
+          "kodim09.png",
+          "kodim10.png",
+          "kodim11.png",
+          "kodim12.png",
+          "kodim13.png",
+          "kodim14.png",
+          "kodim15.png",
+          "kodim16.png",
+          "kodim17.png",
+          "kodim18.png",
+          "kodim19.png",
+          "kodim20.png",
+          "kodim21.png",
+          "kodim22.png",
+          "kodim23.png",
+          "kodim24.png"
+        ],
+        "qualities": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "entropy_estimation": false,
+        "eval_crop": "none; original full image",
+        "padding": "reflect bottom/right to multiple of 256",
+        "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+        "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+        "window_width": 8,
+        "window_stride": 4,
+        "decoder_variants": [
+          "global"
+        ],
+        "variant": "global",
+        "quality_index": 4,
+        "num_images": 24,
+        "avg_bpp": 0.07255384657118055,
+        "psnr": 24.175861676534016,
+        "ms_ssim": 0.8518908663094504,
+        "dists": 0.0693935031692187,
+        "lpips": 0.11755055623749892,
+        "encode_seconds": 0.17979141758327918,
+        "decode_seconds": 0.37847316729167346,
+        "image_to_image_seconds": 0.5582645848749527,
+        "peak_allocated_gib": 5.5939106941223145
+      },
+      {
+        "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+        "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+        "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+        "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+        "checkpoint_step": 30000,
+        "use_ema": true,
+        "distortion_weights": {
+          "pixel": 4,
+          "perceptual": 1,
+          "dists": 1
+        },
+        "training_contract": {
+          "version": "phase1_warmup_e2e_nogan_gan_v1",
+          "phase": "nogan",
+          "rate_weights": [
+            8.0,
+            4.0,
+            2.0,
+            1.0,
+            0.5,
+            0.25
+          ],
+          "freeze_codec": false,
+          "loss_form": "pixel_perceptual_plus_quality_rate",
+          "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+          "distortion_weights": {
+            "pixel": 4.0,
+            "perceptual": 1.0,
+            "dists": 1.0
+          },
+          "training_mode": "phase1_warmup_e2e",
+          "freeze_quality_endpoints": true,
+          "window_training": false,
+          "eval_window": true,
+          "training_crop": [
+            512,
+            512
+          ],
+          "window_rule": "latent_8x8_stride4_triangular_v1"
+        },
+        "dataset": "/data2/ls/data/Kodak",
+        "image_names": [
+          "kodim01.png",
+          "kodim02.png",
+          "kodim03.png",
+          "kodim04.png",
+          "kodim05.png",
+          "kodim06.png",
+          "kodim07.png",
+          "kodim08.png",
+          "kodim09.png",
+          "kodim10.png",
+          "kodim11.png",
+          "kodim12.png",
+          "kodim13.png",
+          "kodim14.png",
+          "kodim15.png",
+          "kodim16.png",
+          "kodim17.png",
+          "kodim18.png",
+          "kodim19.png",
+          "kodim20.png",
+          "kodim21.png",
+          "kodim22.png",
+          "kodim23.png",
+          "kodim24.png"
+        ],
+        "qualities": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "entropy_estimation": false,
+        "eval_crop": "none; original full image",
+        "padding": "reflect bottom/right to multiple of 256",
+        "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+        "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+        "window_width": 8,
+        "window_stride": 4,
+        "decoder_variants": [
+          "global"
+        ],
+        "variant": "global",
+        "quality_index": 5,
+        "num_images": 24,
+        "avg_bpp": 0.08080037434895833,
+        "psnr": 24.250404596328735,
+        "ms_ssim": 0.8550700257889533,
+        "dists": 0.06813671439886093,
+        "lpips": 0.11533168610185385,
+        "encode_seconds": 0.17969420600001249,
+        "decode_seconds": 0.37672377799999407,
+        "image_to_image_seconds": 0.5564179840000065,
+        "peak_allocated_gib": 5.5939106941223145
+      }
+    ],
+    "historical_200k": [
+      {
+        "quality_index": 0,
+        "avg_bpp": 0.02529568142361111,
+        "psnr": 22.90525054931641,
+        "ms_ssim": 0.7798437202641705,
+        "lpips": 0.1652450474599997,
+        "dists": 0.09345257778962453,
+        "num_images": 24
+      },
+      {
+        "quality_index": 1,
+        "avg_bpp": 0.03916083441840278,
+        "psnr": 23.82238181432088,
+        "ms_ssim": 0.8229029761724629,
+        "lpips": 0.1311903096114596,
+        "dists": 0.07497384647528331,
+        "num_images": 24
+      },
+      {
+        "quality_index": 2,
+        "avg_bpp": 0.05450439453125,
+        "psnr": 24.42110951741536,
+        "ms_ssim": 0.8491625126969969,
+        "lpips": 0.1127266326608757,
+        "dists": 0.06468503177165985,
+        "num_images": 24
+      },
+      {
+        "quality_index": 3,
+        "avg_bpp": 0.06880018446180555,
+        "psnr": 24.75815447171529,
+        "ms_ssim": 0.8620985535737834,
+        "lpips": 0.1030255470735331,
+        "dists": 0.0601433739066124,
+        "num_images": 24
+      },
+      {
+        "quality_index": 4,
+        "avg_bpp": 0.08062405056423612,
+        "psnr": 24.90865747133891,
+        "ms_ssim": 0.8677395594956917,
+        "lpips": 0.09881716500967741,
+        "dists": 0.05884183943271637,
+        "num_images": 24
+      },
+      {
+        "quality_index": 5,
+        "avg_bpp": 0.08884345160590278,
+        "psnr": 24.96528323491414,
+        "ms_ssim": 0.8700319516216649,
+        "lpips": 0.09726838100080688,
+        "dists": 0.05818868925174078,
+        "num_images": 24
+      }
+    ],
+    "C": [
+      {
+        "bpp": 0.03181627061631944,
+        "psnr": 22.282316128412884,
+        "lpips": 0.1835064087063074,
+        "dists": 0.10002519935369492,
+        "encode_seconds": 0.46138706949998703,
+        "decode_seconds": 0.3991475547083212,
+        "peak_memory_bytes": 6014432256.0,
+        "base_latent_mse": 0.16124045414229235,
+        "repair_latent_rms": 0.02317887971488138,
+        "high_precision_psnr": 21.096438020467758,
+        "high_precision_area_fraction": 0.6506076492369175,
+        "bytes_by_component": {
+          "hyper": 99.0,
+          "main": 1373.8333333333333,
+          "allocation": 36.0,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.06330597889800703,
+          "main": 0.8785036768624107,
+          "allocation": 0.02302035596291165,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 0.035169988276670575
+        },
+        "avg_bpp": 0.03181627061631944,
+        "quality_index": 0.0,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.049418131510416664,
+        "psnr": 23.450397888819378,
+        "lpips": 0.13676457231243452,
+        "dists": 0.07590245703856151,
+        "encode_seconds": 0.18961175479168446,
+        "decode_seconds": 0.38031709912502265,
+        "peak_memory_bytes": 6015049216.0,
+        "base_latent_mse": 0.08204490753511588,
+        "repair_latent_rms": 0.022783528935785096,
+        "high_precision_psnr": 22.20077524582545,
+        "high_precision_area_fraction": 0.6506076492369175,
+        "bytes_by_component": {
+          "hyper": 99.0,
+          "main": 2239.0,
+          "allocation": 36.0,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.04075751337999177,
+          "main": 0.9217785096747633,
+          "allocation": 0.014820913956360642,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 0.022643062988884313
+        },
+        "avg_bpp": 0.049418131510416664,
+        "quality_index": 0.2,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.06889851888020833,
+        "psnr": 24.30291215578715,
+        "lpips": 0.11257591377943754,
+        "dists": 0.061265806357065834,
+        "encode_seconds": 0.19128462375002186,
+        "decode_seconds": 0.3817614546666448,
+        "peak_memory_bytes": 6015049216.0,
+        "base_latent_mse": 0.04177871315429608,
+        "repair_latent_rms": 0.022371116559952497,
+        "high_precision_psnr": 22.99712399641673,
+        "high_precision_area_fraction": 0.6506076492369175,
+        "bytes_by_component": {
+          "hyper": 99.0,
+          "main": 3196.5,
+          "allocation": 36.0,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.029233722131994686,
+          "main": 0.9438948767163738,
+          "allocation": 0.01063044441163443,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 0.016240956739997047
+        },
+        "avg_bpp": 0.06889851888020833,
+        "quality_index": 0.4,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.09245808919270833,
+        "psnr": 24.831588745117188,
+        "lpips": 0.09972555267934997,
+        "dists": 0.055296202500661217,
+        "encode_seconds": 0.1918570689583324,
+        "decode_seconds": 0.38243529566668144,
+        "peak_memory_bytes": 6015049216.0,
+        "base_latent_mse": 0.023024723787481587,
+        "repair_latent_rms": 0.022069913567975163,
+        "high_precision_psnr": 23.496331026156742,
+        "high_precision_area_fraction": 0.6506076492369175,
+        "bytes_by_component": {
+          "hyper": 99.0,
+          "main": 4354.5,
+          "allocation": 36.0,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.021784574760699747,
+          "main": 0.9581912201562328,
+          "allocation": 0.007921663549345363,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 0.012102541533722082
+        },
+        "avg_bpp": 0.09245808919270833,
+        "quality_index": 0.6,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.12316216362847222,
+        "psnr": 25.138137022654217,
+        "lpips": 0.0928153800778091,
+        "dists": 0.05240687231222788,
+        "encode_seconds": 0.1913001092916602,
+        "decode_seconds": 0.3823373120833177,
+        "peak_memory_bytes": 6015049216.0,
+        "base_latent_mse": 0.014751924628702303,
+        "repair_latent_rms": 0.02193601569160819,
+        "high_precision_psnr": 23.783158312241238,
+        "high_precision_area_fraction": 0.6506076492369175,
+        "bytes_by_component": {
+          "hyper": 99.0,
+          "main": 5863.666666666667,
+          "allocation": 36.0,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.01635372501514234,
+          "main": 0.9686140631022521,
+          "allocation": 0.005946809096415396,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 0.009085402786190187
+        },
+        "avg_bpp": 0.12316216362847222,
+        "quality_index": 0.8,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.16178046332465276,
+        "psnr": 25.295039256413776,
+        "lpips": 0.09036069999759395,
+        "dists": 0.051068094869454704,
+        "encode_seconds": 0.19078886637502515,
+        "decode_seconds": 0.38189119858332293,
+        "peak_memory_bytes": 6015049216.0,
+        "base_latent_mse": 0.011150929417150715,
+        "repair_latent_rms": 0.02189459892300268,
+        "high_precision_psnr": 23.928273965915043,
+        "high_precision_area_fraction": 0.6506076492369175,
+        "bytes_by_component": {
+          "hyper": 99.0,
+          "main": 7761.833333333333,
+          "allocation": 36.0,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.012449959128922052,
+          "main": 0.9761061390455031,
+          "allocation": 0.004527257865062564,
+          "scales": 0.0,
+          "mask": 0.0,
+          "header": 0.0069166439605122506
+        },
+        "avg_bpp": 0.16178046332465276,
+        "quality_index": 1.0,
+        "num_images": 24
+      }
+    ],
+    "D": [
+      {
+        "bpp": 0.03133816189236111,
+        "psnr": 22.32188669840495,
+        "lpips": 0.17630420190592608,
+        "dists": 0.0955937181909879,
+        "encode_seconds": 0.46134201154167914,
+        "decode_seconds": 0.40110696287500974,
+        "peak_memory_bytes": 6057537024.0,
+        "base_latent_mse": 0.16582640757163367,
+        "repair_latent_rms": 0.12373786047101021,
+        "high_precision_psnr": 21.627375334501266,
+        "high_precision_area_fraction": 0.832465298473835,
+        "scale_saturation": 0.0,
+        "bytes_by_component": {
+          "hyper": 97.5,
+          "main": 1303.8333333333333,
+          "allocation": 36.0,
+          "scales": 48.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.0632979874486042,
+          "main": 0.8464618048041549,
+          "allocation": 0.023371564596407705,
+          "scales": 0.031162086128543605,
+          "mask": 0.0,
+          "header": 0.035706557022289545
+        },
+        "avg_bpp": 0.03133816189236111,
+        "quality_index": 0.0,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.04873318142361111,
+        "psnr": 23.34888990720113,
+        "lpips": 0.13510171106706062,
+        "dists": 0.07395235697428386,
+        "encode_seconds": 0.18893883395834146,
+        "decode_seconds": 0.3820624382916454,
+        "peak_memory_bytes": 6058153984.0,
+        "base_latent_mse": 0.08597167364011209,
+        "repair_latent_rms": 0.07128467752287786,
+        "high_precision_psnr": 22.6235032081604,
+        "high_precision_area_fraction": 0.832465298473835,
+        "scale_saturation": 0.0,
+        "bytes_by_component": {
+          "hyper": 97.5,
+          "main": 2158.8333333333335,
+          "allocation": 36.0,
+          "scales": 48.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.04070414695240746,
+          "main": 0.9012663512385194,
+          "allocation": 0.015029223490119677,
+          "scales": 0.0200389646534929,
+          "mask": 0.0,
+          "header": 0.022961313665460618
+        },
+        "avg_bpp": 0.04873318142361111,
+        "quality_index": 0.2,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.06808132595486112,
+        "psnr": 24.165263334910076,
+        "lpips": 0.11298788618296385,
+        "dists": 0.06347472220659256,
+        "encode_seconds": 0.18970708404165748,
+        "decode_seconds": 0.3830624941249899,
+        "peak_memory_bytes": 6058153984.0,
+        "base_latent_mse": 0.04384309922655424,
+        "repair_latent_rms": 0.038228754963104926,
+        "high_precision_psnr": 23.421152879794437,
+        "high_precision_area_fraction": 0.832465298473835,
+        "scale_saturation": 0.0,
+        "bytes_by_component": {
+          "hyper": 97.5,
+          "main": 3109.8333333333335,
+          "allocation": 36.0,
+          "scales": 48.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.029136368164159775,
+          "main": 0.929325630042833,
+          "allocation": 0.01075804362984361,
+          "scales": 0.014344058173124813,
+          "mask": 0.0,
+          "header": 0.01643589999003885
+        },
+        "avg_bpp": 0.06808132595486112,
+        "quality_index": 0.4,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.09129163953993057,
+        "psnr": 24.729198694229126,
+        "lpips": 0.09987138615300258,
+        "dists": 0.05746424198150635,
+        "encode_seconds": 0.1899797171666838,
+        "decode_seconds": 0.38367872641667117,
+        "peak_memory_bytes": 6058153984.0,
+        "base_latent_mse": 0.023629544225210946,
+        "repair_latent_rms": 0.029043265618383884,
+        "high_precision_psnr": 23.972217788298924,
+        "high_precision_area_fraction": 0.832465298473835,
+        "scale_saturation": 0.0,
+        "bytes_by_component": {
+          "hyper": 97.5,
+          "main": 4250.666666666667,
+          "allocation": 36.0,
+          "scales": 48.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.021728633510381457,
+          "main": 0.9472941351261004,
+          "allocation": 0.008022880065371616,
+          "scales": 0.010697173420495486,
+          "mask": 0.0,
+          "header": 0.01225717787765108
+        },
+        "avg_bpp": 0.09129163953993057,
+        "quality_index": 0.6,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.12168714735243057,
+        "psnr": 25.043102025985718,
+        "lpips": 0.09324356323728959,
+        "dists": 0.05280818541844686,
+        "encode_seconds": 0.18930660270837052,
+        "decode_seconds": 0.3836255957083665,
+        "peak_memory_bytes": 6058153984.0,
+        "base_latent_mse": 0.014310348584937552,
+        "repair_latent_rms": 0.03174837678670883,
+        "high_precision_psnr": 24.27536979317665,
+        "high_precision_area_fraction": 0.832465298473835,
+        "scale_saturation": 0.0,
+        "bytes_by_component": {
+          "hyper": 97.5,
+          "main": 5744.666666666667,
+          "allocation": 36.0,
+          "scales": 48.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.016301167553710257,
+          "main": 0.9604592192158721,
+          "allocation": 0.006018892635216095,
+          "scales": 0.008025190180288126,
+          "mask": 0.0,
+          "header": 0.009195530414913479
+        },
+        "avg_bpp": 0.12168714735243057,
+        "quality_index": 0.8,
+        "num_images": 24
+      },
+      {
+        "bpp": 0.16038343641493055,
+        "psnr": 25.21505085627238,
+        "lpips": 0.0905391142393152,
+        "dists": 0.051590425272782646,
+        "encode_seconds": 0.1893173270416829,
+        "decode_seconds": 0.38305111820837584,
+        "peak_memory_bytes": 6058153984.0,
+        "base_latent_mse": 0.01010419059700022,
+        "repair_latent_rms": 0.03522683711101612,
+        "high_precision_psnr": 24.44256439805031,
+        "high_precision_area_fraction": 0.832465298473835,
+        "scale_saturation": 0.0,
+        "bytes_by_component": {
+          "hyper": 97.5,
+          "main": 7646.666666666667,
+          "allocation": 36.0,
+          "scales": 48.0,
+          "mask": 0.0,
+          "header": 55.0
+        },
+        "byte_fractions": {
+          "hyper": 0.01236812617602909,
+          "main": 0.9699993657371192,
+          "allocation": 0.004566692741918434,
+          "scales": 0.006088923655891245,
+          "mask": 0.0,
+          "header": 0.0069768916890420515
+        },
+        "avg_bpp": 0.16038343641493055,
+        "quality_index": 1.0,
+        "num_images": 24
+      }
+    ]
+  },
+  "bd_rate": {
+    "D_vs_C": {
+      "psnr": {
+        "status": "computed",
+        "percent": 3.616054897804102,
+        "increasing_quality_interval": [
+          22.32188669840495,
+          25.21505085627238
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9603153144003661,
+        "overlap_fraction_of_candidate_quality_span": 1.0
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": -3.0072404329373943,
+        "increasing_quality_interval": [
+          -0.17630420190592608,
+          -0.0905391142393152
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9207626293855001,
+        "overlap_fraction_of_candidate_quality_span": 1.0
+      },
+      "dists": {
+        "status": "computed",
+        "percent": -1.9303945067862316,
+        "increasing_quality_interval": [
+          -0.0955937181909879,
+          -0.051590425272782646
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.8988132239799917,
+        "overlap_fraction_of_candidate_quality_span": 1.0
+      }
+    },
+    "C_vs_baseline_30k": {
+      "psnr": {
+        "status": "computed",
+        "percent": 10.569439683958525,
+        "increasing_quality_interval": [
+          22.46532368659973,
+          24.250404596328735
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.5925140923631781
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 5.810873129751483,
+        "increasing_quality_interval": [
+          -0.18059202376753092,
+          -0.11533168610185385
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7006263473689389
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 2.5365699644520276,
+        "increasing_quality_interval": [
+          -0.09935195495684941,
+          -0.06813671439886093
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.6376038960399911
+      }
+    },
+    "D_vs_baseline_30k": {
+      "psnr": {
+        "status": "computed",
+        "percent": 12.937422695207623,
+        "increasing_quality_interval": [
+          22.46532368659973,
+          24.250404596328735
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.6169995245084183
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 0.7111990052518157,
+        "increasing_quality_interval": [
+          -0.17630420190592608,
+          -0.11533168610185385
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9342966644829365,
+        "overlap_fraction_of_candidate_quality_span": 0.710924660172759
+      },
+      "dists": {
+        "status": "computed",
+        "percent": -6.343052856391031,
+        "increasing_quality_interval": [
+          -0.0955937181909879,
+          -0.06813671439886093
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.8796025051006785,
+        "overlap_fraction_of_candidate_quality_span": 0.6239761156776366
+      }
+    },
+    "C_vs_historical_200k": {
+      "psnr": {
+        "status": "computed",
+        "percent": 41.84753054311594,
+        "increasing_quality_interval": [
+          22.90525054931641,
+          24.96528323491414
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.6837776317549213
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 33.69002268508894,
+        "increasing_quality_interval": [
+          -0.1652450474599997,
+          -0.09726838100080688
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7297884937648647
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 25.598864227952063,
+        "increasing_quality_interval": [
+          -0.09345257778962453,
+          -0.05818868925174078
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7203017602733337
+      }
+    },
+    "D_vs_historical_200k": {
+      "psnr": {
+        "status": "computed",
+        "percent": 47.55290261491154,
+        "increasing_quality_interval": [
+          22.90525054931641,
+          24.96528323491414
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7120344969005117
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 29.84063221432781,
+        "increasing_quality_interval": [
+          -0.1652450474599997,
+          -0.09726838100080688
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7925913481652833
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 21.265007410682927,
+        "increasing_quality_interval": [
+          -0.09345257778962453,
+          -0.05818868925174078
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.8013920368058227
+      }
+    }
+  },
+  "matched_rate_interpolation": {
+    "0.04": {
+      "baseline_30k": {
+        "psnr": 23.256673008901497,
+        "lpips": 0.1489039602604794,
+        "dists": 0.08357191925463774
+      },
+      "historical_200k": {
+        "psnr": 23.863400749280483,
+        "lpips": 0.12983335694341272,
+        "dists": 0.07422129031792798
+      },
+      "C": {
+        "psnr": 22.89479871450906,
+        "lpips": 0.1570319147543898,
+        "dists": 0.08680836538552558
+      },
+      "D": {
+        "psnr": 22.882761425492387,
+        "lpips": 0.15177937276905926,
+        "dists": 0.08246709397264068
+      }
+    },
+    "0.06": {
+      "baseline_30k": {
+        "psnr": 23.975130812064712,
+        "lpips": 0.12436297463426618,
+        "dists": 0.07202761564522439
+      },
+      "historical_200k": {
+        "psnr": 24.572481357300177,
+        "lpips": 0.10831239910212911,
+        "dists": 0.062482129044325437
+      },
+      "C": {
+        "psnr": 23.97116273441924,
+        "lpips": 0.12134058390966797,
+        "dists": 0.06642803380340323
+      },
+      "D": {
+        "psnr": 23.86953069967965,
+        "lpips": 0.12039228262677865,
+        "dists": 0.06691485682880673
+      }
+    },
+    "0.08": {
+      "baseline_30k": {
+        "psnr": 24.244664266211203,
+        "lpips": 0.11548427318064793,
+        "dists": 0.06824919488158276
+      },
+      "historical_200k": {
+        "psnr": 24.903036462208423,
+        "lpips": 0.09897220646225412,
+        "dists": 0.05889838376264867
+      },
+      "C": {
+        "psnr": 24.59972142895063,
+        "lpips": 0.10519113771450132,
+        "dists": 0.05771445998858689
+      },
+      "D": {
+        "psnr": 24.503868408400905,
+        "lpips": 0.10492802239682168,
+        "dists": 0.05993702930679383
+      }
+    }
+  },
+  "interpolation": "PCHIP metric versus log real bpp, within observed range only; these are interpolated curve values, not new operating points",
+  "previews": {
+    "kodim01": {
+      "baseline_30k": {
+        "bpp": 0.058756510416666664,
+        "psnr": 21.561378479003906,
+        "lpips": 0.15579281747341156,
+        "dists": 0.07740789651870728,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/global/q2/rec/kodim01.png"
+      },
+      "C": {
+        "bpp": 0.05865478515625,
+        "psnr": 21.29753303527832,
+        "lpips": 0.15618114173412323,
+        "dists": 0.07898318767547607,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/C/kodim01.png"
+      },
+      "D": {
+        "bpp": 0.058736165364583336,
+        "psnr": 21.421661376953125,
+        "lpips": 0.1594599485397339,
+        "dists": 0.07773709297180176,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/D/kodim01.png"
+      }
+    },
+    "kodim13": {
+      "baseline_30k": {
+        "bpp": 0.051920572916666664,
+        "psnr": 18.703624725341797,
+        "lpips": 0.23339374363422394,
+        "dists": 0.11167830228805542,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/global/q2/rec/kodim13.png"
+      },
+      "C": {
+        "bpp": 0.052144368489583336,
+        "psnr": 18.573522567749023,
+        "lpips": 0.23887744545936584,
+        "dists": 0.1009475588798523,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/C/kodim13.png"
+      },
+      "D": {
+        "bpp": 0.052144368489583336,
+        "psnr": 18.46691131591797,
+        "lpips": 0.23482802510261536,
+        "dists": 0.09872990846633911,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/D/kodim13.png"
+      }
+    },
+    "kodim23": {
+      "baseline_30k": {
+        "bpp": 0.046061197916666664,
+        "psnr": 26.199092864990234,
+        "lpips": 0.0787583589553833,
+        "dists": 0.05424332618713379,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/global/q2/rec/kodim23.png"
+      },
+      "C": {
+        "bpp": 0.046122233072916664,
+        "psnr": 26.020143508911133,
+        "lpips": 0.08022063970565796,
+        "dists": 0.0542600154876709,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/C/kodim23.png"
+      },
+      "D": {
+        "bpp": 0.046122233072916664,
+        "psnr": 25.916223526000977,
+        "lpips": 0.07769741117954254,
+        "dists": 0.060409724712371826,
+        "png": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/matched_visuals/D/kodim23.png"
+      }
+    }
+  },
+  "validated_reconstruction_count": 432,
+  "additional_visual_decodes": 6,
+  "maximum_visual_relative_rate_error": 0.004310344827586296,
+  "historical_source_hash_matches": 24,
+  "limitations": [
+    "C/D 34K versus local baseline 30K; historical baseline 200K is archived results, its weights are unavailable",
+    "C/D train image loss 2/1/0.5; baseline image loss 4/1/1; frontends and initialization differ",
+    "Preview rates are matched per image to baseline q2; maximum residual mismatch 0.431%",
+    "Kodak is used for checkpoint selection in these runs; it is not a held-out test set"
+  ]
+}

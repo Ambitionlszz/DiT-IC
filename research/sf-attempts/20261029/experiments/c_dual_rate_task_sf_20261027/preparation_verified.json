@@ -1,0 +1,100 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/sf_start.pt",
+  "bytes": 4244364210,
+  "step": 10000,
+  "micro_seen": 10000,
+  "attempts": 10000,
+  "frozen_C_exact": {
+    "codec": true,
+    "distortion_scale": true,
+    "vae": true,
+    "dit": true,
+    "text": true
+  },
+  "head_preparation": {
+    "steps": 64,
+    "native_steps_advanced": 0,
+    "frozen_C": true,
+    "records": [
+      {
+        "prepare_update": 1,
+        "loss": 0.9908391237258911,
+        "grad_norm": 0.016010718420147896,
+        "sf_cosine": 0.16180549561977386,
+        "sf_aux_distortion": 0.4661293029785156,
+        "sf_aux_mse": 0.02145702764391899,
+        "sf_aux_lpips": 0.23962503671646118,
+        "sf_aux_dists": 0.14067614078521729,
+        "sf_pred_rms": 42.78358840942383,
+        "sf_target_rms": 73.40486907958984,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.5,
+        "sf_b_better": 0.5
+      },
+      {
+        "prepare_update": 16,
+        "loss": 0.4446927607059479,
+        "grad_norm": 0.07329457253217697,
+        "sf_cosine": 0.05085272341966629,
+        "sf_aux_distortion": 0.2632124423980713,
+        "sf_aux_mse": 0.017676670104265213,
+        "sf_aux_lpips": 0.12253239750862122,
+        "sf_aux_dists": 0.06997337937355042,
+        "sf_pred_rms": 57.30684280395508,
+        "sf_target_rms": 74.28876495361328,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.0,
+        "sf_b_better": 0.5
+      },
+      {
+        "prepare_update": 32,
+        "loss": 0.3751423954963684,
+        "grad_norm": 0.049229711294174194,
+        "sf_cosine": 0.0385918915271759,
+        "sf_aux_distortion": 0.2413940131664276,
+        "sf_aux_mse": 0.008695902302861214,
+        "sf_aux_lpips": 0.11418920010328293,
+        "sf_aux_dists": 0.09242120385169983,
+        "sf_pred_rms": 55.3209114074707,
+        "sf_target_rms": 67.4115982055664,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.0,
+        "sf_b_better": 0.5
+      },
+      {
+        "prepare_update": 48,
+        "loss": 0.3582318425178528,
+        "grad_norm": 0.04425100237131119,
+        "sf_cosine": 0.019705669954419136,
+        "sf_aux_distortion": 0.28542399406433105,
+        "sf_aux_mse": 0.01858787052333355,
+        "sf_aux_lpips": 0.12818074226379395,
+        "sf_aux_dists": 0.08289176225662231,
+        "sf_pred_rms": 59.99187469482422,
+        "sf_target_rms": 69.68260955810547,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.5,
+        "sf_b_better": 0.0
+      },
+      {
+        "prepare_update": 64,
+        "loss": 0.511215090751648,
+        "grad_norm": 0.0334102101624012,
+        "sf_cosine": 0.021714385598897934,
+        "sf_aux_distortion": 0.44060030579566956,
+        "sf_aux_mse": 0.0550139956176281,
+        "sf_aux_lpips": 0.1253257393836975,
+        "sf_aux_dists": 0.09521856904029846,
+        "sf_pred_rms": 70.78652954101562,
+        "sf_target_rms": 78.8535385131836,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.0,
+        "sf_b_better": 1.0
+      }
+    ]
+  },
+  "teacher_tensors": 410,
+  "source_optimizer_states": 1034,
+  "prepared_optimizer_states": 1034,
+  "passed": true
+}

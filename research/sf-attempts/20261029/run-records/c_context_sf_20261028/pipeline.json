@@ -1,0 +1,36 @@
+{
+  "supervisor_pid": 23713,
+  "started_at": "2026-10-28T10:00:40.176304+00:00",
+  "status": "paused",
+  "jobs": {
+    "joint": {
+      "pid": 23968,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/data2/ls/code/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/c_context_sf_20261028/configs/joint.json",
+        "--resume",
+        "/data2/ls/checkpoints/c_context_sf_20261028/joint/paused.pt",
+        "--max-updates",
+        "20000"
+      ],
+      "log": "/data2/ls/checkpoints/c_context_sf_20261028/logs/joint.log",
+      "started_at": "2026-10-28T10:00:40.179841+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-28T18:32:18.086815+00:00"
+    }
+  },
+  "segment_target": 20000,
+  "numerical_restarts": [],
+  "updated_at": "2026-10-28T18:32:18.088572+00:00"
+}

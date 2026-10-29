@@ -1,0 +1,8 @@
+{
+  "requested_at": "2026-10-26T08:30:25.808371+00:00",
+  "reason": "User clarified that pure C is already complete on another server. This server must run only C+SF on both GPUs.",
+  "old_supervisor_pid": 306746,
+  "disabled_branch": "pure_c",
+  "active_branch": "c_sf",
+  "resume_policy": "Preserve the current C+SF step, all optimizer/scaler/scheduler/RNG states, SF calibration and teacher EMA; restart only its two-GPU supervisor without a 12K segment ceiling."
+}

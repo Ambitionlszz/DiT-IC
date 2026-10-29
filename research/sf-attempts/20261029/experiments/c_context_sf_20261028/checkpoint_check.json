@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "step": 10004,
+  "attempts": 10004,
+  "micro_seen": 10004,
+  "raw_ema_teacher_optimizer_all_finite": true,
+  "world_size": 2,
+  "effective_batch": 8,
+  "scaler": {
+    "scale": 64.0,
+    "growth_factor": 2.0,
+    "backoff_factor": 0.5,
+    "growth_interval": 2000,
+    "_growth_tracker": 4
+  },
+  "scheduler_last_epoch": 10004,
+  "teacher_tensors": 422,
+  "main_optimizer_states": 1062,
+  "aux_optimizer_states": 1,
+  "max_context_gate": 0.00037942739436402917,
+  "full_precision_retry": false
+}

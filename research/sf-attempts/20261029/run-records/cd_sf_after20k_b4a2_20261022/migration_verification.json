@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "step": 472,
+  "tensor_values_compared": 5200,
+  "preserved_fields": [
+    "raw",
+    "ema",
+    "optimizer",
+    "aux_optimizer",
+    "scheduler",
+    "scaler",
+    "rng_by_rank",
+    "step",
+    "attempts",
+    "rep_weight",
+    "calibration",
+    "assets",
+    "source_sha256",
+    "validation_best",
+    "full_precision_retry",
+    "teacher_initialized_step"
+  ],
+  "old_micro_seen": 944,
+  "new_micro_seen": 472,
+  "global_images_seen": 3776,
+  "effective_batch": 16
+}

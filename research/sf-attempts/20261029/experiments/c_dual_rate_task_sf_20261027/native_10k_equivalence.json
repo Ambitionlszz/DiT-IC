@@ -1,0 +1,36 @@
+{
+  "reference": "/data2/ls/checkpoints/c_sf_ablation_b8_20261026/c_sf/joint/validation_0010000.json",
+  "current": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/validation_0010000.json",
+  "deltas": {
+    "0.0": {
+      "psnr": 0.0,
+      "lpips": 0.0,
+      "dists": 1.986821492050428e-08
+    },
+    "0.2": {
+      "psnr": 0.0,
+      "lpips": 0.0,
+      "dists": 0.0
+    },
+    "0.4": {
+      "psnr": 0.0,
+      "lpips": 9.934107481068821e-09,
+      "dists": 4.967053726656623e-09
+    },
+    "0.6": {
+      "psnr": 0.0,
+      "lpips": 0.0,
+      "dists": -4.967053733595517e-09
+    },
+    "0.8": {
+      "psnr": 0.0,
+      "lpips": 0.0,
+      "dists": 9.93410746025214e-09
+    },
+    "1.0": {
+      "psnr": 0.0,
+      "lpips": 0.0,
+      "dists": 0.0
+    }
+  }
+}

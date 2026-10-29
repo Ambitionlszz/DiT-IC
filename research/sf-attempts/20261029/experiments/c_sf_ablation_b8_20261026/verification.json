@@ -1,0 +1,33 @@
+{
+  "commit": "884b312f741eda582b730761b84251b6657dc369",
+  "branch": "codex/c-sf-ablation-b8-20261026",
+  "github_pushed": true,
+  "checks": [
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_c_sf_ablation.py tests/test_residual_sf_supervisor.py tests/test_quantization_residual_sf.py -k 'not two_rank_ddp'",
+      "result": "36 passed, 1 deselected",
+      "exit_code": 0
+    },
+    {
+      "command": "CUDA_VISIBLE_DEVICES='' python -m pytest -q -x -p no:cacheprovider tests/test_quantization_residual_sf.py::test_two_rank_ddp_dormant_to_active_and_zero_valid_rank tests/test_bt_training.py::TrainingTest::test_two_rank_accumulation_and_auxiliary_optimizer",
+      "result": "2 passed",
+      "exit_code": 0,
+      "environment": "CPU only, outside sandbox for local Gloo communication; no GPUs visible"
+    },
+    {
+      "command": "python -m py_compile (changed Python files); git diff --cached --check",
+      "result": "passed",
+      "exit_code": 0
+    },
+    {
+      "command": "python scripts/prepare_c_sf_ablation.py --output /data2/ls/experiments/c_sf_ablation_b8_20261026",
+      "result": "waiting_for_checkpoint; launch_ready=false; working_tree_dirty=false",
+      "exit_code": 0
+    }
+  ],
+  "initial_sandbox_attempt": "A broader test selection encountered DDP sandbox failures and exited 143. The relevant single-process and two-process selections above were rerun successfully; no full-suite pass is claimed.",
+  "actual_source_checkpoint_migrated": false,
+  "gpu_smoke_test_run": false,
+  "new_training_started": false,
+  "existing_training_stop_requested": false
+}

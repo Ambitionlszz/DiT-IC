@@ -1,0 +1,1303 @@
+{
+  "archived": true,
+  "weights_unavailable": true,
+  "source_hashes_verified": 24,
+  "records": [
+    {
+      "image_name": "kodim01",
+      "quality_index": 0,
+      "bpp": 0.029296875,
+      "psnr": 20.7540283203125,
+      "lpips": 0.184933677315712,
+      "dists": 0.09667253494262695,
+      "source_sha256": "a56e27cbf5f843c048b6af1d6e090760e9c92fadba88b7dee0205918a37523bd"
+    },
+    {
+      "image_name": "kodim02",
+      "quality_index": 0,
+      "bpp": 0.02164713541666667,
+      "psnr": 26.02159309387207,
+      "lpips": 0.1643291115760803,
+      "dists": 0.1163482069969177,
+      "source_sha256": "4f4b74a79237e311d72cad958237b5f7088d8bce1c82305ebefe1a70e3022dfd"
+    },
+    {
+      "image_name": "kodim03",
+      "quality_index": 0,
+      "bpp": 0.02384440104166667,
+      "psnr": 26.50464057922363,
+      "lpips": 0.120542474091053,
+      "dists": 0.08302557468414307,
+      "source_sha256": "e25ca1ff2f0c0cb5fdfd5f9b0a0bb21ac4c3de3c84a67f35b09a85d3306249db"
+    },
+    {
+      "image_name": "kodim04",
+      "quality_index": 0,
+      "bpp": 0.023681640625,
+      "psnr": 24.84382247924805,
+      "lpips": 0.1629806160926819,
+      "dists": 0.08201175928115845,
+      "source_sha256": "e3b946107c5d3441c022f678d0c3caf1e224d81b1604ba840a4f88e562de61aa"
+    },
+    {
+      "image_name": "kodim05",
+      "quality_index": 0,
+      "bpp": 0.03759765625,
+      "psnr": 18.84608268737793,
+      "lpips": 0.2087184637784958,
+      "dists": 0.09509432315826416,
+      "source_sha256": "10349e963c5c813d327852f82c1795fa4148d69fedffc4c589bee458e3ac3d53"
+    },
+    {
+      "image_name": "kodim06",
+      "quality_index": 0,
+      "bpp": 0.01985677083333333,
+      "psnr": 21.67740249633789,
+      "lpips": 0.1528990715742111,
+      "dists": 0.0996406078338623,
+      "source_sha256": "363510303b715d4cbc384e1ce227e466b613a09e1b71ae985882bf8e7fbd9b18"
+    },
+    {
+      "image_name": "kodim07",
+      "quality_index": 0,
+      "bpp": 0.03068033854166667,
+      "psnr": 23.29991912841797,
+      "lpips": 0.1461112797260284,
+      "dists": 0.09489601850509644,
+      "source_sha256": "b77d3f006f42414bb242222e0482e750c0fb9e5ee8d4bed2f6f11c5605fe54a4"
+    },
+    {
+      "image_name": "kodim08",
+      "quality_index": 0,
+      "bpp": 0.03816731770833334,
+      "psnr": 18.02047538757324,
+      "lpips": 0.1871338039636612,
+      "dists": 0.105551540851593,
+      "source_sha256": "ba23983c76b4832ee0e8af0592664756841a16779acd69f792e268fb6d13d6e7"
+    },
+    {
+      "image_name": "kodim09",
+      "quality_index": 0,
+      "bpp": 0.02262369791666667,
+      "psnr": 24.89256286621094,
+      "lpips": 0.1134958416223526,
+      "dists": 0.08232468366622925,
+      "source_sha256": "6a4361c2fc194feb4edaa9f9a4a0620fb9943e460ac7fdf037fb0f6dd6607a7d"
+    },
+    {
+      "image_name": "kodim10",
+      "quality_index": 0,
+      "bpp": 0.02742513020833333,
+      "psnr": 24.48529434204102,
+      "lpips": 0.152005210518837,
+      "dists": 0.09367632865905762,
+      "source_sha256": "9dfb70f5867c29ff9ed6313683f19b3d867849e40fbc0c4c54a4a89df341cf23"
+    },
+    {
+      "image_name": "kodim11",
+      "quality_index": 0,
+      "bpp": 0.02335611979166667,
+      "psnr": 22.49092864990234,
+      "lpips": 0.1807780265808105,
+      "dists": 0.09709012508392334,
+      "source_sha256": "7936814b58b5387fce2e4e2488b4ec830dadd95fa9520f358ddb30990b50f2b6"
+    },
+    {
+      "image_name": "kodim12",
+      "quality_index": 0,
+      "bpp": 0.019775390625,
+      "psnr": 25.81715393066406,
+      "lpips": 0.138504832983017,
+      "dists": 0.08837080001831055,
+      "source_sha256": "d78c37c2f04f23761ed2367dd77e2db584ddd4c3950833fecf89f199a8126980"
+    },
+    {
+      "image_name": "kodim13",
+      "quality_index": 0,
+      "bpp": 0.02490234375,
+      "psnr": 18.30583381652832,
+      "lpips": 0.2585057616233826,
+      "dists": 0.131782054901123,
+      "source_sha256": "bc34a3ce58dea09dce1704c997171602de90cb34d0c8503a988b77f473d39b08"
+    },
+    {
+      "image_name": "kodim14",
+      "quality_index": 0,
+      "bpp": 0.02775065104166667,
+      "psnr": 20.90288352966309,
+      "lpips": 0.2223189920186996,
+      "dists": 0.0940861701965332,
+      "source_sha256": "55a94550ff18f3246c4074fd32b77b0c74447c26b6ad274d564d999c0450ba6e"
+    },
+    {
+      "image_name": "kodim15",
+      "quality_index": 0,
+      "bpp": 0.02400716145833333,
+      "psnr": 24.81597900390625,
+      "lpips": 0.1456083655357361,
+      "dists": 0.07618165016174316,
+      "source_sha256": "7538cbb80cb9103606c48b806eae57d56c885c7f90b9b3be70a41160f9cbb683"
+    },
+    {
+      "image_name": "kodim16",
+      "quality_index": 0,
+      "bpp": 0.01627604166666667,
+      "psnr": 24.70112800598145,
+      "lpips": 0.1438235342502594,
+      "dists": 0.1050180196762085,
+      "source_sha256": "a89c7268ccd4718ba424a99fc4643c572cf692ca6eae887185ceb4e9f11d2e54"
+    },
+    {
+      "image_name": "kodim17",
+      "quality_index": 0,
+      "bpp": 0.02799479166666667,
+      "psnr": 24.18203735351562,
+      "lpips": 0.167289674282074,
+      "dists": 0.08929973840713501,
+      "source_sha256": "37afcc89fbdcb76d9518e04b2fc011027e2f4cd14b3b2f83cefd721641a47c5b"
+    },
+    {
+      "image_name": "kodim18",
+      "quality_index": 0,
+      "bpp": 0.025634765625,
+      "psnr": 21.1027717590332,
+      "lpips": 0.2108172476291656,
+      "dists": 0.09710085391998291,
+      "source_sha256": "1a9258c365988961d87a0598725b609139c303ad48a5aad6c503c3b1a87849aa"
+    },
+    {
+      "image_name": "kodim19",
+      "quality_index": 0,
+      "bpp": 0.02189127604166667,
+      "psnr": 22.7695369720459,
+      "lpips": 0.1443631052970886,
+      "dists": 0.0810171365737915,
+      "source_sha256": "b7450b264b1b0a411390d8931b112c27905a992520fc90569dc4b920aa32bbdc"
+    },
+    {
+      "image_name": "kodim20",
+      "quality_index": 0,
+      "bpp": 0.0205078125,
+      "psnr": 24.74040031433105,
+      "lpips": 0.08814575523138046,
+      "dists": 0.06636106967926025,
+      "source_sha256": "3b46c71e3b92a563820ba32936be8330c586c41f938efd94be938386aae4328a"
+    },
+    {
+      "image_name": "kodim21",
+      "quality_index": 0,
+      "bpp": 0.02189127604166667,
+      "psnr": 21.50230598449707,
+      "lpips": 0.1547890305519104,
+      "dists": 0.08389461040496826,
+      "source_sha256": "ac958597c82073f6bb65129c68f72b651db5b9efd82e11547d07350214bc268b"
+    },
+    {
+      "image_name": "kodim22",
+      "quality_index": 0,
+      "bpp": 0.02392578125,
+      "psnr": 23.18873596191406,
+      "lpips": 0.199380174279213,
+      "dists": 0.09520244598388672,
+      "source_sha256": "1cee58eb1f2d9c7ebb254d208a03c783ce6cf2c4d8c2cf45e235dd23b4ce1b29"
+    },
+    {
+      "image_name": "kodim23",
+      "quality_index": 0,
+      "bpp": 0.024169921875,
+      "psnr": 25.17197036743164,
+      "lpips": 0.1052612066268921,
+      "dists": 0.07278305292129517,
+      "source_sha256": "e3111a2fd4da24af15d6459ef9eacfe54106b38e27b4a21821b75c3f5d2d5baf"
+    },
+    {
+      "image_name": "kodim24",
+      "quality_index": 0,
+      "bpp": 0.03019205729166667,
+      "psnr": 20.68852615356445,
+      "lpips": 0.2131458818912506,
+      "dists": 0.1154325604438782,
+      "source_sha256": "1071c68372cc5a01435c2c225a5cf7d4bb803846ec08bb6b3d6721b156d7cb96"
+    },
+    {
+      "image_name": "kodim01",
+      "quality_index": 1,
+      "bpp": 0.04549153645833334,
+      "psnr": 21.56084442138672,
+      "lpips": 0.15427166223526,
+      "dists": 0.0758700966835022,
+      "source_sha256": "a56e27cbf5f843c048b6af1d6e090760e9c92fadba88b7dee0205918a37523bd"
+    },
+    {
+      "image_name": "kodim02",
+      "quality_index": 1,
+      "bpp": 0.034912109375,
+      "psnr": 26.79656791687012,
+      "lpips": 0.129433199763298,
+      "dists": 0.0831182599067688,
+      "source_sha256": "4f4b74a79237e311d72cad958237b5f7088d8bce1c82305ebefe1a70e3022dfd"
+    },
+    {
+      "image_name": "kodim03",
+      "quality_index": 1,
+      "bpp": 0.035888671875,
+      "psnr": 27.52561950683594,
+      "lpips": 0.08544601500034332,
+      "dists": 0.06524229049682617,
+      "source_sha256": "e25ca1ff2f0c0cb5fdfd5f9b0a0bb21ac4c3de3c84a67f35b09a85d3306249db"
+    },
+    {
+      "image_name": "kodim04",
+      "quality_index": 1,
+      "bpp": 0.03751627604166666,
+      "psnr": 25.96627235412598,
+      "lpips": 0.1196495890617371,
+      "dists": 0.05957603454589844,
+      "source_sha256": "e3b946107c5d3441c022f678d0c3caf1e224d81b1604ba840a4f88e562de61aa"
+    },
+    {
+      "image_name": "kodim05",
+      "quality_index": 1,
+      "bpp": 0.053955078125,
+      "psnr": 19.61712265014648,
+      "lpips": 0.1741172969341278,
+      "dists": 0.07555913925170898,
+      "source_sha256": "10349e963c5c813d327852f82c1795fa4148d69fedffc4c589bee458e3ac3d53"
+    },
+    {
+      "image_name": "kodim06",
+      "quality_index": 1,
+      "bpp": 0.03263346354166666,
+      "psnr": 22.17357635498047,
+      "lpips": 0.1266744583845139,
+      "dists": 0.08975690603256226,
+      "source_sha256": "363510303b715d4cbc384e1ce227e466b613a09e1b71ae985882bf8e7fbd9b18"
+    },
+    {
+      "image_name": "kodim07",
+      "quality_index": 1,
+      "bpp": 0.04484049479166666,
+      "psnr": 24.68540000915527,
+      "lpips": 0.1044482067227364,
+      "dists": 0.07556688785552979,
+      "source_sha256": "b77d3f006f42414bb242222e0482e750c0fb9e5ee8d4bed2f6f11c5605fe54a4"
+    },
+    {
+      "image_name": "kodim08",
+      "quality_index": 1,
+      "bpp": 0.05533854166666666,
+      "psnr": 18.92046928405762,
+      "lpips": 0.153679758310318,
+      "dists": 0.09337234497070312,
+      "source_sha256": "ba23983c76b4832ee0e8af0592664756841a16779acd69f792e268fb6d13d6e7"
+    },
+    {
+      "image_name": "kodim09",
+      "quality_index": 1,
+      "bpp": 0.03499348958333334,
+      "psnr": 25.88104438781738,
+      "lpips": 0.08716671168804169,
+      "dists": 0.06460493803024292,
+      "source_sha256": "6a4361c2fc194feb4edaa9f9a4a0620fb9943e460ac7fdf037fb0f6dd6607a7d"
+    },
+    {
+      "image_name": "kodim10",
+      "quality_index": 1,
+      "bpp": 0.04288736979166666,
+      "psnr": 25.94849014282227,
+      "lpips": 0.1070408076047897,
+      "dists": 0.07222896814346313,
+      "source_sha256": "9dfb70f5867c29ff9ed6313683f19b3d867849e40fbc0c4c54a4a89df341cf23"
+    },
+    {
+      "image_name": "kodim11",
+      "quality_index": 1,
+      "bpp": 0.037109375,
+      "psnr": 23.40196418762207,
+      "lpips": 0.1407755613327026,
+      "dists": 0.07785093784332275,
+      "source_sha256": "7936814b58b5387fce2e4e2488b4ec830dadd95fa9520f358ddb30990b50f2b6"
+    },
+    {
+      "image_name": "kodim12",
+      "quality_index": 1,
+      "bpp": 0.0322265625,
+      "psnr": 26.9119987487793,
+      "lpips": 0.1112034022808075,
+      "dists": 0.07145780324935913,
+      "source_sha256": "d78c37c2f04f23761ed2367dd77e2db584ddd4c3950833fecf89f199a8126980"
+    },
+    {
+      "image_name": "kodim13",
+      "quality_index": 1,
+      "bpp": 0.0400390625,
+      "psnr": 18.72374534606934,
+      "lpips": 0.2258955538272858,
+      "dists": 0.1049860119819641,
+      "source_sha256": "bc34a3ce58dea09dce1704c997171602de90cb34d0c8503a988b77f473d39b08"
+    },
+    {
+      "image_name": "kodim14",
+      "quality_index": 1,
+      "bpp": 0.043212890625,
+      "psnr": 21.66265869140625,
+      "lpips": 0.1839616000652313,
+      "dists": 0.08293384313583374,
+      "source_sha256": "55a94550ff18f3246c4074fd32b77b0c74447c26b6ad274d564d999c0450ba6e"
+    },
+    {
+      "image_name": "kodim15",
+      "quality_index": 1,
+      "bpp": 0.03548177083333334,
+      "psnr": 25.75752639770508,
+      "lpips": 0.1057418882846832,
+      "dists": 0.06235158443450928,
+      "source_sha256": "7538cbb80cb9103606c48b806eae57d56c885c7f90b9b3be70a41160f9cbb683"
+    },
+    {
+      "image_name": "kodim16",
+      "quality_index": 1,
+      "bpp": 0.02962239583333333,
+      "psnr": 25.41199111938477,
+      "lpips": 0.1155766025185585,
+      "dists": 0.07081478834152222,
+      "source_sha256": "a89c7268ccd4718ba424a99fc4643c572cf692ca6eae887185ceb4e9f11d2e54"
+    },
+    {
+      "image_name": "kodim17",
+      "quality_index": 1,
+      "bpp": 0.04215494791666666,
+      "psnr": 25.01728820800781,
+      "lpips": 0.130667120218277,
+      "dists": 0.08285129070281982,
+      "source_sha256": "37afcc89fbdcb76d9518e04b2fc011027e2f4cd14b3b2f83cefd721641a47c5b"
+    },
+    {
+      "image_name": "kodim18",
+      "quality_index": 1,
+      "bpp": 0.042236328125,
+      "psnr": 21.83501815795898,
+      "lpips": 0.1711617559194565,
+      "dists": 0.07628262042999268,
+      "source_sha256": "1a9258c365988961d87a0598725b609139c303ad48a5aad6c503c3b1a87849aa"
+    },
+    {
+      "image_name": "kodim19",
+      "quality_index": 1,
+      "bpp": 0.03409830729166666,
+      "psnr": 23.83849143981934,
+      "lpips": 0.1143027171492577,
+      "dists": 0.0618281364440918,
+      "source_sha256": "b7450b264b1b0a411390d8931b112c27905a992520fc90569dc4b920aa32bbdc"
+    },
+    {
+      "image_name": "kodim20",
+      "quality_index": 1,
+      "bpp": 0.029541015625,
+      "psnr": 25.79348564147949,
+      "lpips": 0.07216218113899231,
+      "dists": 0.0545278787612915,
+      "source_sha256": "3b46c71e3b92a563820ba32936be8330c586c41f938efd94be938386aae4328a"
+    },
+    {
+      "image_name": "kodim21",
+      "quality_index": 1,
+      "bpp": 0.03426106770833334,
+      "psnr": 22.25646209716797,
+      "lpips": 0.1295827329158783,
+      "dists": 0.07389962673187256,
+      "source_sha256": "ac958597c82073f6bb65129c68f72b651db5b9efd82e11547d07350214bc268b"
+    },
+    {
+      "image_name": "kodim22",
+      "quality_index": 1,
+      "bpp": 0.03955078125,
+      "psnr": 24.1875,
+      "lpips": 0.1584236323833466,
+      "dists": 0.08200085163116455,
+      "source_sha256": "1cee58eb1f2d9c7ebb254d208a03c783ce6cf2c4d8c2cf45e235dd23b4ce1b29"
+    },
+    {
+      "image_name": "kodim23",
+      "quality_index": 1,
+      "bpp": 0.03523763020833334,
+      "psnr": 26.45553398132324,
+      "lpips": 0.0801854282617569,
+      "dists": 0.05207812786102295,
+      "source_sha256": "e3111a2fd4da24af15d6459ef9eacfe54106b38e27b4a21821b75c3f5d2d5baf"
+    },
+    {
+      "image_name": "kodim24",
+      "quality_index": 1,
+      "bpp": 0.046630859375,
+      "psnr": 21.4080924987793,
+      "lpips": 0.1669995486736298,
+      "dists": 0.09061294794082642,
+      "source_sha256": "1071c68372cc5a01435c2c225a5cf7d4bb803846ec08bb6b3d6721b156d7cb96"
+    },
+    {
+      "image_name": "kodim01",
+      "quality_index": 2,
+      "bpp": 0.06209309895833334,
+      "psnr": 22.08839797973633,
+      "lpips": 0.1364022344350815,
+      "dists": 0.06823188066482544,
+      "source_sha256": "a56e27cbf5f843c048b6af1d6e090760e9c92fadba88b7dee0205918a37523bd"
+    },
+    {
+      "image_name": "kodim02",
+      "quality_index": 2,
+      "bpp": 0.05110677083333334,
+      "psnr": 27.4541072845459,
+      "lpips": 0.1102970242500305,
+      "dists": 0.0671735405921936,
+      "source_sha256": "4f4b74a79237e311d72cad958237b5f7088d8bce1c82305ebefe1a70e3022dfd"
+    },
+    {
+      "image_name": "kodim03",
+      "quality_index": 2,
+      "bpp": 0.05159505208333334,
+      "psnr": 28.35183143615723,
+      "lpips": 0.06566911190748215,
+      "dists": 0.05124664306640625,
+      "source_sha256": "e25ca1ff2f0c0cb5fdfd5f9b0a0bb21ac4c3de3c84a67f35b09a85d3306249db"
+    },
+    {
+      "image_name": "kodim04",
+      "quality_index": 2,
+      "bpp": 0.05322265625,
+      "psnr": 26.76662635803223,
+      "lpips": 0.09855038672685623,
+      "dists": 0.05309128761291504,
+      "source_sha256": "e3b946107c5d3441c022f678d0c3caf1e224d81b1604ba840a4f88e562de61aa"
+    },
+    {
+      "image_name": "kodim05",
+      "quality_index": 2,
+      "bpp": 0.06917317708333333,
+      "psnr": 20.07906913757324,
+      "lpips": 0.1561994105577469,
+      "dists": 0.06917482614517212,
+      "source_sha256": "10349e963c5c813d327852f82c1795fa4148d69fedffc4c589bee458e3ac3d53"
+    },
+    {
+      "image_name": "kodim06",
+      "quality_index": 2,
+      "bpp": 0.04728190104166666,
+      "psnr": 22.58049964904785,
+      "lpips": 0.1124574914574623,
+      "dists": 0.07236981391906738,
+      "source_sha256": "363510303b715d4cbc384e1ce227e466b613a09e1b71ae985882bf8e7fbd9b18"
+    },
+    {
+      "image_name": "kodim07",
+      "quality_index": 2,
+      "bpp": 0.05948893229166666,
+      "psnr": 25.67654800415039,
+      "lpips": 0.08430178463459015,
+      "dists": 0.06167727708816528,
+      "source_sha256": "b77d3f006f42414bb242222e0482e750c0fb9e5ee8d4bed2f6f11c5605fe54a4"
+    },
+    {
+      "image_name": "kodim08",
+      "quality_index": 2,
+      "bpp": 0.07185872395833333,
+      "psnr": 19.43036842346191,
+      "lpips": 0.137639045715332,
+      "dists": 0.07614380121231079,
+      "source_sha256": "ba23983c76b4832ee0e8af0592664756841a16779acd69f792e268fb6d13d6e7"
+    },
+    {
+      "image_name": "kodim09",
+      "quality_index": 2,
+      "bpp": 0.04768880208333334,
+      "psnr": 26.53644180297852,
+      "lpips": 0.07307950407266617,
+      "dists": 0.05377554893493652,
+      "source_sha256": "6a4361c2fc194feb4edaa9f9a4a0620fb9943e460ac7fdf037fb0f6dd6607a7d"
+    },
+    {
+      "image_name": "kodim10",
+      "quality_index": 2,
+      "bpp": 0.05900065104166666,
+      "psnr": 26.59914016723633,
+      "lpips": 0.08434983342885971,
+      "dists": 0.06246012449264526,
+      "source_sha256": "9dfb70f5867c29ff9ed6313683f19b3d867849e40fbc0c4c54a4a89df341cf23"
+    },
+    {
+      "image_name": "kodim11",
+      "quality_index": 2,
+      "bpp": 0.05257161458333334,
+      "psnr": 23.94584465026855,
+      "lpips": 0.1218669414520264,
+      "dists": 0.07059997320175171,
+      "source_sha256": "7936814b58b5387fce2e4e2488b4ec830dadd95fa9520f358ddb30990b50f2b6"
+    },
+    {
+      "image_name": "kodim12",
+      "quality_index": 2,
+      "bpp": 0.04801432291666666,
+      "psnr": 27.63939666748047,
+      "lpips": 0.08662580698728561,
+      "dists": 0.06205999851226807,
+      "source_sha256": "d78c37c2f04f23761ed2367dd77e2db584ddd4c3950833fecf89f199a8126980"
+    },
+    {
+      "image_name": "kodim13",
+      "quality_index": 2,
+      "bpp": 0.05672200520833334,
+      "psnr": 18.99151611328125,
+      "lpips": 0.2099244594573975,
+      "dists": 0.09460198879241943,
+      "source_sha256": "bc34a3ce58dea09dce1704c997171602de90cb34d0c8503a988b77f473d39b08"
+    },
+    {
+      "image_name": "kodim14",
+      "quality_index": 2,
+      "bpp": 0.05989583333333334,
+      "psnr": 22.15608406066895,
+      "lpips": 0.1597461253404617,
+      "dists": 0.07241404056549072,
+      "source_sha256": "55a94550ff18f3246c4074fd32b77b0c74447c26b6ad274d564d999c0450ba6e"
+    },
+    {
+      "image_name": "kodim15",
+      "quality_index": 2,
+      "bpp": 0.05135091145833334,
+      "psnr": 26.66921424865723,
+      "lpips": 0.08533872663974762,
+      "dists": 0.05145680904388428,
+      "source_sha256": "7538cbb80cb9103606c48b806eae57d56c885c7f90b9b3be70a41160f9cbb683"
+    },
+    {
+      "image_name": "kodim16",
+      "quality_index": 2,
+      "bpp": 0.04524739583333334,
+      "psnr": 25.92864227294922,
+      "lpips": 0.09832140803337097,
+      "dists": 0.05830681324005127,
+      "source_sha256": "a89c7268ccd4718ba424a99fc4643c572cf692ca6eae887185ceb4e9f11d2e54"
+    },
+    {
+      "image_name": "kodim17",
+      "quality_index": 2,
+      "bpp": 0.05973307291666666,
+      "psnr": 25.82939338684082,
+      "lpips": 0.1077175885438919,
+      "dists": 0.07026040554046631,
+      "source_sha256": "37afcc89fbdcb76d9518e04b2fc011027e2f4cd14b3b2f83cefd721641a47c5b"
+    },
+    {
+      "image_name": "kodim18",
+      "quality_index": 2,
+      "bpp": 0.05851236979166666,
+      "psnr": 22.19042015075684,
+      "lpips": 0.1471351385116577,
+      "dists": 0.07089817523956299,
+      "source_sha256": "1a9258c365988961d87a0598725b609139c303ad48a5aad6c503c3b1a87849aa"
+    },
+    {
+      "image_name": "kodim19",
+      "quality_index": 2,
+      "bpp": 0.050048828125,
+      "psnr": 24.65023040771484,
+      "lpips": 0.09890809655189514,
+      "dists": 0.05585348606109619,
+      "source_sha256": "b7450b264b1b0a411390d8931b112c27905a992520fc90569dc4b920aa32bbdc"
+    },
+    {
+      "image_name": "kodim20",
+      "quality_index": 2,
+      "bpp": 0.04044596354166666,
+      "psnr": 26.32379913330078,
+      "lpips": 0.06156365945935249,
+      "dists": 0.04614794254302979,
+      "source_sha256": "3b46c71e3b92a563820ba32936be8330c586c41f938efd94be938386aae4328a"
+    },
+    {
+      "image_name": "kodim21",
+      "quality_index": 2,
+      "bpp": 0.04752604166666666,
+      "psnr": 22.63552856445312,
+      "lpips": 0.1136517599225044,
+      "dists": 0.06480157375335693,
+      "source_sha256": "ac958597c82073f6bb65129c68f72b651db5b9efd82e11547d07350214bc268b"
+    },
+    {
+      "image_name": "kodim22",
+      "quality_index": 2,
+      "bpp": 0.05476888020833334,
+      "psnr": 24.64279556274414,
+      "lpips": 0.1438368111848831,
+      "dists": 0.07055443525314331,
+      "source_sha256": "1cee58eb1f2d9c7ebb254d208a03c783ce6cf2c4d8c2cf45e235dd23b4ce1b29"
+    },
+    {
+      "image_name": "kodim23",
+      "quality_index": 2,
+      "bpp": 0.04817708333333334,
+      "psnr": 27.15440559387207,
+      "lpips": 0.06490685790777206,
+      "dists": 0.04894137382507324,
+      "source_sha256": "e3111a2fd4da24af15d6459ef9eacfe54106b38e27b4a21821b75c3f5d2d5baf"
+    },
+    {
+      "image_name": "kodim24",
+      "quality_index": 2,
+      "bpp": 0.06258138020833333,
+      "psnr": 21.78632736206055,
+      "lpips": 0.146949976682663,
+      "dists": 0.08019900321960449,
+      "source_sha256": "1071c68372cc5a01435c2c225a5cf7d4bb803846ec08bb6b3d6721b156d7cb96"
+    },
+    {
+      "image_name": "kodim01",
+      "quality_index": 3,
+      "bpp": 0.07771809895833333,
+      "psnr": 22.41257667541504,
+      "lpips": 0.125194638967514,
+      "dists": 0.0633169412612915,
+      "source_sha256": "a56e27cbf5f843c048b6af1d6e090760e9c92fadba88b7dee0205918a37523bd"
+    },
+    {
+      "image_name": "kodim02",
+      "quality_index": 3,
+      "bpp": 0.06681315104166667,
+      "psnr": 27.71773338317871,
+      "lpips": 0.101649209856987,
+      "dists": 0.06843405961990356,
+      "source_sha256": "4f4b74a79237e311d72cad958237b5f7088d8bce1c82305ebefe1a70e3022dfd"
+    },
+    {
+      "image_name": "kodim03",
+      "quality_index": 3,
+      "bpp": 0.06526692708333333,
+      "psnr": 28.9420108795166,
+      "lpips": 0.05724319070577621,
+      "dists": 0.04589647054672241,
+      "source_sha256": "e25ca1ff2f0c0cb5fdfd5f9b0a0bb21ac4c3de3c84a67f35b09a85d3306249db"
+    },
+    {
+      "image_name": "kodim04",
+      "quality_index": 3,
+      "bpp": 0.06754557291666667,
+      "psnr": 27.20475959777832,
+      "lpips": 0.08716592192649841,
+      "dists": 0.04080379009246826,
+      "source_sha256": "e3b946107c5d3441c022f678d0c3caf1e224d81b1604ba840a4f88e562de61aa"
+    },
+    {
+      "image_name": "kodim05",
+      "quality_index": 3,
+      "bpp": 0.08463541666666667,
+      "psnr": 20.35548782348633,
+      "lpips": 0.1490056663751602,
+      "dists": 0.06267845630645752,
+      "source_sha256": "10349e963c5c813d327852f82c1795fa4148d69fedffc4c589bee458e3ac3d53"
+    },
+    {
+      "image_name": "kodim06",
+      "quality_index": 3,
+      "bpp": 0.06298828125,
+      "psnr": 22.85789489746094,
+      "lpips": 0.1022279188036919,
+      "dists": 0.0680243968963623,
+      "source_sha256": "363510303b715d4cbc384e1ce227e466b613a09e1b71ae985882bf8e7fbd9b18"
+    },
+    {
+      "image_name": "kodim07",
+      "quality_index": 3,
+      "bpp": 0.07503255208333333,
+      "psnr": 26.12666702270508,
+      "lpips": 0.07320456206798553,
+      "dists": 0.05644100904464722,
+      "source_sha256": "b77d3f006f42414bb242222e0482e750c0fb9e5ee8d4bed2f6f11c5605fe54a4"
+    },
+    {
+      "image_name": "kodim08",
+      "quality_index": 3,
+      "bpp": 0.085205078125,
+      "psnr": 19.59572601318359,
+      "lpips": 0.1303970664739609,
+      "dists": 0.07230186462402344,
+      "source_sha256": "ba23983c76b4832ee0e8af0592664756841a16779acd69f792e268fb6d13d6e7"
+    },
+    {
+      "image_name": "kodim09",
+      "quality_index": 3,
+      "bpp": 0.060791015625,
+      "psnr": 27.02740669250488,
+      "lpips": 0.06439010053873062,
+      "dists": 0.0503801703453064,
+      "source_sha256": "6a4361c2fc194feb4edaa9f9a4a0620fb9943e460ac7fdf037fb0f6dd6607a7d"
+    },
+    {
+      "image_name": "kodim10",
+      "quality_index": 3,
+      "bpp": 0.07259114583333333,
+      "psnr": 27.14163017272949,
+      "lpips": 0.07589827477931976,
+      "dists": 0.05940443277359009,
+      "source_sha256": "9dfb70f5867c29ff9ed6313683f19b3d867849e40fbc0c4c54a4a89df341cf23"
+    },
+    {
+      "image_name": "kodim11",
+      "quality_index": 3,
+      "bpp": 0.06754557291666667,
+      "psnr": 24.2191047668457,
+      "lpips": 0.1101842969655991,
+      "dists": 0.06155472993850708,
+      "source_sha256": "7936814b58b5387fce2e4e2488b4ec830dadd95fa9520f358ddb30990b50f2b6"
+    },
+    {
+      "image_name": "kodim12",
+      "quality_index": 3,
+      "bpp": 0.06193033854166666,
+      "psnr": 28.03823280334473,
+      "lpips": 0.0773334801197052,
+      "dists": 0.06029772758483887,
+      "source_sha256": "d78c37c2f04f23761ed2367dd77e2db584ddd4c3950833fecf89f199a8126980"
+    },
+    {
+      "image_name": "kodim13",
+      "quality_index": 3,
+      "bpp": 0.07177734375,
+      "psnr": 19.12367248535156,
+      "lpips": 0.1970677971839905,
+      "dists": 0.09074074029922485,
+      "source_sha256": "bc34a3ce58dea09dce1704c997171602de90cb34d0c8503a988b77f473d39b08"
+    },
+    {
+      "image_name": "kodim14",
+      "quality_index": 3,
+      "bpp": 0.07462565104166667,
+      "psnr": 22.42273712158203,
+      "lpips": 0.1490147560834885,
+      "dists": 0.07059669494628906,
+      "source_sha256": "55a94550ff18f3246c4074fd32b77b0c74447c26b6ad274d564d999c0450ba6e"
+    },
+    {
+      "image_name": "kodim15",
+      "quality_index": 3,
+      "bpp": 0.06502278645833333,
+      "psnr": 27.00467300415039,
+      "lpips": 0.0762714073061943,
+      "dists": 0.04436028003692627,
+      "source_sha256": "7538cbb80cb9103606c48b806eae57d56c885c7f90b9b3be70a41160f9cbb683"
+    },
+    {
+      "image_name": "kodim16",
+      "quality_index": 3,
+      "bpp": 0.06005859375,
+      "psnr": 26.25137519836426,
+      "lpips": 0.09090489894151688,
+      "dists": 0.05601561069488525,
+      "source_sha256": "a89c7268ccd4718ba424a99fc4643c572cf692ca6eae887185ceb4e9f11d2e54"
+    },
+    {
+      "image_name": "kodim17",
+      "quality_index": 3,
+      "bpp": 0.07356770833333333,
+      "psnr": 26.17168045043945,
+      "lpips": 0.09759825468063354,
+      "dists": 0.06454914808273315,
+      "source_sha256": "37afcc89fbdcb76d9518e04b2fc011027e2f4cd14b3b2f83cefd721641a47c5b"
+    },
+    {
+      "image_name": "kodim18",
+      "quality_index": 3,
+      "bpp": 0.07210286458333333,
+      "psnr": 22.36202430725098,
+      "lpips": 0.1352071315050125,
+      "dists": 0.0678856372833252,
+      "source_sha256": "1a9258c365988961d87a0598725b609139c303ad48a5aad6c503c3b1a87849aa"
+    },
+    {
+      "image_name": "kodim19",
+      "quality_index": 3,
+      "bpp": 0.06388346354166667,
+      "psnr": 25.08168411254883,
+      "lpips": 0.08665408194065094,
+      "dists": 0.05266940593719482,
+      "source_sha256": "b7450b264b1b0a411390d8931b112c27905a992520fc90569dc4b920aa32bbdc"
+    },
+    {
+      "image_name": "kodim20",
+      "quality_index": 3,
+      "bpp": 0.05118815104166666,
+      "psnr": 26.70039939880371,
+      "lpips": 0.05351395532488823,
+      "dists": 0.04125964641571045,
+      "source_sha256": "3b46c71e3b92a563820ba32936be8330c586c41f938efd94be938386aae4328a"
+    },
+    {
+      "image_name": "kodim21",
+      "quality_index": 3,
+      "bpp": 0.059814453125,
+      "psnr": 22.86275863647461,
+      "lpips": 0.1094395071268082,
+      "dists": 0.06210273504257202,
+      "source_sha256": "ac958597c82073f6bb65129c68f72b651db5b9efd82e11547d07350214bc268b"
+    },
+    {
+      "image_name": "kodim22",
+      "quality_index": 3,
+      "bpp": 0.069580078125,
+      "psnr": 25.00982666015625,
+      "lpips": 0.1309918910264969,
+      "dists": 0.06809979677200317,
+      "source_sha256": "1cee58eb1f2d9c7ebb254d208a03c783ce6cf2c4d8c2cf45e235dd23b4ce1b29"
+    },
+    {
+      "image_name": "kodim23",
+      "quality_index": 3,
+      "bpp": 0.06306966145833333,
+      "psnr": 27.52710151672363,
+      "lpips": 0.05420263111591339,
+      "dists": 0.04053610563278198,
+      "source_sha256": "e3111a2fd4da24af15d6459ef9eacfe54106b38e27b4a21821b75c3f5d2d5baf"
+    },
+    {
+      "image_name": "kodim24",
+      "quality_index": 3,
+      "bpp": 0.07845052083333333,
+      "psnr": 22.03854370117188,
+      "lpips": 0.1378524899482727,
+      "dists": 0.07509112358093262,
+      "source_sha256": "1071c68372cc5a01435c2c225a5cf7d4bb803846ec08bb6b3d6721b156d7cb96"
+    },
+    {
+      "image_name": "kodim01",
+      "quality_index": 4,
+      "bpp": 0.08894856770833333,
+      "psnr": 22.58602905273438,
+      "lpips": 0.1230137199163437,
+      "dists": 0.05988442897796631,
+      "source_sha256": "a56e27cbf5f843c048b6af1d6e090760e9c92fadba88b7dee0205918a37523bd"
+    },
+    {
+      "image_name": "kodim02",
+      "quality_index": 4,
+      "bpp": 0.07877604166666667,
+      "psnr": 27.95947265625,
+      "lpips": 0.09290461242198944,
+      "dists": 0.06621021032333374,
+      "source_sha256": "4f4b74a79237e311d72cad958237b5f7088d8bce1c82305ebefe1a70e3022dfd"
+    },
+    {
+      "image_name": "kodim03",
+      "quality_index": 4,
+      "bpp": 0.07796223958333333,
+      "psnr": 29.10453033447266,
+      "lpips": 0.05375029891729355,
+      "dists": 0.04682564735412598,
+      "source_sha256": "e25ca1ff2f0c0cb5fdfd5f9b0a0bb21ac4c3de3c84a67f35b09a85d3306249db"
+    },
+    {
+      "image_name": "kodim04",
+      "quality_index": 4,
+      "bpp": 0.080322265625,
+      "psnr": 27.35850524902344,
+      "lpips": 0.08241957426071167,
+      "dists": 0.04062527418136597,
+      "source_sha256": "e3b946107c5d3441c022f678d0c3caf1e224d81b1604ba840a4f88e562de61aa"
+    },
+    {
+      "image_name": "kodim05",
+      "quality_index": 4,
+      "bpp": 0.09562174479166667,
+      "psnr": 20.47382545471191,
+      "lpips": 0.1459843218326569,
+      "dists": 0.06482470035552979,
+      "source_sha256": "10349e963c5c813d327852f82c1795fa4148d69fedffc4c589bee458e3ac3d53"
+    },
+    {
+      "image_name": "kodim06",
+      "quality_index": 4,
+      "bpp": 0.07421875,
+      "psnr": 22.96209335327148,
+      "lpips": 0.1006826534867287,
+      "dists": 0.06460678577423096,
+      "source_sha256": "363510303b715d4cbc384e1ce227e466b613a09e1b71ae985882bf8e7fbd9b18"
+    },
+    {
+      "image_name": "kodim07",
+      "quality_index": 4,
+      "bpp": 0.08748372395833333,
+      "psnr": 26.3660888671875,
+      "lpips": 0.0697457492351532,
+      "dists": 0.05388361215591431,
+      "source_sha256": "b77d3f006f42414bb242222e0482e750c0fb9e5ee8d4bed2f6f11c5605fe54a4"
+    },
+    {
+      "image_name": "kodim08",
+      "quality_index": 4,
+      "bpp": 0.09505208333333333,
+      "psnr": 19.72830772399902,
+      "lpips": 0.1270237416028976,
+      "dists": 0.07282918691635132,
+      "source_sha256": "ba23983c76b4832ee0e8af0592664756841a16779acd69f792e268fb6d13d6e7"
+    },
+    {
+      "image_name": "kodim09",
+      "quality_index": 4,
+      "bpp": 0.07194010416666667,
+      "psnr": 27.20730781555176,
+      "lpips": 0.06123513355851173,
+      "dists": 0.04790025949478149,
+      "source_sha256": "6a4361c2fc194feb4edaa9f9a4a0620fb9943e460ac7fdf037fb0f6dd6607a7d"
+    },
+    {
+      "image_name": "kodim10",
+      "quality_index": 4,
+      "bpp": 0.084716796875,
+      "psnr": 27.38744354248047,
+      "lpips": 0.07202062010765076,
+      "dists": 0.05871093273162842,
+      "source_sha256": "9dfb70f5867c29ff9ed6313683f19b3d867849e40fbc0c4c54a4a89df341cf23"
+    },
+    {
+      "image_name": "kodim11",
+      "quality_index": 4,
+      "bpp": 0.07918294270833333,
+      "psnr": 24.36927032470703,
+      "lpips": 0.1055609583854675,
+      "dists": 0.06447267532348633,
+      "source_sha256": "7936814b58b5387fce2e4e2488b4ec830dadd95fa9520f358ddb30990b50f2b6"
+    },
+    {
+      "image_name": "kodim12",
+      "quality_index": 4,
+      "bpp": 0.07535807291666667,
+      "psnr": 28.23640441894531,
+      "lpips": 0.07290184497833252,
+      "dists": 0.05459499359130859,
+      "source_sha256": "d78c37c2f04f23761ed2367dd77e2db584ddd4c3950833fecf89f199a8126980"
+    },
+    {
+      "image_name": "kodim13",
+      "quality_index": 4,
+      "bpp": 0.08284505208333333,
+      "psnr": 19.16826820373535,
+      "lpips": 0.1927544325590134,
+      "dists": 0.09075552225112915,
+      "source_sha256": "bc34a3ce58dea09dce1704c997171602de90cb34d0c8503a988b77f473d39b08"
+    },
+    {
+      "image_name": "kodim14",
+      "quality_index": 4,
+      "bpp": 0.086669921875,
+      "psnr": 22.56793594360352,
+      "lpips": 0.1409552246332169,
+      "dists": 0.06816869974136353,
+      "source_sha256": "55a94550ff18f3246c4074fd32b77b0c74447c26b6ad274d564d999c0450ba6e"
+    },
+    {
+      "image_name": "kodim15",
+      "quality_index": 4,
+      "bpp": 0.077880859375,
+      "psnr": 27.11503982543945,
+      "lpips": 0.0707281231880188,
+      "dists": 0.04537492990493774,
+      "source_sha256": "7538cbb80cb9103606c48b806eae57d56c885c7f90b9b3be70a41160f9cbb683"
+    },
+    {
+      "image_name": "kodim16",
+      "quality_index": 4,
+      "bpp": 0.07234700520833333,
+      "psnr": 26.46831893920898,
+      "lpips": 0.08672285079956055,
+      "dists": 0.05400973558425903,
+      "source_sha256": "a89c7268ccd4718ba424a99fc4643c572cf692ca6eae887185ceb4e9f11d2e54"
+    },
+    {
+      "image_name": "kodim17",
+      "quality_index": 4,
+      "bpp": 0.08626302083333333,
+      "psnr": 26.34404373168945,
+      "lpips": 0.09251865744590759,
+      "dists": 0.06058019399642944,
+      "source_sha256": "37afcc89fbdcb76d9518e04b2fc011027e2f4cd14b3b2f83cefd721641a47c5b"
+    },
+    {
+      "image_name": "kodim18",
+      "quality_index": 4,
+      "bpp": 0.08479817708333333,
+      "psnr": 22.44601821899414,
+      "lpips": 0.1325695812702179,
+      "dists": 0.06455099582672119,
+      "source_sha256": "1a9258c365988961d87a0598725b609139c303ad48a5aad6c503c3b1a87849aa"
+    },
+    {
+      "image_name": "kodim19",
+      "quality_index": 4,
+      "bpp": 0.07560221354166667,
+      "psnr": 25.15311241149902,
+      "lpips": 0.0805417150259018,
+      "dists": 0.05011379718780518,
+      "source_sha256": "b7450b264b1b0a411390d8931b112c27905a992520fc90569dc4b920aa32bbdc"
+    },
+    {
+      "image_name": "kodim20",
+      "quality_index": 4,
+      "bpp": 0.0615234375,
+      "psnr": 26.86396026611328,
+      "lpips": 0.05116276070475578,
+      "dists": 0.04312527179718018,
+      "source_sha256": "3b46c71e3b92a563820ba32936be8330c586c41f938efd94be938386aae4328a"
+    },
+    {
+      "image_name": "kodim21",
+      "quality_index": 4,
+      "bpp": 0.07088216145833333,
+      "psnr": 22.92050933837891,
+      "lpips": 0.1062179580330849,
+      "dists": 0.05986279249191284,
+      "source_sha256": "ac958597c82073f6bb65129c68f72b651db5b9efd82e11547d07350214bc268b"
+    },
+    {
+      "image_name": "kodim22",
+      "quality_index": 4,
+      "bpp": 0.08138020833333333,
+      "psnr": 25.10357666015625,
+      "lpips": 0.127274826169014,
+      "dists": 0.06672066450119019,
+      "source_sha256": "1cee58eb1f2d9c7ebb254d208a03c783ce6cf2c4d8c2cf45e235dd23b4ce1b29"
+    },
+    {
+      "image_name": "kodim23",
+      "quality_index": 4,
+      "bpp": 0.075927734375,
+      "psnr": 27.82034301757812,
+      "lpips": 0.0510881245136261,
+      "dists": 0.03912115097045898,
+      "source_sha256": "e3111a2fd4da24af15d6459ef9eacfe54106b38e27b4a21821b75c3f5d2d5baf"
+    },
+    {
+      "image_name": "kodim24",
+      "quality_index": 4,
+      "bpp": 0.08927408854166667,
+      "psnr": 22.09737396240234,
+      "lpips": 0.131834477186203,
+      "dists": 0.07445168495178223,
+      "source_sha256": "1071c68372cc5a01435c2c225a5cf7d4bb803846ec08bb6b3d6721b156d7cb96"
+    },
+    {
+      "image_name": "kodim01",
+      "quality_index": 5,
+      "bpp": 0.094970703125,
+      "psnr": 22.63568878173828,
+      "lpips": 0.1210751980543137,
+      "dists": 0.05915164947509766,
+      "source_sha256": "a56e27cbf5f843c048b6af1d6e090760e9c92fadba88b7dee0205918a37523bd"
+    },
+    {
+      "image_name": "kodim02",
+      "quality_index": 5,
+      "bpp": 0.08683268229166667,
+      "psnr": 28.04494667053223,
+      "lpips": 0.09166374802589417,
+      "dists": 0.06557720899581909,
+      "source_sha256": "4f4b74a79237e311d72cad958237b5f7088d8bce1c82305ebefe1a70e3022dfd"
+    },
+    {
+      "image_name": "kodim03",
+      "quality_index": 5,
+      "bpp": 0.08780924479166667,
+      "psnr": 29.26861572265625,
+      "lpips": 0.05011138319969177,
+      "dists": 0.04332822561264038,
+      "source_sha256": "e25ca1ff2f0c0cb5fdfd5f9b0a0bb21ac4c3de3c84a67f35b09a85d3306249db"
+    },
+    {
+      "image_name": "kodim04",
+      "quality_index": 5,
+      "bpp": 0.08919270833333333,
+      "psnr": 27.42474365234375,
+      "lpips": 0.08119858056306839,
+      "dists": 0.0402335524559021,
+      "source_sha256": "e3b946107c5d3441c022f678d0c3caf1e224d81b1604ba840a4f88e562de61aa"
+    },
+    {
+      "image_name": "kodim05",
+      "quality_index": 5,
+      "bpp": 0.1021321614583333,
+      "psnr": 20.4927921295166,
+      "lpips": 0.1463123857975006,
+      "dists": 0.06295949220657349,
+      "source_sha256": "10349e963c5c813d327852f82c1795fa4148d69fedffc4c589bee458e3ac3d53"
+    },
+    {
+      "image_name": "kodim06",
+      "quality_index": 5,
+      "bpp": 0.08333333333333333,
+      "psnr": 23.00040817260742,
+      "lpips": 0.09733734279870987,
+      "dists": 0.06655579805374146,
+      "source_sha256": "363510303b715d4cbc384e1ce227e466b613a09e1b71ae985882bf8e7fbd9b18"
+    },
+    {
+      "image_name": "kodim07",
+      "quality_index": 5,
+      "bpp": 0.09529622395833333,
+      "psnr": 26.3923454284668,
+      "lpips": 0.06903433799743652,
+      "dists": 0.0541498064994812,
+      "source_sha256": "b77d3f006f42414bb242222e0482e750c0fb9e5ee8d4bed2f6f11c5605fe54a4"
+    },
+    {
+      "image_name": "kodim08",
+      "quality_index": 5,
+      "bpp": 0.100830078125,
+      "psnr": 19.75551414489746,
+      "lpips": 0.1252586990594864,
+      "dists": 0.06976526975631714,
+      "source_sha256": "ba23983c76b4832ee0e8af0592664756841a16779acd69f792e268fb6d13d6e7"
+    },
+    {
+      "image_name": "kodim09",
+      "quality_index": 5,
+      "bpp": 0.08162434895833333,
+      "psnr": 27.23420906066895,
+      "lpips": 0.05863393843173981,
+      "dists": 0.04638803005218506,
+      "source_sha256": "6a4361c2fc194feb4edaa9f9a4a0620fb9943e460ac7fdf037fb0f6dd6607a7d"
+    },
+    {
+      "image_name": "kodim10",
+      "quality_index": 5,
+      "bpp": 0.09228515625,
+      "psnr": 27.45623397827148,
+      "lpips": 0.069675512611866,
+      "dists": 0.05559295415878296,
+      "source_sha256": "9dfb70f5867c29ff9ed6313683f19b3d867849e40fbc0c4c54a4a89df341cf23"
+    },
+    {
+      "image_name": "kodim11",
+      "quality_index": 5,
+      "bpp": 0.08797200520833333,
+      "psnr": 24.40618515014648,
+      "lpips": 0.1037131771445274,
+      "dists": 0.06290841102600098,
+      "source_sha256": "7936814b58b5387fce2e4e2488b4ec830dadd95fa9520f358ddb30990b50f2b6"
+    },
+    {
+      "image_name": "kodim12",
+      "quality_index": 5,
+      "bpp": 0.08447265625,
+      "psnr": 28.28146171569824,
+      "lpips": 0.07059796899557114,
+      "dists": 0.05848783254623413,
+      "source_sha256": "d78c37c2f04f23761ed2367dd77e2db584ddd4c3950833fecf89f199a8126980"
+    },
+    {
+      "image_name": "kodim13",
+      "quality_index": 5,
+      "bpp": 0.08951822916666667,
+      "psnr": 19.18792724609375,
+      "lpips": 0.1929159611463547,
+      "dists": 0.09021508693695068,
+      "source_sha256": "bc34a3ce58dea09dce1704c997171602de90cb34d0c8503a988b77f473d39b08"
+    },
+    {
+      "image_name": "kodim14",
+      "quality_index": 5,
+      "bpp": 0.09423828125,
+      "psnr": 22.54981994628906,
+      "lpips": 0.1415601372718811,
+      "dists": 0.06855100393295288,
+      "source_sha256": "55a94550ff18f3246c4074fd32b77b0c74447c26b6ad274d564d999c0450ba6e"
+    },
+    {
+      "image_name": "kodim15",
+      "quality_index": 5,
+      "bpp": 0.08821614583333333,
+      "psnr": 27.29323959350586,
+      "lpips": 0.06898266077041626,
+      "dists": 0.04047417640686035,
+      "source_sha256": "7538cbb80cb9103606c48b806eae57d56c885c7f90b9b3be70a41160f9cbb683"
+    },
+    {
+      "image_name": "kodim16",
+      "quality_index": 5,
+      "bpp": 0.08040364583333333,
+      "psnr": 26.56770896911621,
+      "lpips": 0.08447861671447754,
+      "dists": 0.04884511232376099,
+      "source_sha256": "a89c7268ccd4718ba424a99fc4643c572cf692ca6eae887185ceb4e9f11d2e54"
+    },
+    {
+      "image_name": "kodim17",
+      "quality_index": 5,
+      "bpp": 0.09440104166666667,
+      "psnr": 26.37410163879395,
+      "lpips": 0.09187859296798706,
+      "dists": 0.06383299827575684,
+      "source_sha256": "37afcc89fbdcb76d9518e04b2fc011027e2f4cd14b3b2f83cefd721641a47c5b"
+    },
+    {
+      "image_name": "kodim18",
+      "quality_index": 5,
+      "bpp": 0.09244791666666667,
+      "psnr": 22.49243927001953,
+      "lpips": 0.132662832736969,
+      "dists": 0.06433272361755371,
+      "source_sha256": "1a9258c365988961d87a0598725b609139c303ad48a5aad6c503c3b1a87849aa"
+    },
+    {
+      "image_name": "kodim19",
+      "quality_index": 5,
+      "bpp": 0.08544921875,
+      "psnr": 25.17905807495117,
+      "lpips": 0.0792071521282196,
+      "dists": 0.05321323871612549,
+      "source_sha256": "b7450b264b1b0a411390d8931b112c27905a992520fc90569dc4b920aa32bbdc"
+    },
+    {
+      "image_name": "kodim20",
+      "quality_index": 5,
+      "bpp": 0.0712890625,
+      "psnr": 26.87628555297852,
+      "lpips": 0.05112596973776817,
+      "dists": 0.04646056890487671,
+      "source_sha256": "3b46c71e3b92a563820ba32936be8330c586c41f938efd94be938386aae4328a"
+    },
+    {
+      "image_name": "kodim21",
+      "quality_index": 5,
+      "bpp": 0.07893880208333333,
+      "psnr": 22.9656810760498,
+      "lpips": 0.1040855571627617,
+      "dists": 0.06113433837890625,
+      "source_sha256": "ac958597c82073f6bb65129c68f72b651db5b9efd82e11547d07350214bc268b"
+    },
+    {
+      "image_name": "kodim22",
+      "quality_index": 5,
+      "bpp": 0.08935546875,
+      "psnr": 25.19036102294922,
+      "lpips": 0.1223102882504463,
+      "dists": 0.0654485821723938,
+      "source_sha256": "1cee58eb1f2d9c7ebb254d208a03c783ce6cf2c4d8c2cf45e235dd23b4ce1b29"
+    },
+    {
+      "image_name": "kodim23",
+      "quality_index": 5,
+      "bpp": 0.08577473958333333,
+      "psnr": 27.95421600341797,
+      "lpips": 0.04907259345054626,
+      "dists": 0.03834211826324463,
+      "source_sha256": "e3111a2fd4da24af15d6459ef9eacfe54106b38e27b4a21821b75c3f5d2d5baf"
+    },
+    {
+      "image_name": "kodim24",
+      "quality_index": 5,
+      "bpp": 0.095458984375,
+      "psnr": 22.14281463623047,
+      "lpips": 0.1315485090017319,
+      "dists": 0.0705803632736206,
+      "source_sha256": "1071c68372cc5a01435c2c225a5cf7d4bb803846ec08bb6b3d6721b156d7cb96"
+    }
+  ]
+}

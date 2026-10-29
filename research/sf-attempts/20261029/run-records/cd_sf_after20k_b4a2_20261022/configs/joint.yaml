@@ -1,0 +1,77 @@
+data:
+  train:
+  - /data2/ls/data/DIV2K_train_HR_clean
+  - /data2/ls/data/Flickr2K/Flickr2K_png
+  - /data2/ls/data/LSDIR
+  - /data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png
+  valid:
+  - /data2/ls/data/Kodak
+  crop: 512
+  valid_crop: 0
+  workers: 8
+  valid_limit: 24
+model:
+  sana_path: /data2/ls/checkpoints/SANA
+  text_path: /data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt
+  backend: D
+  dit_rank: 128
+  vae_rank: 32
+  checkpoint_blocks: true
+  codec:
+    ch_emd: 32
+    channel: 320
+    channel_out: 32
+    delta_coarse: 4.0
+    delta_fine: 0.5
+    kappa: 0.6931471805599453
+optimizer:
+  codec_lr: 0.0001
+  joint_codec_lr: 5.0e-05
+  backend_lr: 0.0001
+  vae_lr: 1.0e-05
+  aux_lr: 0.001
+  max_grad_norm: 4.0
+  warmup: 500
+  schedule: cosine
+image_loss:
+  mse_weight: 4.0
+  lpips_weight: 1.0
+  dists_weight: 1.0
+self_flow:
+  enabled: true
+  mixed_sampling: true
+  high_fraction: 0.25
+  student_layer: 8
+  teacher_layer: 20
+  warmup: 0
+  ramp: 2000
+  calibrate_every: 500
+  gradient_target: 0.05
+  gradient_cap: 0.1
+  start_step: 20000
+  mixed_every: 2
+  ema_decay: 0.9999
+train:
+  phase: joint
+  steps: 200000
+  output: /data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint
+  batch_size: 4
+  effective_batch: 16
+  accumulation_steps: 2
+  seed: 903
+  eval_every: 2000
+  save_every: 2000
+  validation_actual_bpp: true
+  log_every: 100
+  packet_samples: 2
+  data_scale_samples: 128
+  calibration_samples: 512
+  require_quality_span: true
+  router_uniform_steps: 2000
+  router_ramp_steps: 3000
+  full_decode_every: 10000
+  keep_last_checkpoints: 3
+  tensorboard: true
+objective:
+  base_weight: 0.1
+  repaired_weight: 0.0

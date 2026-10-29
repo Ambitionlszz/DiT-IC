@@ -1,0 +1,11 @@
+base: /data2/ls/code/DiT-IC-bt-self-flow/configs/bt_self_flow/c_joint.yaml
+data:
+  valid_limit: 1
+  workers: 0
+train:
+  steps: 2
+  output: /data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/direct_e2e_200k_gpu/C
+  log_every: 1
+  eval_every: 2
+  save_every: 2
+  packet_samples: 1

@@ -1,0 +1,87 @@
+{
+  "verified_at": "2026-10-19T11:11:41.712971+08:00",
+  "status": "actual_optimizer_updates_verified_on_both_gpus",
+  "jobs": {
+    "C": {
+      "pid": 6741,
+      "first_resumed_update": {
+        "step": 34001,
+        "attempts": 34118,
+        "lambda_low": 0.5516136415655757,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.0970231294631958,
+        "seconds_per_update": 14.62619400099993,
+        "steady_seconds_per_update": 14.62619400099993,
+        "max_memory_bytes": 23943188480,
+        "mse": 0.024886926636099815,
+        "lpips": 0.11563856899738312,
+        "dists": 0.07424525916576385,
+        "psnr": 22.35992431640625,
+        "base": 0.03948002681136131,
+        "latent": 0.0389404371380806,
+        "rate_est": 0.08834286034107208
+      },
+      "latest_new_logged_update": {
+        "step": 34001,
+        "attempts": 34118,
+        "lambda_low": 0.5516136415655757,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.0970231294631958,
+        "seconds_per_update": 14.62619400099993,
+        "steady_seconds_per_update": 14.62619400099993,
+        "max_memory_bytes": 23943188480,
+        "mse": 0.024886926636099815,
+        "lpips": 0.11563856899738312,
+        "dists": 0.07424525916576385,
+        "psnr": 22.35992431640625,
+        "base": 0.03948002681136131,
+        "latent": 0.0389404371380806,
+        "rate_est": 0.08834286034107208
+      },
+      "new_nonfinite_reports": []
+    },
+    "D": {
+      "pid": 6742,
+      "first_resumed_update": {
+        "step": 36001,
+        "attempts": 36036,
+        "lambda_low": 0.6129091325246052,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.1583586931228638,
+        "seconds_per_update": 14.59213271700014,
+        "steady_seconds_per_update": 14.59213271700014,
+        "max_memory_bytes": 24941327360,
+        "mse": 0.02569970116019249,
+        "lpips": 0.10670388489961624,
+        "dists": 0.06781776249408722,
+        "psnr": 23.01982879638672,
+        "base": 0.03468327224254608,
+        "latent": 0.032210566103458405,
+        "rate_est": 0.09078733623027802
+      },
+      "latest_new_logged_update": {
+        "step": 36001,
+        "attempts": 36036,
+        "lambda_low": 0.6129091325246052,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.1583586931228638,
+        "seconds_per_update": 14.59213271700014,
+        "steady_seconds_per_update": 14.59213271700014,
+        "max_memory_bytes": 24941327360,
+        "mse": 0.02569970116019249,
+        "lpips": 0.10670388489961624,
+        "dists": 0.06781776249408722,
+        "psnr": 23.01982879638672,
+        "base": 0.03468327224254608,
+        "latent": 0.032210566103458405,
+        "rate_est": 0.09078733623027802
+      },
+      "new_nonfinite_reports": []
+    }
+  },
+  "gpu_status": "0, Tesla V100S-PCIE-32GB, 23876 MiB, 94 %\n1, Tesla V100S-PCIE-32GB, 24810 MiB, 93 %"
+}

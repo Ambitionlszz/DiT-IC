@@ -1,0 +1,203 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt",
+  "checkpoint_sha256": "a4a3cc1034ca37a70df2c40841a23df6a82e8cdb4bddf5d66d8d8ce78c07176b",
+  "weights": "ema",
+  "backend": "D",
+  "step": 96750,
+  "phase": "joint",
+  "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+  "images": 24,
+  "metric_protocol": "float RGB [0,1], pyiqa PSNR/MS-SSIM/DISTS and torchmetrics LPIPS alex normalize=True, matching archived 512 evaluator",
+  "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+  "codec_precision": "fp32",
+  "nfe": 1,
+  "summary": {
+    "0": {
+      "bpp": 0.029069688585069444,
+      "psnr": 22.63884099324544,
+      "lpips": 0.1640160291766127,
+      "dists": 0.08985164761543274,
+      "encode_seconds": 0.9572106459575783,
+      "decode_seconds": 0.7874975597102699,
+      "peak_memory_bytes": 6067859285.333333,
+      "ms_ssim": 0.779356973966033,
+      "base_latent_mse": 0.174660320704182,
+      "repair_latent_rms": 0.20335916926463446,
+      "high_precision_psnr": 22.07836498816808,
+      "high_precision_area_fraction": 0.8567708544433117,
+      "scale_saturation": 0.004340277907128136,
+      "bytes_by_component": {
+        "hyper": 107.5,
+        "main": 1182.3333333333333,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.07523620669543916,
+        "main": 0.8274816283681325,
+        "allocation": 0.025195380846844743,
+        "scales": 0.03359384112912633,
+        "mask": 0.0,
+        "header": 0.03849294296045725
+      }
+    },
+    "13107": {
+      "bpp": 0.04671563042534722,
+      "psnr": 23.66287287076314,
+      "lpips": 0.12684039026498795,
+      "dists": 0.0721416821082433,
+      "encode_seconds": 0.3522544517933663,
+      "decode_seconds": 0.7202515163323066,
+      "peak_memory_bytes": 6068896768.0,
+      "ms_ssim": 0.8265185010503505,
+      "base_latent_mse": 0.0910943125685056,
+      "repair_latent_rms": 0.13428841376056275,
+      "high_precision_psnr": 23.076627800861996,
+      "high_precision_area_fraction": 0.8567708544433117,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 107.5,
+        "main": 2049.6666666666665,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.04681715903317123,
+        "main": 0.892647165565798,
+        "allocation": 0.015678304420410828,
+        "scales": 0.020904405893881105,
+        "mask": 0.0,
+        "header": 0.02395296508673877
+      }
+    },
+    "26214": {
+      "bpp": 0.06645033094618055,
+      "psnr": 24.417192856470745,
+      "lpips": 0.10665093564117949,
+      "dists": 0.059691657622655235,
+      "encode_seconds": 0.3341997428748679,
+      "decode_seconds": 0.6768038679583697,
+      "peak_memory_bytes": 6068896768.0,
+      "ms_ssim": 0.8549392782861331,
+      "base_latent_mse": 0.04526226998617252,
+      "repair_latent_rms": 0.08180346339941025,
+      "high_precision_psnr": 23.813023169835407,
+      "high_precision_area_fraction": 0.8567708544433117,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 107.5,
+        "main": 3019.6666666666665,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.03291320100015308,
+        "main": 0.9245292646833699,
+        "allocation": 0.011022095218655917,
+        "scales": 0.014696126958207888,
+        "mask": 0.0,
+        "header": 0.016839312139613205
+      }
+    },
+    "39321": {
+      "bpp": 0.08944023980034722,
+      "psnr": 24.968435366948444,
+      "lpips": 0.09502614149823785,
+      "dists": 0.05371192842721939,
+      "encode_seconds": 0.3904502311706892,
+      "decode_seconds": 0.8125281080792774,
+      "peak_memory_bytes": 6068896768.0,
+      "ms_ssim": 0.8732487700210835,
+      "base_latent_mse": 0.023061935712272923,
+      "repair_latent_rms": 0.05210073323299488,
+      "high_precision_psnr": 24.355656852324802,
+      "high_precision_area_fraction": 0.8567708544433117,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 107.5,
+        "main": 4149.666666666667,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.024453122038139288,
+        "main": 0.9439284224892899,
+        "allocation": 0.008188952496493157,
+        "scales": 0.010918603328657543,
+        "mask": 0.0,
+        "header": 0.0125108996474201
+      }
+    },
+    "52428": {
+      "bpp": 0.11872694227430557,
+      "psnr": 25.32304040590922,
+      "lpips": 0.08764169675608476,
+      "dists": 0.050338404874006905,
+      "encode_seconds": 0.3774803573348133,
+      "decode_seconds": 0.7865402379538864,
+      "peak_memory_bytes": 6068896768.0,
+      "ms_ssim": 0.883672877665608,
+      "base_latent_mse": 0.012695138691924512,
+      "repair_latent_rms": 0.039292317970345415,
+      "high_precision_psnr": 24.707058866818745,
+      "high_precision_area_fraction": 0.8567708544433117,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 107.5,
+        "main": 5589.166666666667,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.01842120294739247,
+        "main": 0.9577597532415605,
+        "allocation": 0.006168960987033758,
+        "scales": 0.00822528131604501,
+        "mask": 0.0,
+        "header": 0.009424801507968242
+      }
+    },
+    "65535": {
+      "bpp": 0.1555820041232639,
+      "psnr": 25.500592867533367,
+      "lpips": 0.08502301728973786,
+      "dists": 0.048921296993891396,
+      "encode_seconds": 0.4027605713320857,
+      "decode_seconds": 0.8119747454523653,
+      "peak_memory_bytes": 6068896768.0,
+      "ms_ssim": 0.8885143866849203,
+      "base_latent_mse": 0.00807327228055025,
+      "repair_latent_rms": 0.03482997960721453,
+      "high_precision_psnr": 24.88013247648875,
+      "high_precision_area_fraction": 0.8567708544433117,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 107.5,
+        "main": 7400.666666666667,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.01405749406098119,
+        "main": 0.9677658391997036,
+        "allocation": 0.004707625918096027,
+        "scales": 0.006276834557461369,
+        "mask": 0.0,
+        "header": 0.007192206263757819
+      }
+    }
+  },
+  "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included"
+}

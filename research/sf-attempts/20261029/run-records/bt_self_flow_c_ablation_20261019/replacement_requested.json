@@ -1,0 +1,13 @@
+{
+  "requested_at": "2026-10-19 17:00:48 +0800",
+  "reason": "User requested retiring D and replacing GPU1 with C without base/latent losses",
+  "old_supervisor": 16957,
+  "original_c_pid": 17252,
+  "retiring_d_pid": 17253,
+  "old_supervisor_suspended_to_preserve_C": true,
+  "C_not_signalled": true,
+  "D_signal": "SIGTERM: finish current optimizer update and save paused.pt",
+  "new_run_initialization": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+  "new_run_updates": 200000,
+  "bitrate_parameters_unchanged": true
+}

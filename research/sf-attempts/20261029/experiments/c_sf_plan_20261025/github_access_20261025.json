@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-10-25T03:08:14.061720+08:00",
+  "repository": "git@github.com:Ambitionlszz/DiT-IC.git",
+  "local_repository": "/data2/ls/code/DiT-IC-c-sf-residual-staging-20261025",
+  "ssh_command": "ssh -F /home/ls/.ssh/ditic_v100_github.conf",
+  "ssh_authentication": "passed",
+  "fetch_existing_branch": "passed",
+  "write_probe": {
+    "result": "passed",
+    "commit": "431c6238b304b1fbcf9fa88283dc57b64b81a7e9",
+    "branch": "codex/access-probe-20261025-8b4d",
+    "cleanup": "deleted"
+  },
+  "requested_source": {
+    "commit": "073f54eced8bff354f49f3233da9dca9aee8eccf",
+    "branch": "codex/c-precision-lambda16-20261022",
+    "result": "branch absent from ls-remote; direct commit fetch returned not our ref"
+  },
+  "training_changed": false,
+  "unfinished_patch_uploaded": false
+}

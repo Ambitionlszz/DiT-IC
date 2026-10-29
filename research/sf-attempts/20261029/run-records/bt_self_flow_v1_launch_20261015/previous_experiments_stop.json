@@ -1,0 +1,142 @@
+{
+  "requested_at": "2026-10-15T21:57:37.005074+08:00",
+  "authorization": "user explicitly requested stopping GPU 0,1 experiments and replacing them with BT C/D",
+  "previous_status": {
+    "status_at_last_check": "RUNNING",
+    "started_at": "2026-10-13T16:10:09+08:00",
+    "last_checked_at": "2026-10-15T19:23:30.005047+08:00",
+    "authorization": "User requested continuing the stopped experiment",
+    "restart_from_warmup": false,
+    "previous_stopped_run": "/data2/ls/checkpoints/baseline512/512-gpu1-MobJvd/terminated-run.json",
+    "filesystem_repair": "Unmounted project ext4 bitmap/count metadata repaired with e2undo; subsequent e2fsck -fn exited 0",
+    "filesystem_repair_undo": "/data2/ls/code/volumes/ditic-code-repair-20261013-1605-forced.e2undo",
+    "tmux_session": "ditic-baseline512-dual",
+    "host_available_ram_gib_at_check": 50,
+    "repository": "/data2/ls/code/DiT-IC-baseline512",
+    "git_commit": "d6dc93abe02d0d5c7349f29e34e78238afd01b3d",
+    "environment": "/data2/ls/code/venvs/ditic",
+    "run_root": "/data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH",
+    "config": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314/train-dual.yaml",
+    "experiment_directory": "/data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH/train/512-variable-rate-baseline",
+    "checkpoint_directory": "/data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH/train/512-variable-rate-baseline/checkpoints",
+    "stdout_log": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314/train-dual.stdout.log",
+    "model_log": "/data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH/train/512-variable-rate-baseline/log.txt",
+    "training_crop": [
+      512,
+      512
+    ],
+    "distortion_weights": {
+      "pixel": 4.0,
+      "perceptual": 1.0,
+      "dists": 1.0
+    },
+    "precision": "fp32",
+    "world_size": 2,
+    "per_gpu_batch_size": 2,
+    "accumulation_steps": 2,
+    "effective_batch": 8,
+    "max_steps": 200000,
+    "log_every": 10,
+    "eval_every": 2000,
+    "ckpt_every": 10000,
+    "rolling_checkpoint_slots": 2,
+    "resume": true,
+    "initialization": "Full state resume from E2E step30000, with exact live weights, EMA, optimizers, scheduler and quality state verified on both ranks",
+    "strict_warmup_loading": "PASS",
+    "training_images": 89026,
+    "validation_images": 24,
+    "training_mode": "phase1_warmup_e2e",
+    "e2e_phase": "nogan",
+    "window_training": false,
+    "eval_window": true,
+    "entropy_update_mode": "official_post_main",
+    "last_logged_optimizer_step": 30090,
+    "last_validation": {
+      "step": 32000,
+      "completed_at": "2026-10-15T11:22:08+08:00",
+      "mean_loss": 0.2559,
+      "mean_psnr_db": 23.19,
+      "mean_lpips": 0.1348,
+      "mean_likelihood_bpp": 0.0555,
+      "scope": "Previous run completed this validation but failed during the following checkpoint save; that32000 state was not recoverable."
+    },
+    "best_checkpoint": {
+      "path": "/data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH/train/512-variable-rate-baseline/checkpoints/best_ckpt.pt",
+      "step": 30000,
+      "saved_at": "2026-10-15T09:28:41+08:00",
+      "bytes": 3742716529,
+      "zip_directory_readable": true
+    },
+    "train_peak_allocated_gib": 24.11,
+    "train_peak_reserved_gib": 24.88,
+    "quality_step_counts_at_last_log": [
+      5033,
+      4999,
+      4985,
+      5002,
+      4944,
+      5127
+    ],
+    "first_loss_log_pending": false,
+    "fatal_error_observed": false,
+    "notes": "Recovered after rank0 checkpoint-save stall and NCCL timeout; complete30000 state pinned,2000 unsaved updates replayed. Buffered atomic/fsynced save and3h communication timeout; hyperparameters unchanged. Existing full checkpoint CPU-finite and both-rank restore audits passed; small writer roundtrip/failure protection passed; next full-size checkpoint write remains unverified.",
+    "torchrun_pid": 30361,
+    "training_pids": [
+      30984,
+      30985
+    ],
+    "physical_gpus": [
+      0,
+      1
+    ],
+    "resume_checkpoint": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314/resume.pt",
+    "resume_step": 30000,
+    "resume_checkpoint_sha256": "b85bd2d5bf5b1224d7abe79b3a348da9b0070395329ef449f5f003a0619b56f2",
+    "switch_evidence": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314",
+    "last_loss_log_at": "2026-10-15 19:23:04",
+    "last_logged_mean_train_loss": 0.5806,
+    "last_logged_mean_aux_loss": 11.5852,
+    "gpu_devices": [
+      {
+        "index": 0,
+        "uuid": "GPU-cdafe484-8d24-1b2d-acb3-b58cbea116a3",
+        "memory_mib": 26894,
+        "utilization_percent": 100
+      },
+      {
+        "index": 1,
+        "uuid": "GPU-59f8b473-00e4-85ad-7c43-538a031cc53a",
+        "memory_mib": 26882,
+        "utilization_percent": 100
+      }
+    ],
+    "dual_gpu_acceptance": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314/acceptance.json",
+    "measured_seconds_per_optimizer_step": 3.3499999999999996,
+    "measured_speedup_vs_single": 1.878787878787879,
+    "recovery_supervisor": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314/acceptance-watch.json",
+    "recovery_supervisor_tmux": "ditic-baseline512-acceptance",
+    "recovery_phase": "RUNNING_VERIFIED"
+  },
+  "processes": [
+    {
+      "pid": 30361,
+      "command": "/data2/ls/code/linux/venvs/ditic-v100-py312-candidate/bin/python /data2/ls/code/linux/venvs/ditic/bin/torchrun --standalone --nproc_per_node=2 /data2/ls/code/deployment-bootstrap/resume_baseline512_with_io.py --config /data2/ls/checkpoints/baseline512/recovery-20261015-173314/train-dual.yaml --audit-root /data2/ls/checkpoints/baseline512/recovery-20261015-173314 ",
+      "proc_starttime": "623808"
+    },
+    {
+      "pid": 30984,
+      "command": "/data2/ls/code/linux/venvs/ditic-v100-py312-candidate/bin/python -u /data2/ls/code/deployment-bootstrap/resume_baseline512_with_io.py --config /data2/ls/checkpoints/baseline512/recovery-20261015-173314/train-dual.yaml --audit-root /data2/ls/checkpoints/baseline512/recovery-20261015-173314 ",
+      "proc_starttime": "653505"
+    },
+    {
+      "pid": 30985,
+      "command": "/data2/ls/code/linux/venvs/ditic-v100-py312-candidate/bin/python -u /data2/ls/code/deployment-bootstrap/resume_baseline512_with_io.py --config /data2/ls/checkpoints/baseline512/recovery-20261015-173314/train-dual.yaml --audit-root /data2/ls/checkpoints/baseline512/recovery-20261015-173314 ",
+      "proc_starttime": "653513"
+    }
+  ],
+  "preserved_recovery_checkpoint": "/data2/ls/checkpoints/baseline512/recovery-20261015-173314/resume.pt",
+  "snapshot_bytes": 3742711548,
+  "stopped_at": "2026-10-15T21:57:39.010294+08:00",
+  "remaining_live_pids": [],
+  "complete": true
+}

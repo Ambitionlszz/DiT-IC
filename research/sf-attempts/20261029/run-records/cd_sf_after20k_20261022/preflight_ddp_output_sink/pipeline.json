@@ -1,0 +1,62 @@
+{
+  "supervisor_pid": 672864,
+  "started_at": "2026-10-22T13:42:16.087943+00:00",
+  "status": "failed",
+  "jobs": {
+    "warmup": {
+      "pid": 672907,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/config.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+        "--max-updates",
+        "2"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/logs/warmup.log",
+      "started_at": "2026-10-22T13:42:16.092862+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-22T13:44:48.105811+00:00"
+    },
+    "activation": {
+      "pid": 673284,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/config.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/joint/paused.pt",
+        "--max-updates",
+        "4"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/logs/activation.log",
+      "started_at": "2026-10-22T13:44:48.621976+00:00",
+      "status": "failed",
+      "returncode": 1,
+      "ended_at": "2026-10-22T13:45:46.626829+00:00"
+    }
+  },
+  "self_flow_start_step": 2,
+  "updated_at": "2026-10-22T13:45:46.632018+00:00",
+  "error": "RuntimeError: activation exited 1; see /data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/logs/activation.log"
+}

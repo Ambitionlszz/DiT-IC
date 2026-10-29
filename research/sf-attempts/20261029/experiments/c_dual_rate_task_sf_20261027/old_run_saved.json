@@ -1,0 +1,19 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/c_sf_weight1_20261026/joint/paused.pt",
+  "bytes": 4200094956,
+  "step": 21663,
+  "attempts": 21663,
+  "optimizer_states": 1042,
+  "auxiliary_states": 1,
+  "rng_ranks": 2,
+  "teacher_tensors": 402,
+  "components": [
+    "codec",
+    "distortion_scale",
+    "vae",
+    "dit",
+    "text",
+    "residual"
+  ],
+  "recoverable": true
+}

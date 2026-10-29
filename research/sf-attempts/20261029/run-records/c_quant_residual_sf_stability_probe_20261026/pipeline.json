@@ -1,0 +1,48 @@
+{
+  "supervisor_pid": 207425,
+  "started_at": "2026-10-25T16:22:29.899534+00:00",
+  "status": "probe_completed",
+  "jobs": {
+    "joint": {
+      "pid": 207677,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "/data2/ls/experiments/c_sf_plan_20261025/check_distributed_recovery_gpu.py",
+        "--worker",
+        "--root",
+        "/data2/ls/checkpoints/c_quant_residual_sf_stability_probe_20261026",
+        "--target",
+        "11334",
+        "--resume",
+        "/data2/ls/checkpoints/c_quant_residual_sf_stability_probe_20261026/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/c_quant_residual_sf_stability_probe_20261026/logs/joint.log",
+      "started_at": "2026-10-25T16:25:32.488310+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-25T16:28:30.508552+00:00"
+    }
+  },
+  "numerical_restarts": [
+    {
+      "reason": "amp_nonfinite_forward",
+      "step": 11332,
+      "attempts": 11339,
+      "world_size": 2,
+      "checkpoint": "paused.pt",
+      "checkpoint_size": 4200093996,
+      "checkpoint_mtime_ns": 1792945449337716200,
+      "checkpoint_path": "/data2/ls/checkpoints/c_quant_residual_sf_stability_probe_20261026/joint/paused.pt",
+      "restarted_at": "2026-10-25T16:25:32.482169+00:00"
+    }
+  ],
+  "updated_at": "2026-10-25T16:28:30.524164+00:00"
+}

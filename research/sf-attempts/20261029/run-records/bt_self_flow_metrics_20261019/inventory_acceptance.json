@@ -1,0 +1,8 @@
+{
+  "training_images": 89026,
+  "training_fingerprint": "e3d86490abc0f158700aab9288e7214494606d8df27b59b19ec6d40770fb11d1",
+  "validation_images": 24,
+  "validation_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+  "paths_and_order_identical": true,
+  "seconds": 28.730298748999303
+}

@@ -1,0 +1,18 @@
+{
+  "checked_on": "2026-10-29",
+  "repository": "https://github.com/Ambitionlszz/DiT-IC",
+  "checked_with": "authenticated git ls-remote --heads",
+  "heads": {
+    "codex/bt-self-flow-v1-20261015": "5ccc75e5135cd4b3dd18891b136b42b2fe737c83",
+    "codex/bt-lowrate-c-ddp-20261019": "5f4df50a64677d300bdc0ec75ff81623cdf2853c",
+    "codex/bt-lowrate-c-from30k-20261020": "683cfb59d825dc21be99d87615cc93a7c7d24a42",
+    "codex/c-precision-closed-loop-20261022": "431c6238b304b1fbcf9fa88283dc57b64b81a7e9",
+    "codex/c-quant-residual-self-flow-20261025": "ff9bc592e9fd43ba66f22ef5b53f60cd4bcafc58",
+    "codex/c-sf-ablation-b8-20261026": "bb9bab01f091bdd9cb618571717b92eee70fcd7e",
+    "codex/c-dual-rate-task-sf-20261027": "29dc767e7f2da39d8445d9a2af48e9d9a579d332",
+    "codex/c-native-relational-sf-20261027": "279867bed45cdb6abbbc93f9d22bf6321b148671",
+    "codex/c-local-precision-sf-20261028": "99b99766c75a04c575e221f6e85b369d12344e47",
+    "codex/c-context-sf-20261028": "e62b46e880ef3bd65a41eedd3c21541cd1da59fa"
+  },
+  "note": "These existing remote branches were verified before the archive push. Local file snapshots may contain changes beyond these commits."
+}

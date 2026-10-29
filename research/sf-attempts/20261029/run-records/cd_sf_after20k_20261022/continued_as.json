@@ -1,0 +1,9 @@
+{
+  "reason": "User requested batch=4, accumulation=2, world=2",
+  "saved_step": 472,
+  "new_run": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022",
+  "new_source": "/data2/ls/code/DiT-IC-self-flow-b4-20261022",
+  "new_log": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/logs/joint.log",
+  "new_effective_batch": 16,
+  "migration_verified": true
+}

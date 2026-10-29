@@ -1,0 +1,115 @@
+{
+  "recorded_at": "2026-10-24T15:35:28.393740+00:00",
+  "scope": "Read-only existing CPU logs; no GPU evaluation or training changes",
+  "calibration_scope": "Gradient norms at the decoded coarse latent interface, not all parameter gradients; gradient angle is unmeasured",
+  "calibration_points": [
+    {
+      "step": 25001,
+      "sf": 0.0034926363732665777,
+      "weight": 9.60196304321289,
+      "sf_rd_gradient_norm_at_coarse": 0.02591055817902088,
+      "sf_gradient_norm_at_coarse": 6.321029650280252e-05,
+      "weighted_sf_over_rd_norm_at_coarse": 0.02342454094492897,
+      "teacher_valid": 0.9833984375
+    },
+    {
+      "step": 25501,
+      "sf": 0.003391536884009838,
+      "weight": 9.641765594482422,
+      "sf_rd_gradient_norm_at_coarse": 0.02970353327691555,
+      "sf_gradient_norm_at_coarse": 7.277166878338903e-05,
+      "weighted_sf_over_rd_norm_at_coarse": 0.02362168048452486,
+      "teacher_valid": 0.9150390625
+    },
+    {
+      "step": 26001,
+      "sf": 0.004487231373786926,
+      "weight": 9.677589416503906,
+      "sf_rd_gradient_norm_at_coarse": 0.027031593024730682,
+      "sf_gradient_norm_at_coarse": 9.75407165242359e-05,
+      "weighted_sf_over_rd_norm_at_coarse": 0.03492058366850756,
+      "teacher_valid": 0.7529296875
+    },
+    {
+      "step": 26501,
+      "sf": 0.004365580156445503,
+      "weight": 9.709831237792969,
+      "sf_rd_gradient_norm_at_coarse": 0.02899489738047123,
+      "sf_gradient_norm_at_coarse": 7.394804561045021e-05,
+      "weighted_sf_over_rd_norm_at_coarse": 0.024763772529358723,
+      "teacher_valid": 0.90625
+    },
+    {
+      "step": 27001,
+      "sf": 0.006025032140314579,
+      "weight": 9.738847732543945,
+      "sf_rd_gradient_norm_at_coarse": 0.02354128286242485,
+      "sf_gradient_norm_at_coarse": 0.00011314517178107053,
+      "weighted_sf_over_rd_norm_at_coarse": 0.046807287694892986,
+      "teacher_valid": 0.9716796875
+    },
+    {
+      "step": 27501,
+      "sf": 0.005710946395993233,
+      "weight": 9.764963150024414,
+      "sf_rd_gradient_norm_at_coarse": 0.02778511494398117,
+      "sf_gradient_norm_at_coarse": 8.898296800907701e-05,
+      "weighted_sf_over_rd_norm_at_coarse": 0.03127269422279872,
+      "teacher_valid": 0.8828125
+    },
+    {
+      "step": 28001,
+      "sf": 0.005466495640575886,
+      "weight": 9.7598237991333,
+      "sf_rd_gradient_norm_at_coarse": 0.02491304650902748,
+      "sf_gradient_norm_at_coarse": 0.00013213460624683648,
+      "weighted_sf_over_rd_norm_at_coarse": 0.05176446302019625,
+      "teacher_valid": 0.8271484375
+    },
+    {
+      "step": 28501,
+      "sf": 0.005855518393218517,
+      "weight": 9.755199432373047,
+      "sf_rd_gradient_norm_at_coarse": 0.027842195704579353,
+      "sf_gradient_norm_at_coarse": 8.084405271802098e-05,
+      "weighted_sf_over_rd_norm_at_coarse": 0.028325706260870134,
+      "teacher_valid": 0.8955078125
+    },
+    {
+      "step": 29001,
+      "sf": 0.008417923003435135,
+      "weight": 9.567094802856445,
+      "sf_rd_gradient_norm_at_coarse": 0.027711715549230576,
+      "sf_gradient_norm_at_coarse": 0.00024104176554828882,
+      "weighted_sf_over_rd_norm_at_coarse": 0.08321640781681611,
+      "teacher_valid": 0.947265625
+    },
+    {
+      "step": 29501,
+      "sf": 0.011106924153864384,
+      "weight": 9.157685279846191,
+      "sf_rd_gradient_norm_at_coarse": 0.0296146422624588,
+      "sf_gradient_norm_at_coarse": 0.00028488365933299065,
+      "weighted_sf_over_rd_norm_at_coarse": 0.08809408772935283,
+      "teacher_valid": 0.974609375
+    },
+    {
+      "step": 30001,
+      "sf": 0.010548045858740807,
+      "weight": 9.001800537109375,
+      "sf_rd_gradient_norm_at_coarse": 0.02984166517853737,
+      "sf_gradient_norm_at_coarse": 0.00010494219168322161,
+      "weighted_sf_over_rd_norm_at_coarse": 0.031656030982442664,
+      "teacher_valid": 0.90625
+    }
+  ],
+  "validation_step": 30000,
+  "validation_sha256": "9d327e0bdb4d0ee47b04f12ef5b530ad266d81cff1e569f6a72089b0ec7adecf",
+  "validation_identity": {
+    "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+    "images": 24,
+    "crop": 0,
+    "actual_rate": true
+  },
+  "source_root": "/data2/ls/code/DiT-IC-self-flow-sf10k-recovery-20261023"
+}

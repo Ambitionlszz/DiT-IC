@@ -1,0 +1,14 @@
+base: common.yaml
+data:
+  workers: 8
+model:
+  codec:
+    delta_coarse: 8.0
+    delta_fine: 1.0
+train:
+  output: /data2/ls/checkpoints/bt_self_flow_lowrate_20261019/common
+  batch_size: 32
+  accumulation_steps: 1
+  effective_batch: 64
+  rate_weight: 3.0
+  keep_last_checkpoints: 3

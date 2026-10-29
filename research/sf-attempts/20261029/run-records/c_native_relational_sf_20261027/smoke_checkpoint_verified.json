@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "step": 10008,
+  "global_samples": 80064,
+  "teacher_saved": true,
+  "rank_rngs": 2,
+  "loss_scale": 64.0,
+  "finite_parameters_and_moments": true,
+  "source_sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+  "quality_pairs": [
+    {
+      "step": 10001,
+      "qa": 1.0,
+      "qb": 1.0
+    },
+    {
+      "step": 10002,
+      "qa": 0.2,
+      "qb": 0.2
+    },
+    {
+      "step": 10003,
+      "qa": 0.8,
+      "qb": 1.0
+    },
+    {
+      "step": 10004,
+      "qa": 0.4,
+      "qb": 0.6
+    },
+    {
+      "step": 10005,
+      "qa": 0.2,
+      "qb": 1.0
+    },
+    {
+      "step": 10006,
+      "qa": 0.8,
+      "qb": 0.6
+    },
+    {
+      "step": 10007,
+      "qa": 0.8,
+      "qb": 0.6
+    },
+    {
+      "step": 10008,
+      "qa": 1.0,
+      "qb": 0.0
+    }
+  ],
+  "unequal_quality_updates": 6
+}

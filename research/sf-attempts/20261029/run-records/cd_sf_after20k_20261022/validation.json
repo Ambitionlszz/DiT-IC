@@ -1,0 +1,41 @@
+{
+  "updated_at": "2026-10-22T22:09:48.075462+08:00",
+  "unit_checks_passed": 17,
+  "checks": [
+    "Delayed SF: unchanged base-q stream and 25% masks",
+    "Delayed SF: teacher starts from current student at boundary; projector frozen before SF",
+    "Delayed SF: exact raw/EMA/teacher/scheduler resume across prefix and active SF",
+    "Delayed SF: two-rank accumulation, student/teacher equality, active teacher resume",
+    "Delayed SF: recipe uses 4/1/1 + base .1 + repaired 0 and global batch 8",
+    "FP16 calibration: small unscaled gradient vanishes; scaled norm recovers reference",
+    "7 existing backend/teacher/bitstream/checkpointing tests",
+    "1 existing perceptual loss device/gradient test",
+    "3 existing staged-training/shared-init/recipe tests",
+    "Calibration backward preserves FP32 inside outer forward autocast"
+  ],
+  "source_identity_verified": true,
+  "real_gpu_preflight": "passed",
+  "old_run_paused_at": 4333,
+  "last_full_delayed_suite": {
+    "tests": 6,
+    "passed": true,
+    "log": "/data2/ls/checkpoints/cd_sf_after20k_20261022/unit_delayed.log"
+  },
+  "post_preflight_change": "Logging only: emit the update record on each calibration, including update 20001, so SF norms/scale are visible with production log_every=100.",
+  "real_gpu_verification": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/verification.json",
+  "peak_memory_bytes": 19887452672,
+  "gpu_preflight_amp_skips": 0,
+  "production_launch_verified": {
+    "checked_at": "2026-10-22T22:12:11.523654+08:00",
+    "first_successful_update": 1,
+    "sf_active": false,
+    "supervisor_pid": 677170,
+    "torchrun_pid": 677226,
+    "both_gpus_observed_active": true,
+    "gpu_utilization_observed": [
+      86,
+      78
+    ],
+    "finite_loss_and_gradient": true
+  }
+}

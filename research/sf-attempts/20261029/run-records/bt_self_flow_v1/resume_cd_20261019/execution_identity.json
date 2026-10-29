@@ -1,0 +1,9 @@
+{
+  "reason": "resume original C/D with their original committed code in an isolated checkout",
+  "original_repository": "/data2/ls/code/DiT-IC-bt-self-flow",
+  "execution_repository": "/data2/ls/code/DiT-IC-resume-cd-20261019",
+  "commit": "2845a1d595e346b2e3c273d95c743e22820fbb61",
+  "all_configurations_unchanged": true,
+  "checkpoint_selection": "latest paused.pt for each arm",
+  "lowrate_experiment_restart": false
+}

@@ -1,0 +1,5 @@
+{
+  "source": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight_ddp_output_sink/joint/paused.pt",
+  "step": 2,
+  "reason": "RD-only prefix has no teacher/projector gradient; reuse verified identical prefix for the new SF calibration test"
+}

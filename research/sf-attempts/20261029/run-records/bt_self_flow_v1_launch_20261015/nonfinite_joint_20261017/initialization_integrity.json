@@ -1,0 +1,14 @@
+[
+  {
+    "path": "/data2/ls/checkpoints/bt_self_flow_v1/common/complete.pt",
+    "phase": "codec",
+    "step": 50000,
+    "raw_all_finite": true
+  },
+  {
+    "path": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+    "phase": "backend_init",
+    "step": 0,
+    "raw_all_finite": true
+  }
+]

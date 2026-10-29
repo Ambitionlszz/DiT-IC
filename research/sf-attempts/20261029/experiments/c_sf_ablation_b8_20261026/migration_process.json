@@ -1,0 +1,16 @@
+{
+  "pid": 305489,
+  "started_at": 1793001028.7671561,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/migrate_c_sf_batch8.py",
+    "--checkpoint",
+    "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+    "--output",
+    "/data2/ls/checkpoints/c_sf_ablation_b8_20261026",
+    "--dataset-policy",
+    "shared-local"
+  ],
+  "source_sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+  "source_data_user_report": "only directory/file layout changed"
+}

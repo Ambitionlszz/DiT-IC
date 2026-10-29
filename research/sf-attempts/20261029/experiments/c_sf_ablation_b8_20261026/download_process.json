@@ -1,0 +1,8 @@
+{
+  "pid": 303950,
+  "started_at": 1793000339.457673,
+  "log": "/data2/ls/experiments/c_sf_ablation_b8_20261026/download_ranges.log",
+  "workers": 4,
+  "cdn_reuse": true,
+  "direct_cdn": true
+}

@@ -1,0 +1,14 @@
+_base_: dual_rate_self_flow_full.yaml
+
+model:
+  params:
+    self_flow_params:
+      conditioning_enabled: false
+      student_input: uniform
+      use_second_view: false
+      teacher_enabled: false
+      teacher_quality: student
+      representation_enabled: false
+
+train:
+  exp_name: dual_rate_self_flow_ablation_posttrain_control

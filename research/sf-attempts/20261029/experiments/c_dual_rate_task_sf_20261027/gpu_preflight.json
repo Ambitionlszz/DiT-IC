@@ -1,0 +1,63 @@
+{
+  "batch": 4,
+  "crop": 512,
+  "split_full_image_max_error": 0.0118408203125,
+  "split_full_image_mse": 3.853877927895155e-08,
+  "zero_adapter_max_error": 0.0,
+  "main_loss": 0.4760344326496124,
+  "auxiliary": {
+    "sf_cosine": 0.18442000448703766,
+    "sf_aux_distortion": 0.3314090669155121,
+    "sf_aux_mse": 0.018293848261237144,
+    "sf_aux_lpips": 0.15120789408683777,
+    "sf_aux_dists": 0.10702577233314514,
+    "sf_pred_rms": 36.93095779418945,
+    "sf_target_rms": 68.04254150390625,
+    "sf_mixed_fraction": 0.25,
+    "sf_equal_quality": 0.0,
+    "sf_b_better": 0.0
+  },
+  "prefix_grad_norm": 0.02912811891809076,
+  "predictor_grad_norm": 0.0027833847669542153,
+  "codec_has_aux_grad": false,
+  "tail_has_aux_grad": false,
+  "vae_has_aux_grad": false,
+  "teacher_readout_comparisons": [
+    {
+      "q": 0.0,
+      "oracle": 0.49761825799942017,
+      "wrong_image": 0.4985448718070984,
+      "wrong_image_image_mse_vs_correct": 1.3782855603494681e-05,
+      "shuffle": 0.49782058596611023,
+      "shuffle_image_mse_vs_correct": 6.879139164084336e-06
+    },
+    {
+      "q": 0.4,
+      "oracle": 0.43993574380874634,
+      "wrong_image": 0.44011789560317993,
+      "wrong_image_image_mse_vs_correct": 7.378750069619855e-06,
+      "shuffle": 0.4397572875022888,
+      "shuffle_image_mse_vs_correct": 7.1217305048776325e-06
+    },
+    {
+      "q": 0.8,
+      "oracle": 0.28082239627838135,
+      "wrong_image": 0.28095588088035583,
+      "wrong_image_image_mse_vs_correct": 7.506126166845206e-06,
+      "shuffle": 0.28096574544906616,
+      "shuffle_image_mse_vs_correct": 6.8720146373379976e-06
+    },
+    {
+      "q": 1.0,
+      "oracle": 0.3530740737915039,
+      "wrong_image": 0.3523860275745392,
+      "wrong_image_image_mse_vs_correct": 1.258849624719005e-05,
+      "shuffle": 0.3521052896976471,
+      "shuffle_image_mse_vs_correct": 1.1208149771846365e-05
+    }
+  ],
+  "target_content_sensitive": true,
+  "oracle_beats_wrong_fraction": 0.75,
+  "peak_memory_bytes": 18678176768,
+  "passed": true
+}

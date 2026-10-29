@@ -1,0 +1,45 @@
+{
+  "requested_at": "2026-10-27T14:49:23.034094+00:00",
+  "old_root": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027",
+  "supervisor_pid": 397369,
+  "last_logged_step": 30600,
+  "paused_before_mtime_ns": 1793037345347709500,
+  "saved_checkpoint": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/paused.pt",
+  "saved_step": 30662,
+  "checkpoint_bytes": 4373094508,
+  "full_state_verified": true,
+  "old_pipeline": {
+    "supervisor_pid": 397369,
+    "started_at": "2026-10-26T17:59:29.215268+00:00",
+    "status": "paused",
+    "jobs": {
+      "joint": {
+        "pid": 397608,
+        "gpus": [
+          "0",
+          "1"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "-m",
+          "torch.distributed.run",
+          "--standalone",
+          "--nproc_per_node=2",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/configs/joint.json",
+          "--resume",
+          "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/paused.pt"
+        ],
+        "log": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/logs/joint.log",
+        "started_at": "2026-10-26T17:59:29.218991+00:00",
+        "status": "paused",
+        "returncode": 0,
+        "ended_at": "2026-10-27T14:51:05.713660+00:00"
+      }
+    },
+    "numerical_restarts": [],
+    "updated_at": "2026-10-27T14:51:05.716678+00:00",
+    "error": "InterruptedError: supervisor stop requested"
+  }
+}

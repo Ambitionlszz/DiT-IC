@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-10-17T02:31:26.718875+00:00",
+  "commit": "9ca4514b4161621bed0528953f80de2848ed8b67",
+  "supervisor_pid": 7185,
+  "status": "paired_training",
+  "source": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+  "C_and_D_actual_updates": {
+    "C": {
+      "first_update": {
+        "step": 1,
+        "attempts": 1,
+        "lambda_low": 0.2025940337224384,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 53.179588317871094,
+        "seconds_per_update": 12.89216069400004,
+        "steady_seconds_per_update": 0.0,
+        "max_memory_bytes": 22063052800,
+        "mse": 0.4913169741630554,
+        "lpips": 0.7115486264228821,
+        "dists": 0.6373656988143921,
+        "psnr": 9.159281730651855,
+        "base": 0.0891021117568016,
+        "latent": 1.318690538406372,
+        "rate_est": 0.052210837602615356
+      },
+      "latest_logged_step": 1,
+      "pid": 7214,
+      "gpu": "0"
+    },
+    "D": {
+      "first_update": {
+        "step": 1,
+        "attempts": 1,
+        "lambda_low": 0.2025940337224384,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 11.277374267578125,
+        "seconds_per_update": 12.979962804000024,
+        "steady_seconds_per_update": 0.0,
+        "max_memory_bytes": 22968505856,
+        "mse": 0.09784425050020218,
+        "lpips": 0.30417290329933167,
+        "dists": 0.23792524635791779,
+        "psnr": 16.27153778076172,
+        "base": 0.0891021117568016,
+        "latent": 0.1738336682319641,
+        "rate_est": 0.053187400102615356
+      },
+      "latest_logged_step": 1,
+      "pid": 7215,
+      "gpu": "1"
+    }
+  },
+  "common_first_data_and_control": true
+}

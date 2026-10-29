@@ -1,0 +1,12 @@
+{
+  "temporary_root": "/tmp/bt-self-flow-stopped-eval-20261022",
+  "pids": [
+    654344,
+    654696
+  ],
+  "output_symlinks": [
+    "C",
+    "D"
+  ],
+  "reason": "Shared filesystem small-file write latency; same evaluator and metric protocol"
+}

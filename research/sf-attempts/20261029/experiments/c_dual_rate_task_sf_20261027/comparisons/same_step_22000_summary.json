@@ -1,0 +1,172 @@
+{
+  "step": 22000,
+  "source_C": "/home/ls/.codex/attachments/9c35c1ef-9239-4a1b-8838-a7fe0be8e577/all_quality_points.csv",
+  "source_SF": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/validation_0022000.json",
+  "same_q": [
+    {
+      "q": 0.0,
+      "C_bpp": 0.0175204798579216,
+      "SF_bpp": 0.017110188802083332,
+      "bpp_change_percent": -2.3417797866578494,
+      "C_psnr": 21.78790028889974,
+      "C_lpips": 0.21890326340993246,
+      "C_dists": 0.11626289288202922,
+      "C_ms_ssim": 0.7153596878051758,
+      "SF_psnr": 21.824302673339844,
+      "SF_lpips": 0.21816158294677734,
+      "SF_dists": 0.11832039554913838,
+      "SF_ms_ssim": 0.7175020376841227,
+      "delta_psnr": 0.03640238444010535,
+      "delta_lpips": -0.0007416804631551199,
+      "delta_dists": 0.0020575026671091623,
+      "delta_ms_ssim": 0.002142349878946903,
+      "C_RD": 0.7684508959452311,
+      "SF_RD": 0.7617044448852539
+    },
+    {
+      "q": 0.2,
+      "C_bpp": 0.030361597736676533,
+      "SF_bpp": 0.029476587971051533,
+      "bpp_change_percent": -2.9148985283996343,
+      "C_psnr": 22.94127146402995,
+      "C_lpips": 0.1655401587486267,
+      "C_dists": 0.08984132607777913,
+      "C_ms_ssim": 0.7789331277211508,
+      "SF_psnr": 22.986536661783855,
+      "SF_lpips": 0.16495051980018616,
+      "SF_dists": 0.08945563435554504,
+      "SF_ms_ssim": 0.7787012259165446,
+      "delta_psnr": 0.04526519775390625,
+      "delta_lpips": -0.0005896389484405518,
+      "delta_dists": -0.00038569172223408554,
+      "delta_ms_ssim": -0.0002319018046061938,
+      "C_RD": 0.613177220026652,
+      "SF_RD": 0.6045826276143392
+    },
+    {
+      "q": 0.4,
+      "C_bpp": 0.0461663156747818,
+      "SF_bpp": 0.045101587971051536,
+      "bpp_change_percent": -2.306286928397594,
+      "C_psnr": 23.918617248535156,
+      "C_lpips": 0.1307417849699656,
+      "C_dists": 0.07074198126792908,
+      "C_ms_ssim": 0.823127269744873,
+      "SF_psnr": 23.927141825358074,
+      "SF_lpips": 0.1311866044998169,
+      "SF_dists": 0.07094970345497131,
+      "SF_ms_ssim": 0.8236600557963053,
+      "delta_psnr": 0.008524576822917851,
+      "delta_lpips": 0.0004448195298512869,
+      "delta_dists": 0.00020772218704223633,
+      "delta_ms_ssim": 0.0005327860514322547,
+      "C_RD": 0.4752360979715983,
+      "SF_RD": 0.4716196457544963
+    },
+    {
+      "q": 0.6,
+      "C_bpp": 0.06307644645373027,
+      "SF_bpp": 0.0616997629404068,
+      "bpp_change_percent": -2.1825635252508024,
+      "C_psnr": 24.621536254882812,
+      "C_lpips": 0.10893615086873372,
+      "C_dists": 0.06008648872375488,
+      "C_ms_ssim": 0.8513523737589518,
+      "SF_psnr": 24.634078979492188,
+      "SF_lpips": 0.10995510220527649,
+      "SF_dists": 0.060429622729619346,
+      "SF_ms_ssim": 0.8520140647888184,
+      "delta_psnr": 0.012542724609375,
+      "delta_lpips": 0.00101895133654277,
+      "delta_dists": 0.0003431340058644636,
+      "delta_ms_ssim": 0.0006616910298665735,
+      "C_RD": 0.3692646423975627,
+      "SF_RD": 0.3675345182418823
+    },
+    {
+      "q": 0.8,
+      "C_bpp": 0.0809054970741272,
+      "SF_bpp": 0.07854546109835307,
+      "bpp_change_percent": -2.9170279661118848,
+      "C_psnr": 25.0897216796875,
+      "C_lpips": 0.09858743349711101,
+      "C_dists": 0.05431662996610006,
+      "C_ms_ssim": 0.8672474225362142,
+      "SF_psnr": 25.093671162923176,
+      "SF_lpips": 0.09874564409255981,
+      "SF_dists": 0.05457469820976257,
+      "SF_ms_ssim": 0.8675964673360189,
+      "delta_psnr": 0.003949483235675899,
+      "delta_lpips": 0.00015821059544880722,
+      "delta_dists": 0.00025806824366251396,
+      "delta_ms_ssim": 0.0003490447998046875,
+      "C_RD": 0.2995111147562663,
+      "SF_RD": 0.29712482293446857
+    },
+    {
+      "q": 1.0,
+      "C_bpp": 0.10121663411458333,
+      "SF_bpp": 0.09576754768689473,
+      "bpp_change_percent": -5.383587861180905,
+      "C_psnr": 25.35608418782552,
+      "C_lpips": 0.09267629186312358,
+      "C_dists": 0.05226638913154602,
+      "C_ms_ssim": 0.8761442502339681,
+      "SF_psnr": 25.370134989420574,
+      "SF_lpips": 0.09269516666730244,
+      "SF_dists": 0.05185829599698385,
+      "SF_ms_ssim": 0.8762409687042236,
+      "delta_psnr": 0.014050801595054452,
+      "delta_lpips": 1.8874804178864446e-05,
+      "delta_dists": -0.00040809313456217217,
+      "delta_ms_ssim": 9.671847025549685e-05,
+      "C_RD": 0.25696539878845215,
+      "SF_RD": 0.25345810254414874
+    }
+  ],
+  "same_q_mean_bpp_change_percent": -3.0076907659997785,
+  "same_q_bpp_change_range_percent": [
+    -5.383587861180905,
+    -2.1825635252508024
+  ],
+  "same_q_mean_delta": {
+    "psnr": 0.02012252807617247,
+    "lpips": 5.158947573767614e-05,
+    "dists": 0.00034544037448035306,
+    "ms_ssim": 0.000591781404283287
+  },
+  "C_mean_RD": 0.4637675616476271,
+  "SF_mean_RD": 0.45933736032909817,
+  "aggregate_RD_change_percent": -0.9552633010359246,
+  "matched_bpp": {
+    "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+    "range": [
+      0.0175204798579216,
+      0.09576754768689473
+    ],
+    "mean_delta": {
+      "psnr": 0.07857714320617701,
+      "lpips": -0.001930693785474061,
+      "dists": -0.0006684466916907283,
+      "ms_ssim": 0.0029995941902176276
+    },
+    "low_third_mean_delta": {
+      "psnr": 0.09804452332870503,
+      "lpips": -0.003242352223982904,
+      "dists": -0.0005857573583342794,
+      "ms_ssim": 0.0039250532522485835
+    },
+    "high_third_mean_delta": {
+      "psnr": 0.05992822530526814,
+      "lpips": -0.000750129479384469,
+      "dists": -0.0004127900008600403,
+      "ms_ssim": 0.0022145313729230063
+    }
+  },
+  "limitations": [
+    "One run and Kodak24 mean curves; no statistical significance established.",
+    "C BF16 versus SF FP16+GradScaler on V100; user confirmed same image set but directory layout differs.",
+    "New SF also adds a zero-initialized quality conditioner and auxiliary image supervision; gains cannot be attributed to alignment alone.",
+    "Use rate_actual on all24 images with side information; packet_bpp may cover only two decoded examples."
+  ]
+}

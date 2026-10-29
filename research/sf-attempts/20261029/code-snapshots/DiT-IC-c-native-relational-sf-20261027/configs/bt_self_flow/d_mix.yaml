@@ -1,0 +1,9 @@
+base: d_joint.yaml
+model:
+  checkpoint_blocks: true
+self_flow:
+  mixed_sampling: true
+train:
+  phase: self_flow
+  steps: 10000
+  output: /data2/ls/checkpoints/bt_self_flow_v1/D_mix

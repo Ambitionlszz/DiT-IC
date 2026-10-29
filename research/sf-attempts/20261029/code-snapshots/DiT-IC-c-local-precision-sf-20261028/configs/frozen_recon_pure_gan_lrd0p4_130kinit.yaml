@@ -1,0 +1,97 @@
+# Frozen codec Pure + GAN vs Full GAN ablation
+# Codec frozen, VAE LoRA + DiT LoRA trainable
+# All settings aligned with train_pure_sana_gemma_lrd0p4_stage2_gan.yaml
+# except freeze_codec=True, freeze_vae_lora=False
+
+data:
+  data_path:
+    - /data2/luosheng/data/Datasets/DIV2K_train_HR_clean
+    - /data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png
+    - /data2/luosheng/data/Datasets/LSDIR
+    - /data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png
+  valid_path:
+    - /data2/luosheng/data/Datasets/Kodak
+  im_exts: ['JPEG', 'png', 'jpg', 'jpeg', 'PNG']
+  num_workers: 8
+  path_size: [256, 256]
+
+model:
+  model_type: Codec
+  use_checkpoint: false
+  params:
+    use_aux_encoder: False
+    use_aux_decoder: False
+    use_variance_guide: False
+    use_self_dist: False
+    use_text_condition: True
+    text_encoder_path: "/data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers/text_encoder"
+    time: 999
+    codec_mode: 'self_dist'
+    DiT_mode: 'scale'
+    dit_path: "SANA"
+    elic_path: "/data2/luosheng/hf_models/hub/elic_official.pth"
+    # ---- Stage 2: load stage-1 best checkpoint (same as full GAN) ----
+    codec_path: "/data2/luosheng/code/DiT-IC/checkpoints/pure_sana_gemma_lrd0p4_bs8_200k_noauxed_noauxe_noauxd_novarguide_noselfdist_textcond/checkpoints/best_ckpt.pt"
+    use_ema: True
+    use_merge: False
+    training: True
+    # ---- Frozen codec, VAE LoRA trainable ----
+    freeze_codec: True
+    freeze_vae_lora: False
+    DiT_params:
+      DiT: True
+      DiT_lora: True
+      lora_rank_DiT: 128
+      lora_alpha_DiT: 128
+      channel_in: 32
+    vae_params:
+      vae_lora: True
+      lora_rank_vae: 64
+      lora_alpha_vae: 64
+    codec_param:
+      ch_emd: 32
+      channel: 320
+      channel_out: 32
+      num_slices: 5
+      max_support_slices: 5
+      kernel_size: 3
+      drop_path_rate: 0.1
+      depths: [2, 2, 2, 2, 2]
+      num_heads: [16, 16, 16, 16, 16]
+      upsample_mode: 'pixelshuffle'
+    loss_params:
+      pp_style: true
+      pixelloss_weight: 1.0
+      perceptual_weight: 1.0
+      kl_weight: 0.1
+      # ---- GAN Stage 2 (same as full GAN) ----
+      disc_start: 0
+      disc_weight: 0.5
+      use_vf: ~
+      latent: False
+      reverse_proj: True
+      vf_weight: 0.1
+      adaptive_vf: True
+      distmat_margin: 0.25
+      cos_margin: 0.5
+
+train:
+  output_dir: 'checkpoints'
+  exp_name: 'frozen_gan_lrd0p4_stage2'
+  global_batch_size: 8
+  accumulation_steps: 1
+  accumulate_disc: false
+  resume: false
+  log_every: 100
+  eval_every: 2000
+  ckpt_every: 10000
+  max_steps: 50001
+  global_seed: 903
+  lrd: 0.4
+optimizer:
+  lr: 0.0001
+  aux_lr: 0.001
+  beta2: 0.999
+  beta_vae: [0.9, 0.999]
+  step_lr: [10000, 30000, 45000]
+  max_grad_norm: 4.0

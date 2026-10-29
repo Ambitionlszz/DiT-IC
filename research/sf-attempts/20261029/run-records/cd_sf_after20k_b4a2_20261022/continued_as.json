@@ -1,0 +1,9 @@
+{
+  "reason": "User moved Self-Flow start to 10K; host reboot interrupted 9056-step pause save",
+  "source_complete_step": 8000,
+  "new_run": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023",
+  "new_source": "/data2/ls/code/DiT-IC-self-flow-sf10k-recovery-20261023",
+  "new_log": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/logs/joint.log",
+  "sf_start_step": 10000,
+  "permanent_pure_rd_checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/pre_sf_0010000.pt"
+}

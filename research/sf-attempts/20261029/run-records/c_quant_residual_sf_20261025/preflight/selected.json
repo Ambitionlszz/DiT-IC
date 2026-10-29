@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "selected_config": "/data2/ls/code/DiT-IC-c-sf-residual-20261025/configs/bt_self_flow/quantization_residual/c_sf_b4a2.json",
+  "report": "/data2/ls/checkpoints/c_quant_residual_sf_20261025/preflight/c_sf_b4a2_verified.json",
+  "batch_size": 4,
+  "accumulation_steps": 2,
+  "effective_batch": 16,
+  "b8a1_result": "native RD backward and Adam succeeded; active SF caused CUDA OOM",
+  "peak_allocated_bytes_per_rank": 23769946624,
+  "packet_forward_max_error": 0.0,
+  "initial_one_update_privileged_gate_passed": false,
+  "research_transition": "Recalibrate and repeat task gate only after 10000 pure-RD updates; do not reuse probe alpha or weights."
+}

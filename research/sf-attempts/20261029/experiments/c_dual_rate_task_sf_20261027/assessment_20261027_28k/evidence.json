@@ -1,0 +1,276 @@
+{
+  "checked_at": "2026-10-27T21:22:08.763448+08:00",
+  "method": "dual_rate_task_v1",
+  "latest_logged_step": 29200,
+  "training_health": {
+    "max_attempt_gap": 0,
+    "nonfinite_logged_steps": []
+  },
+  "validation": [
+    {
+      "step": 24000,
+      "aggregate_RD_change_percent": -0.014659066866085091,
+      "same_q_mean_bpp_change_percent": -0.19611149115476198,
+      "matched_bpp": {
+        "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+        "range": [
+          0.017120361328125,
+          0.0958726704120636
+        ],
+        "mean_delta": {
+          "psnr": 0.008084533350097543,
+          "lpips": -0.00023768015400437486,
+          "dists": -6.329528585847255e-05,
+          "ms_ssim": 0.00037763992075983197
+        },
+        "low_third_mean_delta": {
+          "psnr": 0.004376821105387788,
+          "lpips": -0.00027250720261179606,
+          "dists": -0.000648083115810053,
+          "ms_ssim": 0.0003816739952344315
+        },
+        "high_third_mean_delta": {
+          "psnr": 0.013123750728956655,
+          "lpips": 0.00025064626587103535,
+          "dists": 0.0004924126785287128,
+          "ms_ssim": 0.0003211382321792973
+        }
+      }
+    },
+    {
+      "step": 26000,
+      "aggregate_RD_change_percent": -0.0931378084130241,
+      "same_q_mean_bpp_change_percent": 0.10855821161052288,
+      "matched_bpp": {
+        "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+        "range": [
+          0.0170152448117733,
+          0.09576754768689473
+        ],
+        "mean_delta": {
+          "psnr": 0.014115185904590948,
+          "lpips": -0.0004483090143322521,
+          "dists": 0.00030559832766735237,
+          "ms_ssim": 7.542964178055974e-05
+        },
+        "low_third_mean_delta": {
+          "psnr": 0.022067137660526998,
+          "lpips": -0.0007238560871676717,
+          "dists": 0.0001647904466169269,
+          "ms_ssim": -9.534919725979621e-05
+        },
+        "high_third_mean_delta": {
+          "psnr": -0.004121008420624422,
+          "lpips": -0.00014476311624794138,
+          "dists": 0.0002741896427794547,
+          "ms_ssim": 0.00016490890915639352
+        }
+      }
+    },
+    {
+      "step": 28000,
+      "aggregate_RD_change_percent": -0.09979174860325069,
+      "same_q_mean_bpp_change_percent": 0.030451250320164453,
+      "matched_bpp": {
+        "method": "Piecewise linear interpolation in log(total bpp), 101 log-spaced points inside measured overlap; no extrapolation",
+        "range": [
+          0.017022027323643368,
+          0.0958421528339386
+        ],
+        "mean_delta": {
+          "psnr": 0.014426080823335729,
+          "lpips": -0.00011147106848962495,
+          "dists": 0.00024066015807062385,
+          "ms_ssim": 0.0005118164660766129
+        },
+        "low_third_mean_delta": {
+          "psnr": 0.020262774878017375,
+          "lpips": -0.0004591581871956719,
+          "dists": 0.00021392516837694803,
+          "ms_ssim": 0.000826254467092858
+        },
+        "high_third_mean_delta": {
+          "psnr": 0.014464094508520793,
+          "lpips": 4.3174606950451084e-05,
+          "dists": 0.0002519392085823865,
+          "ms_ssim": 0.0002645614278219541
+        }
+      }
+    }
+  ],
+  "training_windows": [
+    {
+      "start_exclusive": 10000,
+      "end_inclusive": 12000,
+      "logged_batches": 22,
+      "means": {
+        "sf_cosine": 0.004094794461376627,
+        "sf_aux_distortion": 0.3912975503639741,
+        "sf_pred_rms": 64.41491907293147,
+        "sf_target_rms": 68.47257510098544
+      },
+      "caution": "Different training images and qualities; these are descriptive logged-batch means, not a fixed-probe comparison."
+    },
+    {
+      "start_exclusive": 12000,
+      "end_inclusive": 16000,
+      "logged_batches": 40,
+      "means": {
+        "sf_cosine": 0.0011700108356308193,
+        "sf_aux_distortion": 0.3717402908951044,
+        "sf_pred_rms": 63.19481430053711,
+        "sf_target_rms": 67.82055416107178
+      },
+      "caution": "Different training images and qualities; these are descriptive logged-batch means, not a fixed-probe comparison."
+    },
+    {
+      "start_exclusive": 20000,
+      "end_inclusive": 24000,
+      "logged_batches": 40,
+      "means": {
+        "sf_cosine": 0.0004371486124000512,
+        "sf_aux_distortion": 0.36190265156328677,
+        "sf_pred_rms": 62.4127121925354,
+        "sf_target_rms": 67.50880546569825
+      },
+      "caution": "Different training images and qualities; these are descriptive logged-batch means, not a fixed-probe comparison."
+    },
+    {
+      "start_exclusive": 26000,
+      "end_inclusive": 30000,
+      "logged_batches": 32,
+      "means": {
+        "sf_cosine": 0.0003055522520298837,
+        "sf_aux_distortion": 0.3599656606093049,
+        "sf_pred_rms": 59.51635813713074,
+        "sf_target_rms": 63.78858160972595
+      },
+      "caution": "Different training images and qualities; these are descriptive logged-batch means, not a fixed-probe comparison."
+    }
+  ],
+  "startup_teacher_interventions": {
+    "records": [
+      {
+        "q": 0.0,
+        "correct_D411": 0.49761825799942017,
+        "wrong_minus_correct": 0.0009266138076782227,
+        "shuffled_minus_correct": 0.00020232796669006348
+      },
+      {
+        "q": 0.4,
+        "correct_D411": 0.43993574380874634,
+        "wrong_minus_correct": 0.00018215179443359375,
+        "shuffled_minus_correct": -0.00017845630645751953
+      },
+      {
+        "q": 0.8,
+        "correct_D411": 0.28082239627838135,
+        "wrong_minus_correct": 0.0001334846019744873,
+        "shuffled_minus_correct": 0.00014334917068481445
+      },
+      {
+        "q": 1.0,
+        "correct_D411": 0.3530740737915039,
+        "wrong_minus_correct": -0.0006880462169647217,
+        "shuffled_minus_correct": -0.0009687840938568115
+      }
+    ],
+    "mean_wrong_minus_correct": 0.0001385509967803955,
+    "mean_shuffle_minus_correct": -0.00020039081573486328,
+    "limitation": "Startup tiny probe; no current-checkpoint teacher intervention was run."
+  },
+  "head_only_preparation": {
+    "steps": 64,
+    "native_steps_advanced": 0,
+    "frozen_C": true,
+    "records": [
+      {
+        "prepare_update": 1,
+        "loss": 0.9908391237258911,
+        "grad_norm": 0.016010718420147896,
+        "sf_cosine": 0.16180549561977386,
+        "sf_aux_distortion": 0.4661293029785156,
+        "sf_aux_mse": 0.02145702764391899,
+        "sf_aux_lpips": 0.23962503671646118,
+        "sf_aux_dists": 0.14067614078521729,
+        "sf_pred_rms": 42.78358840942383,
+        "sf_target_rms": 73.40486907958984,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.5,
+        "sf_b_better": 0.5
+      },
+      {
+        "prepare_update": 16,
+        "loss": 0.4446927607059479,
+        "grad_norm": 0.07329457253217697,
+        "sf_cosine": 0.05085272341966629,
+        "sf_aux_distortion": 0.2632124423980713,
+        "sf_aux_mse": 0.017676670104265213,
+        "sf_aux_lpips": 0.12253239750862122,
+        "sf_aux_dists": 0.06997337937355042,
+        "sf_pred_rms": 57.30684280395508,
+        "sf_target_rms": 74.28876495361328,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.0,
+        "sf_b_better": 0.5
+      },
+      {
+        "prepare_update": 32,
+        "loss": 0.3751423954963684,
+        "grad_norm": 0.049229711294174194,
+        "sf_cosine": 0.0385918915271759,
+        "sf_aux_distortion": 0.2413940131664276,
+        "sf_aux_mse": 0.008695902302861214,
+        "sf_aux_lpips": 0.11418920010328293,
+        "sf_aux_dists": 0.09242120385169983,
+        "sf_pred_rms": 55.3209114074707,
+        "sf_target_rms": 67.4115982055664,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.0,
+        "sf_b_better": 0.5
+      },
+      {
+        "prepare_update": 48,
+        "loss": 0.3582318425178528,
+        "grad_norm": 0.04425100237131119,
+        "sf_cosine": 0.019705669954419136,
+        "sf_aux_distortion": 0.28542399406433105,
+        "sf_aux_mse": 0.01858787052333355,
+        "sf_aux_lpips": 0.12818074226379395,
+        "sf_aux_dists": 0.08289176225662231,
+        "sf_pred_rms": 59.99187469482422,
+        "sf_target_rms": 69.68260955810547,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.5,
+        "sf_b_better": 0.0
+      },
+      {
+        "prepare_update": 64,
+        "loss": 0.511215090751648,
+        "grad_norm": 0.0334102101624012,
+        "sf_cosine": 0.021714385598897934,
+        "sf_aux_distortion": 0.44060030579566956,
+        "sf_aux_mse": 0.0550139956176281,
+        "sf_aux_lpips": 0.1253257393836975,
+        "sf_aux_dists": 0.09521856904029846,
+        "sf_pred_rms": 70.78652954101562,
+        "sf_target_rms": 78.8535385131836,
+        "sf_mixed_fraction": 0.25,
+        "sf_equal_quality": 0.0,
+        "sf_b_better": 1.0
+      }
+    ]
+  },
+  "hypotheses_not_established": [
+    "The predictor absorbs most useful adaptation.",
+    "Common feature components dominate raw cosine.",
+    "Auxiliary and main RD gradients conflict.",
+    "Teacher has similarly low readout utility at the current checkpoint."
+  ],
+  "sources": [
+    "/data2/ls/experiments/c_dual_rate_task_sf_20261027/gpu_preflight.json",
+    "/data2/ls/experiments/c_dual_rate_task_sf_20261027/preparation_verified.json",
+    "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/train.jsonl",
+    "/data2/ls/experiments/c_dual_rate_task_sf_20261027/comparisons/compare_native.py"
+  ]
+}

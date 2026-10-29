@@ -1,0 +1,44 @@
+{
+  "supervisor_pid": 22908,
+  "started_at": "2026-10-18T01:32:48.368009+00:00",
+  "status": "evaluating_after_host_reboot",
+  "jobs": {
+    "c_joint": {
+      "gpus": [
+        "0"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+      "started_at": "2026-10-18T01:32:48.477407+00:00",
+      "status": "interrupted_by_host_reboot",
+      "previous_pid": 22922
+    },
+    "d_joint": {
+      "gpus": [
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+      "started_at": "2026-10-18T01:32:48.483890+00:00",
+      "status": "interrupted_by_host_reboot",
+      "previous_pid": 22923
+    }
+  },
+  "updated_at": "2026-10-18T01:32:48.483920+00:00",
+  "observed_at": "2026-10-19T10:51:55.245415+08:00",
+  "note": "Host reboot terminated both jobs. Evaluating pinned C/D 34K checkpoints and baseline before resuming C34K/D36K."
+}

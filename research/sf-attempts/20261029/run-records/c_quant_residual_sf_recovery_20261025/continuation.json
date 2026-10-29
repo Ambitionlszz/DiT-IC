@@ -1,0 +1,11 @@
+{
+  "created_at": "2026-10-25T15:46:01.888453+00:00",
+  "source_run": "/data2/ls/checkpoints/c_quant_residual_sf_continue_20261025",
+  "source_checkpoint": "/data2/ls/checkpoints/c_quant_residual_sf_continue_20261025/joint/paused.pt",
+  "resume_step": 10973,
+  "reason": "FP16 SANA block27 feed-forward overflow fixed with FP32 arithmetic",
+  "optimizer_scheduler_rng_teacher": "restore_from_checkpoint",
+  "batch_per_gpu": 4,
+  "accumulation_steps": 2,
+  "world_size": 2
+}

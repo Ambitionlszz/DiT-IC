@@ -1,0 +1,86 @@
+{
+  "supervisor_pid": 670920,
+  "started_at": "2026-10-22T13:27:46.854909+00:00",
+  "status": "paused",
+  "jobs": {
+    "warmup": {
+      "pid": 670962,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/config.yaml",
+        "--init-checkpoint",
+        "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+        "--max-updates",
+        "2"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/logs/warmup.log",
+      "started_at": "2026-10-22T13:27:46.858358+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-22T13:30:08.868793+00:00"
+    },
+    "activation": {
+      "pid": 671309,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/config.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/joint/paused.pt",
+        "--max-updates",
+        "4"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/logs/activation.log",
+      "started_at": "2026-10-22T13:30:09.395181+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-22T13:32:53.407300+00:00"
+    },
+    "resume": {
+      "pid": 671728,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/config.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/joint/0000004.pt"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/logs/resume.log",
+      "started_at": "2026-10-22T13:32:54.074675+00:00",
+      "status": "completed",
+      "returncode": 0,
+      "ended_at": "2026-10-22T13:35:46.087519+00:00"
+    }
+  },
+  "self_flow_start_step": 2,
+  "updated_at": "2026-10-22T13:35:46.092391+00:00",
+  "error": "InterruptedError: supervisor stop requested"
+}

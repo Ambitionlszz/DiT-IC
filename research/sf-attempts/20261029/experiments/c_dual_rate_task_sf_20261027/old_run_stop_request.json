@@ -1,0 +1,6 @@
+{
+  "supervisor_pid": 326558,
+  "root": "/data2/ls/checkpoints/c_sf_weight1_20261026",
+  "requested_at": "2026-10-27T01:28:58.127835+08:00",
+  "reason": "User approved replacement by dual-rate task-supervised Self-Flow from pure C 10K"
+}

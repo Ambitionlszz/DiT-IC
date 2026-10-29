@@ -1,0 +1,39 @@
+{
+  "ranks": [
+    {
+      "step": 18050,
+      "micro": 0,
+      "rank": 0,
+      "backend": "D",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": NaN,
+        "lpips": NaN,
+        "dists": NaN,
+        "psnr": NaN,
+        "base": 0.03558428958058357,
+        "latent": NaN,
+        "rate_est": 0.09984216094017029
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 5.339682102203369
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.362565517425537
+        },
+        "latent": {
+          "finite": false,
+          "max_abs": NaN
+        },
+        "image": {
+          "finite": false,
+          "max_abs": NaN
+        }
+      },
+      "model_state_finite": true
+    }
+  ]
+}

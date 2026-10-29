@@ -1,0 +1,48 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt",
+  "checkpoint_sha256": "a4a3cc1034ca37a70df2c40841a23df6a82e8cdb4bddf5d66d8d8ce78c07176b",
+  "weights": "ema",
+  "backend": "D",
+  "step": 96750,
+  "phase": "joint",
+  "dataset_fingerprint": "edfd1af58b91644fd617856965eda5649038cc63a6a4835c6d3c32aee87298ba",
+  "images": 1,
+  "metric_protocol": "float RGB [-1,1], PSNR dynamic range 2, LPIPS alex, DISTS [0,1]",
+  "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+  "codec_precision": "fp32",
+  "nfe": 1,
+  "summary": {
+    "39321": {
+      "bpp": 0.09291585286458333,
+      "psnr": 22.477209091186523,
+      "lpips": 0.12194429337978363,
+      "dists": 0.05958324670791626,
+      "encode_seconds": 6.295266624016222,
+      "decode_seconds": 1.2864427180029452,
+      "peak_memory_bytes": 6044324864.0,
+      "ms_ssim": 0.8269755244255066,
+      "base_latent_mse": 0.022477183490991592,
+      "repair_latent_rms": 0.05411481484770775,
+      "high_precision_psnr": 22.47720956802368,
+      "high_precision_area_fraction": 1.0,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 108.0,
+        "main": 4320.0,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.023647908911758265,
+        "main": 0.9459163564703307,
+        "allocation": 0.007882636303919423,
+        "scales": 0.01051018173855923,
+        "mask": 0.0,
+        "header": 0.01204291657543245
+      }
+    }
+  },
+  "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included"
+}

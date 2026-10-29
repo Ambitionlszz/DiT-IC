@@ -1,0 +1,24 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027/joint/paused.pt",
+  "bytes": 4373094444,
+  "step": 10020,
+  "attempts": 10020,
+  "micro_seen": 10020,
+  "scheduler_epoch": 10020,
+  "scaler": {
+    "scale": 64.0,
+    "growth_factor": 2.0,
+    "backoff_factor": 0.5,
+    "growth_interval": 2000,
+    "_growth_tracker": 20
+  },
+  "optimizer_states": 1048,
+  "teacher_tensors": 410,
+  "rng_ranks": 2,
+  "weights_finite": true,
+  "verified_training_updates": 20,
+  "amp_skipped_updates": 0,
+  "full_precision_retry": false,
+  "prepared": true,
+  "passed": true
+}

@@ -1,0 +1,41 @@
+base: common.yaml
+data:
+  workers: 8
+model:
+  backend: D
+  checkpoint_blocks: true
+image_loss:
+  mse_weight: 4.0
+  lpips_weight: 1.0
+  dists_weight: 1.0
+objective:
+  base_weight: 0.1
+  repaired_weight: 0.0
+self_flow:
+  enabled: true
+  start_step: 10000
+  mixed_sampling: true
+  mixed_every: 2
+  high_fraction: 0.25
+  student_layer: 8
+  teacher_layer: 20
+  ema_decay: 0.9999
+  warmup: 0
+  ramp: 2000
+  calibrate_every: 500
+  gradient_target: 0.05
+  gradient_cap: 0.1
+optimizer:
+  schedule: cosine
+train:
+  phase: joint
+  steps: 200000
+  output: /data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint
+  batch_size: 4
+  accumulation_steps: 2
+  effective_batch: 16
+  eval_every: 2000
+  save_every: 2000
+  full_decode_every: 10000
+  keep_last_checkpoints: 3
+  tensorboard: true

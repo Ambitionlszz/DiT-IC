@@ -1,0 +1,21 @@
+{
+  "supervisor_pid": 208782,
+  "launched_at": "2026-10-25T16:35:38.104786+00:00",
+  "commit": "ff9bc592e9fd43ba66f22ef5b53f60cd4bcafc58",
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_quantization_residual.py",
+    "--root",
+    "/data2/ls/checkpoints/c_quant_residual_sf_stable_20261026",
+    "--config",
+    "/data2/ls/code/DiT-IC-c-sf-residual-20261025/configs/bt_self_flow/quantization_residual/c_sf_b4a2_stable.json",
+    "--init-checkpoint",
+    "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_50k_20261022/backend_init.pt",
+    "--gpus",
+    "0,1"
+  ],
+  "resume_step": 11332,
+  "batch_per_gpu": 4,
+  "accumulation_steps": 2,
+  "source_checkpoint": "/data2/ls/checkpoints/c_quant_residual_sf_stable_20261026/joint/paused.pt"
+}

@@ -1,0 +1,6 @@
+base: lowrate_c_joint.yaml
+image_loss:
+  base_weight: 0.0
+  latent_weight: 0.0
+train:
+  output: /data2/ls/checkpoints/bt_self_flow_lowrate_20261019/C_no_latent/joint

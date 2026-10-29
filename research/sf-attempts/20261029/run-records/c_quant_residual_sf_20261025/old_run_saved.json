@@ -1,0 +1,6 @@
+{
+  "old_run": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023",
+  "saved_step": 33024,
+  "checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/paused.pt",
+  "safe_stop": true
+}

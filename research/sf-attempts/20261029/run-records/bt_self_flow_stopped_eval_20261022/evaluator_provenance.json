@@ -1,0 +1,9 @@
+{
+  "source": "/data2/ls/code/DiT-IC-c-precision-20261022/eval_bt_self_flow.py",
+  "source_sha256": "2605d3ff670a7c239277dc4acc1b4286d78ba40af949816a8649d2814feeffb8",
+  "changes": [
+    "Metrics only: same implementations as baseline evaluator",
+    "All packet encode/decode and model loading unchanged"
+  ],
+  "baseline_metric_source": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/evaluate_baseline_source.py"
+}

@@ -1,0 +1,36 @@
+{
+  "checked_at": "2026-10-15T17:45:16.220735+00:00",
+  "phase": "common_frontend",
+  "supervisor_pid": 87758,
+  "launcher_pid": 87936,
+  "workers": [
+    {
+      "pid": 87960,
+      "state": "R",
+      "starttime": "3090583"
+    },
+    {
+      "pid": 87961,
+      "state": "R",
+      "starttime": "3090583"
+    }
+  ],
+  "last_logged_update": {
+    "step": 500,
+    "attempts": 500,
+    "lambda_low": 0.5000076295109483,
+    "mixed": false,
+    "transition": 1.0,
+    "grad_norm": 0.6877126097679138,
+    "seconds_per_update": 0.608930569000222,
+    "steady_seconds_per_update": 0.7525525250097683,
+    "max_memory_bytes": 5430599168,
+    "base": 0.5237948298454285,
+    "rate_est": 0.05982199311256409
+  },
+  "resumed_from_step": 295,
+  "config": "/data2/ls/checkpoints/bt_self_flow_v1/configs/common.yaml",
+  "arms_started": false,
+  "gpu_status": "0, 6138 MiB, 97 %\n1, 6138 MiB, 98 %\n",
+  "completion_pending": "shared frontend 50000 updates + calibration + actual C/D launch"
+}

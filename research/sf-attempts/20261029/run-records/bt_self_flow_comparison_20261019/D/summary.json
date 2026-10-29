@@ -1,0 +1,197 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/D_34000.pt",
+  "checkpoint_sha256": "29516c6a6c7975954f11429ca831bfbd6ccf759533d5925de640e8d284660c23",
+  "weights": "ema",
+  "backend": "D",
+  "step": 34000,
+  "phase": "joint",
+  "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+  "images": 24,
+  "metric_protocol": "float RGB [-1,1], PSNR dynamic range 2, LPIPS alex, DISTS [0,1]",
+  "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+  "codec_precision": "fp32",
+  "nfe": 1,
+  "summary": {
+    "0": {
+      "bpp": 0.03133816189236111,
+      "psnr": 22.32188669840495,
+      "lpips": 0.17630420190592608,
+      "dists": 0.0955937181909879,
+      "encode_seconds": 0.46134201154167914,
+      "decode_seconds": 0.40110696287500974,
+      "peak_memory_bytes": 6057537024.0,
+      "base_latent_mse": 0.16582640757163367,
+      "repair_latent_rms": 0.12373786047101021,
+      "high_precision_psnr": 21.627375334501266,
+      "high_precision_area_fraction": 0.832465298473835,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 97.5,
+        "main": 1303.8333333333333,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.0632979874486042,
+        "main": 0.8464618048041549,
+        "allocation": 0.023371564596407705,
+        "scales": 0.031162086128543605,
+        "mask": 0.0,
+        "header": 0.035706557022289545
+      }
+    },
+    "13107": {
+      "bpp": 0.04873318142361111,
+      "psnr": 23.34888990720113,
+      "lpips": 0.13510171106706062,
+      "dists": 0.07395235697428386,
+      "encode_seconds": 0.18893883395834146,
+      "decode_seconds": 0.3820624382916454,
+      "peak_memory_bytes": 6058153984.0,
+      "base_latent_mse": 0.08597167364011209,
+      "repair_latent_rms": 0.07128467752287786,
+      "high_precision_psnr": 22.6235032081604,
+      "high_precision_area_fraction": 0.832465298473835,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 97.5,
+        "main": 2158.8333333333335,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.04070414695240746,
+        "main": 0.9012663512385194,
+        "allocation": 0.015029223490119677,
+        "scales": 0.0200389646534929,
+        "mask": 0.0,
+        "header": 0.022961313665460618
+      }
+    },
+    "26214": {
+      "bpp": 0.06808132595486112,
+      "psnr": 24.165263334910076,
+      "lpips": 0.11298788618296385,
+      "dists": 0.06347472220659256,
+      "encode_seconds": 0.18970708404165748,
+      "decode_seconds": 0.3830624941249899,
+      "peak_memory_bytes": 6058153984.0,
+      "base_latent_mse": 0.04384309922655424,
+      "repair_latent_rms": 0.038228754963104926,
+      "high_precision_psnr": 23.421152879794437,
+      "high_precision_area_fraction": 0.832465298473835,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 97.5,
+        "main": 3109.8333333333335,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.029136368164159775,
+        "main": 0.929325630042833,
+        "allocation": 0.01075804362984361,
+        "scales": 0.014344058173124813,
+        "mask": 0.0,
+        "header": 0.01643589999003885
+      }
+    },
+    "39321": {
+      "bpp": 0.09129163953993057,
+      "psnr": 24.729198694229126,
+      "lpips": 0.09987138615300258,
+      "dists": 0.05746424198150635,
+      "encode_seconds": 0.1899797171666838,
+      "decode_seconds": 0.38367872641667117,
+      "peak_memory_bytes": 6058153984.0,
+      "base_latent_mse": 0.023629544225210946,
+      "repair_latent_rms": 0.029043265618383884,
+      "high_precision_psnr": 23.972217788298924,
+      "high_precision_area_fraction": 0.832465298473835,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 97.5,
+        "main": 4250.666666666667,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.021728633510381457,
+        "main": 0.9472941351261004,
+        "allocation": 0.008022880065371616,
+        "scales": 0.010697173420495486,
+        "mask": 0.0,
+        "header": 0.01225717787765108
+      }
+    },
+    "52428": {
+      "bpp": 0.12168714735243057,
+      "psnr": 25.043102025985718,
+      "lpips": 0.09324356323728959,
+      "dists": 0.05280818541844686,
+      "encode_seconds": 0.18930660270837052,
+      "decode_seconds": 0.3836255957083665,
+      "peak_memory_bytes": 6058153984.0,
+      "base_latent_mse": 0.014310348584937552,
+      "repair_latent_rms": 0.03174837678670883,
+      "high_precision_psnr": 24.27536979317665,
+      "high_precision_area_fraction": 0.832465298473835,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 97.5,
+        "main": 5744.666666666667,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.016301167553710257,
+        "main": 0.9604592192158721,
+        "allocation": 0.006018892635216095,
+        "scales": 0.008025190180288126,
+        "mask": 0.0,
+        "header": 0.009195530414913479
+      }
+    },
+    "65535": {
+      "bpp": 0.16038343641493055,
+      "psnr": 25.21505085627238,
+      "lpips": 0.0905391142393152,
+      "dists": 0.051590425272782646,
+      "encode_seconds": 0.1893173270416829,
+      "decode_seconds": 0.38305111820837584,
+      "peak_memory_bytes": 6058153984.0,
+      "base_latent_mse": 0.01010419059700022,
+      "repair_latent_rms": 0.03522683711101612,
+      "high_precision_psnr": 24.44256439805031,
+      "high_precision_area_fraction": 0.832465298473835,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 97.5,
+        "main": 7646.666666666667,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.01236812617602909,
+        "main": 0.9699993657371192,
+        "allocation": 0.004566692741918434,
+        "scales": 0.006088923655891245,
+        "mask": 0.0,
+        "header": 0.0069768916890420515
+      }
+    }
+  },
+  "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included"
+}

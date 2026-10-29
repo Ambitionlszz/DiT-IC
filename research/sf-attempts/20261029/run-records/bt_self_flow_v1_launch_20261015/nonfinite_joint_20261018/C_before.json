@@ -1,0 +1,397 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261018/C_failure.pt",
+  "step": 15726,
+  "micro": 0,
+  "keys": [
+    [
+      11249,
+      484455710062742630
+    ],
+    [
+      85265,
+      1060767460357692994
+    ]
+  ],
+  "first_nonfinite": "caption_projection.linear_2",
+  "coarse": {
+    "dtype": "torch.float32",
+    "shape": [
+      2,
+      32,
+      16,
+      16
+    ],
+    "finite": true,
+    "max_abs": 5.386871814727783
+  },
+  "fp32_reference": {
+    "dtype": "torch.float32",
+    "shape": [
+      2,
+      32,
+      16,
+      16
+    ],
+    "finite": true,
+    "max_abs": 0.14708450436592102
+  },
+  "trace": [
+    {
+      "module": "patch_embed.proj",
+      "class": "Conv2d",
+      "inputs": [
+        {
+          "dtype": "torch.float32",
+          "shape": [
+            2,
+            32,
+            16,
+            16
+          ],
+          "finite": true,
+          "max_abs": 5.386871814727783
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152,
+          16,
+          16
+        ],
+        "finite": true,
+        "max_abs": 21.78125
+      }
+    },
+    {
+      "module": "patch_embed",
+      "class": "PatchEmbed",
+      "inputs": [
+        {
+          "dtype": "torch.float32",
+          "shape": [
+            2,
+            32,
+            16,
+            16
+          ],
+          "finite": true,
+          "max_abs": 5.386871814727783
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          256,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 21.78125
+      }
+    },
+    {
+      "module": "time_embed.emb.time_proj",
+      "class": "Timesteps",
+      "inputs": [
+        {
+          "dtype": "torch.float32",
+          "shape": [
+            2
+          ],
+          "finite": true,
+          "max_abs": 999.0
+        }
+      ],
+      "output": {
+        "dtype": "torch.float32",
+        "shape": [
+          2,
+          256
+        ],
+        "finite": true,
+        "max_abs": 0.9999779462814331
+      }
+    },
+    {
+      "module": "time_embed.emb.timestep_embedder.linear_1",
+      "class": "Linear",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            256
+          ],
+          "finite": true,
+          "max_abs": 1.0
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 17.796875
+      }
+    },
+    {
+      "module": "time_embed.emb.timestep_embedder.act",
+      "class": "SiLU",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 17.796875
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 1.1728515625
+      }
+    },
+    {
+      "module": "time_embed.emb.timestep_embedder.linear_2",
+      "class": "Linear",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 1.1728515625
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 1.3154296875
+      }
+    },
+    {
+      "module": "time_embed.emb.timestep_embedder",
+      "class": "TimestepEmbedding",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            256
+          ],
+          "finite": true,
+          "max_abs": 1.0
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 1.3154296875
+      }
+    },
+    {
+      "module": "time_embed.emb",
+      "class": "PixArtAlphaCombinedTimestepSizeEmbeddings",
+      "inputs": [
+        {
+          "dtype": "torch.float32",
+          "shape": [
+            2
+          ],
+          "finite": true,
+          "max_abs": 999.0
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 1.3154296875
+      }
+    },
+    {
+      "module": "time_embed.silu",
+      "class": "SiLU",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 1.3154296875
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 0.2783203125
+      }
+    },
+    {
+      "module": "time_embed.linear",
+      "class": "Linear",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 0.2783203125
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          6912
+        ],
+        "finite": true,
+        "max_abs": 7.5078125
+      }
+    },
+    {
+      "module": "time_embed",
+      "class": "AdaLayerNormSingle",
+      "inputs": [
+        {
+          "dtype": "torch.float32",
+          "shape": [
+            2
+          ],
+          "finite": true,
+          "max_abs": 999.0
+        }
+      ],
+      "output": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            6912
+          ],
+          "finite": true,
+          "max_abs": 7.5078125
+        },
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 1.3154296875
+        }
+      ]
+    },
+    {
+      "module": "caption_projection.linear_1",
+      "class": "Linear",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            77,
+            2304
+          ],
+          "finite": true,
+          "max_abs": 58.09375
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          77,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 1494.0
+      }
+    },
+    {
+      "module": "caption_projection.act_1",
+      "class": "GELU",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            77,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 1494.0
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          77,
+          1152
+        ],
+        "finite": true,
+        "max_abs": 1494.0
+      }
+    },
+    {
+      "module": "caption_projection.linear_2",
+      "class": "Linear",
+      "inputs": [
+        {
+          "dtype": "torch.float16",
+          "shape": [
+            2,
+            77,
+            1152
+          ],
+          "finite": true,
+          "max_abs": 1494.0
+        }
+      ],
+      "output": {
+        "dtype": "torch.float16",
+        "shape": [
+          2,
+          77,
+          1152
+        ],
+        "finite": false,
+        "max_abs": Infinity
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "status": "passed",
+  "scope": "resume_saved_fp32_retry_state",
+  "paused_step": 1,
+  "full_precision_retry_restored": true,
+  "raw_and_ema_equal_to_uninterrupted": true,
+  "final_step": 2,
+  "micro_seen": 4
+}

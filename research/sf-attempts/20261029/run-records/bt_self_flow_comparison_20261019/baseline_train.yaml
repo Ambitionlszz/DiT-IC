@@ -1,0 +1,137 @@
+data:
+  data_path:
+  - /data2/ls/data/DIV2K_train_HR_clean
+  - /data2/ls/data/Flickr2K/Flickr2K_png
+  - /data2/ls/data/LSDIR
+  - /data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png
+  valid_path:
+  - /data2/ls/data/Kodak
+  im_exts:
+  - JPEG
+  - png
+  - jpg
+  - jpeg
+  - PNG
+  num_workers: 8
+  path_size:
+  - 512
+  - 512
+model:
+  model_type: Codec
+  params:
+    decode_mode: sana
+    use_text_condition: true
+    text_encoder_path: /data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt
+    dit_path: /data2/ls/checkpoints/SANA
+    codec_path: /data2/ls/checkpoints/ditic-50k-warmups/checkpoints/multirate_e2e_latent_warmup_lrd8_to_0p25_50k/checkpoints/phase_a_complete.pt
+    use_ema: true
+    use_merge: false
+    training: true
+    freeze_codec: false
+    strict_stage_loading: true
+    train_text_projection: true
+    DiT_params:
+      DiT: true
+      DiT_lora: true
+      lora_rank_DiT: 128
+      lora_alpha_DiT: 128
+      channel_in: 32
+    vae_params:
+      vae_lora: true
+      train_vae_lora: true
+      decoder_lora_only: true
+      lora_rank_vae: 32
+      lora_alpha_vae: 32
+    codec_param:
+      ch_emd: 32
+      channel: 320
+      channel_out: 32
+      num_slices: 5
+      max_support_slices: 5
+      kernel_size: 3
+      drop_path_rate: 0.1
+      depths:
+      - 2
+      - 2
+      - 2
+      - 2
+      - 2
+      num_heads:
+      - 16
+      - 16
+      - 16
+      - 16
+      - 16
+      upsample_mode: pixelshuffle
+      variable_rate: true
+      num_quality_levels: 6
+    loss_params:
+      pp_style: true
+      pixelloss_weight: 4.0
+      perceptual_weight: 1.0
+      dists_weight: 1.0
+      rate_weight: 0.0
+      disc_start: 200000
+      disc_weight: 0.0
+      disc_factor: 0.0
+    allow_phase_a_handoff: true
+    memory_recompute: false
+    window_width: 8
+    window_stride: 4
+quality_control:
+  enabled: true
+  num_levels: 6
+  sampling: uniform_step_shared
+  rate_weights:
+  - 8.0
+  - 4.0
+  - 2.0
+  - 1.0
+  - 0.5
+  - 0.25
+experiment_contract:
+  control_run: window_b_infer_only_512_w8s4_bs2a2_norecompute_20260930
+  entropy_update_mode: official_post_main
+  dists_input_contract: rgb_0_1_from_minus1_1_v1
+  distortion_weights:
+    pixel: 4.0
+    perceptual: 1.0
+    dists: 1.0
+  comparison: 512_large_crop_train_global_eval_window_loss_weights_4_1_1
+  warmup: multirate_e2e_latent_warmup_lrd8_to_0p25_50k/phase_a_complete.pt
+  memory_implementation: none
+train:
+  output_dir: /data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH/train
+  exp_name: 512-variable-rate-baseline
+  training_mode: phase1_warmup_e2e
+  e2e_phase: nogan
+  freeze_quality_endpoints: true
+  per_gpu_batch_size: 2
+  accumulation_steps: 2
+  accumulate_disc: false
+  resume: true
+  log_every: 10
+  eval_every: 2000
+  ckpt_every: 10000
+  max_steps: 200000
+  global_seed: 903
+  rate_weight: 0.0
+  window_training: false
+  eval_window: true
+  rolling_checkpoint_slots: 2
+  best_selection_start_fraction: 0.0
+  resume_checkpoint: /data2/ls/checkpoints/baseline512/recovery-20261015-173314/resume.pt
+optimizer:
+  lr: 0.0001
+  aux_lr: 0.001
+  entropy_lr: 0.001
+  beta2: 0.999
+  beta_vae:
+  - 0.9
+  - 0.999
+  step_lr:
+  - 100000
+  - 160000
+  - 190000
+  max_grad_norm: 4.0
+  entropy_update_mode: official_post_main

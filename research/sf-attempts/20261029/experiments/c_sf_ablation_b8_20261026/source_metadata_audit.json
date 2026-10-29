@@ -1,0 +1,6 @@
+{
+  "metadata_only": true,
+  "config_differences": {},
+  "assets_match": true,
+  "dataset_error": "source training file list differs after path relocation"
+}

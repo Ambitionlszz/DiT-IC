@@ -1,0 +1,47 @@
+{
+  "output": "/data2/ls/checkpoints/c_native_relational_sf_20261027/joint/0010000.pt",
+  "source": {
+    "path": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+    "sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+    "step": 10000,
+    "world_size": 2,
+    "batch_size": 2,
+    "accumulation_steps": 2,
+    "effective_batch": 8,
+    "source_amp": "auto (confirm source hardware/runtime)",
+    "micro_seen": 20000,
+    "attempts": 10000,
+    "metadata_errors": [],
+    "converted": false
+  },
+  "migration": {
+    "protocol": "pure_c10k_native_relational_v1",
+    "source_sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+    "parent_source_sha256": "72021789824591baa47ce4913f754068d5c0b2ec858278ecd8d15659afe2d5c1",
+    "source_layout": {
+      "world_size": 2,
+      "batch_size": 2,
+      "accumulation_steps": 2
+    },
+    "target_layout": {
+      "world_size": 2,
+      "batch_size": 4,
+      "accumulation_steps": 1
+    },
+    "source_micro_seen": 20000,
+    "target_micro_seen": 10000,
+    "rng_policy": "preserve existing rank RNGs; seed only newly added ranks with train.seed+rank",
+    "fresh_fp16_scale": 64.0,
+    "preserved_global_samples": 80000,
+    "shared_weights_exact": true,
+    "optimizer_moments_preserved": true,
+    "teacher_initialization": "raw student C10K prefix, before first update",
+    "dataset": {
+      "local_images": 89026,
+      "local_fingerprint": "e3d86490abc0f158700aab9288e7214494606d8df27b59b19ec6d40770fb11d1",
+      "relocated_fingerprint": "eb73f948e431fe591250aefbd29ec2deb353dfaafde6d526b7e34995448e4819",
+      "source_fingerprint": "277b57a63ecda648707e40dd3a233e2955aa99d300cccb720790b6e16a2ee6b8",
+      "user_confirmed_directory_layout_only": true
+    }
+  }
+}

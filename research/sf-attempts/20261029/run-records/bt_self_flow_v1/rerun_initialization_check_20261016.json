@@ -1,0 +1,46 @@
+{
+  "scope": "rerun_initialization_check",
+  "commit": "a24427911f56cde8052d58fc35deb9233e684c5b",
+  "backends": {
+    "C": {
+      "pid": 67125,
+      "first_update_matches_previous_run": true,
+      "keys": [
+        "lambda_low",
+        "transition",
+        "grad_norm",
+        "mse",
+        "lpips",
+        "dists",
+        "psnr",
+        "base",
+        "latent",
+        "rate_est"
+      ],
+      "matching_logged_steps": [
+        1,
+        100
+      ]
+    },
+    "D": {
+      "pid": 67126,
+      "first_update_matches_previous_run": true,
+      "keys": [
+        "lambda_low",
+        "transition",
+        "grad_norm",
+        "mse",
+        "lpips",
+        "dists",
+        "psnr",
+        "base",
+        "latent",
+        "rate_est"
+      ],
+      "matching_logged_steps": [
+        1,
+        100
+      ]
+    }
+  }
+}

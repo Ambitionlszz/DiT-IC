@@ -1,0 +1,18 @@
+{
+  "changed_at": "2026-10-19 16:21:08 +0800",
+  "previous_commit": "552c3fb8e75e5444b6c978f57b5f63b56e84584c",
+  "commit": "2845a1d595e346b2e3c273d95c743e22820fbb61",
+  "reason": "Avoid cold-cache per-image stat during dataset enumeration; identical training and validation inventory verified",
+  "changed_manifest_fields": [
+    "commit"
+  ],
+  "frozen_configs_unchanged": true,
+  "tests_passed": [
+    "inventory_order_fingerprint_symlinks",
+    "empty_missing_roots",
+    "counter_sampler_resume",
+    "trainer_resume_equivalence",
+    "shared_gan_bn_contract",
+    "stage1_gan_bn_contract"
+  ]
+}

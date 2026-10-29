@@ -1,0 +1,2612 @@
+{
+  "checkpoint": "common/0040000.pt",
+  "step": 40000,
+  "weights": "deployment_ema",
+  "backend": "C",
+  "image_count": 32,
+  "crop": 512,
+  "dataset_fingerprint": "f0ab36c7c3cbc57af1c0734ed0762d948c47132fec759ee53b54ab35d5c0df3b",
+  "includes_all_packet_bytes": true,
+  "summary": {
+    "0.0": {
+      "mean": 0.035564422607421875,
+      "min": 0.021820068359375,
+      "p10": 0.027801513671875,
+      "median": 0.035736083984375,
+      "p90": 0.041644287109375004,
+      "max": 0.045867919921875,
+      "component_means": {
+        "hyper": 0.0021209716796875,
+        "main": 0.031032562255859375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    "0.2": {
+      "mean": 0.053691864013671875,
+      "min": 0.038421630859375,
+      "p10": 0.045892333984375,
+      "median": 0.054290771484375,
+      "p90": 0.060186767578125,
+      "max": 0.064422607421875,
+      "component_means": {
+        "hyper": 0.0021209716796875,
+        "main": 0.049160003662109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    "0.4": {
+      "mean": 0.07427597045898438,
+      "min": 0.057342529296875,
+      "p10": 0.064813232421875,
+      "median": 0.075408935546875,
+      "p90": 0.082000732421875,
+      "max": 0.087615966796875,
+      "component_means": {
+        "hyper": 0.0021209716796875,
+        "main": 0.06974411010742188,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    "0.6": {
+      "mean": 0.10101699829101562,
+      "min": 0.078704833984375,
+      "p10": 0.088726806640625,
+      "median": 0.102264404296875,
+      "p90": 0.11207885742187501,
+      "max": 0.117523193359375,
+      "component_means": {
+        "hyper": 0.0021209716796875,
+        "main": 0.09648513793945312,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    "0.8": {
+      "mean": 0.13690567016601562,
+      "min": 0.107025146484375,
+      "p10": 0.121563720703125,
+      "median": 0.138763427734375,
+      "p90": 0.150469970703125,
+      "max": 0.157806396484375,
+      "component_means": {
+        "hyper": 0.0021209716796875,
+        "main": 0.13237380981445312,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    "1.0": {
+      "mean": 0.17802047729492188,
+      "min": 0.146209716796875,
+      "p10": 0.161761474609375,
+      "median": 0.179656982421875,
+      "p90": 0.191912841796875,
+      "max": 0.199066162109375,
+      "component_means": {
+        "hyper": 0.0021209716796875,
+        "main": 0.17348861694335938,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    }
+  },
+  "images": [
+    {
+      "index": 0,
+      "quality": 0.0,
+      "bpp": 0.027557373046875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0230712890625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      },
+      "latent_roundtrip_max_error": 0.0
+    },
+    {
+      "index": 0,
+      "quality": 0.2,
+      "bpp": 0.045867919921875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0413818359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      },
+      "latent_roundtrip_max_error": 0.0
+    },
+    {
+      "index": 0,
+      "quality": 0.4,
+      "bpp": 0.065032958984375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.060546875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      },
+      "latent_roundtrip_max_error": 0.0
+    },
+    {
+      "index": 0,
+      "quality": 0.6,
+      "bpp": 0.088348388671875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0838623046875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      },
+      "latent_roundtrip_max_error": 0.0
+    },
+    {
+      "index": 0,
+      "quality": 0.8,
+      "bpp": 0.121673583984375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      },
+      "latent_roundtrip_max_error": 0.0
+    },
+    {
+      "index": 0,
+      "quality": 1.0,
+      "bpp": 0.161712646484375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1572265625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      },
+      "latent_roundtrip_max_error": 0.0
+    },
+    {
+      "index": 1,
+      "quality": 0.0,
+      "bpp": 0.035736083984375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0311279296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 1,
+      "quality": 0.2,
+      "bpp": 0.054290771484375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0496826171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 1,
+      "quality": 0.4,
+      "bpp": 0.075408935546875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.07080078125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 1,
+      "quality": 0.6,
+      "bpp": 0.102264404296875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.09765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 1,
+      "quality": 0.8,
+      "bpp": 0.138763427734375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1341552734375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 1,
+      "quality": 1.0,
+      "bpp": 0.179656982421875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.175048828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 2,
+      "quality": 0.0,
+      "bpp": 0.038543701171875,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.03369140625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 2,
+      "quality": 0.2,
+      "bpp": 0.057220458984375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.0523681640625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 2,
+      "quality": 0.4,
+      "bpp": 0.078582763671875,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.07373046875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 2,
+      "quality": 0.6,
+      "bpp": 0.107513427734375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.1026611328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 2,
+      "quality": 0.8,
+      "bpp": 0.146087646484375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.1412353515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 2,
+      "quality": 1.0,
+      "bpp": 0.187835693359375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.1829833984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 3,
+      "quality": 0.0,
+      "bpp": 0.040863037109375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0364990234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 3,
+      "quality": 0.2,
+      "bpp": 0.059417724609375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0550537109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 3,
+      "quality": 0.4,
+      "bpp": 0.080902099609375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0765380859375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 3,
+      "quality": 0.6,
+      "bpp": 0.110321044921875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.10595703125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 3,
+      "quality": 0.8,
+      "bpp": 0.148162841796875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.143798828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 3,
+      "quality": 1.0,
+      "bpp": 0.190155029296875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.185791015625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 4,
+      "quality": 0.0,
+      "bpp": 0.027801513671875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 4,
+      "quality": 0.2,
+      "bpp": 0.046112060546875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.041748046875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 4,
+      "quality": 0.4,
+      "bpp": 0.065765380859375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0614013671875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 4,
+      "quality": 0.6,
+      "bpp": 0.089202880859375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0848388671875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 4,
+      "quality": 0.8,
+      "bpp": 0.121551513671875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 4,
+      "quality": 1.0,
+      "bpp": 0.162200927734375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1578369140625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 5,
+      "quality": 0.0,
+      "bpp": 0.027923583984375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.023193359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 5,
+      "quality": 0.2,
+      "bpp": 0.046112060546875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.0413818359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 5,
+      "quality": 0.4,
+      "bpp": 0.064788818359375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.06005859375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 5,
+      "quality": 0.6,
+      "bpp": 0.088714599609375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.083984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 5,
+      "quality": 0.8,
+      "bpp": 0.120941162109375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.1162109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 5,
+      "quality": 1.0,
+      "bpp": 0.161468505859375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.15673828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 6,
+      "quality": 0.0,
+      "bpp": 0.027801513671875,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.02294921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 6,
+      "quality": 0.2,
+      "bpp": 0.045257568359375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.0404052734375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 6,
+      "quality": 0.4,
+      "bpp": 0.064544677734375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.0596923828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 6,
+      "quality": 0.6,
+      "bpp": 0.088836669921875,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.083984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 6,
+      "quality": 0.8,
+      "bpp": 0.121917724609375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.1170654296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 6,
+      "quality": 1.0,
+      "bpp": 0.162811279296875,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.157958984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 7,
+      "quality": 0.0,
+      "bpp": 0.035247802734375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0308837890625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 7,
+      "quality": 0.2,
+      "bpp": 0.053680419921875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.04931640625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 7,
+      "quality": 0.4,
+      "bpp": 0.073944091796875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.069580078125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 7,
+      "quality": 0.6,
+      "bpp": 0.099700927734375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0953369140625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 7,
+      "quality": 0.8,
+      "bpp": 0.135345458984375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1309814453125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 7,
+      "quality": 1.0,
+      "bpp": 0.176605224609375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1722412109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 8,
+      "quality": 0.0,
+      "bpp": 0.031463623046875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.02685546875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 8,
+      "quality": 0.2,
+      "bpp": 0.049041748046875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.04443359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 8,
+      "quality": 0.4,
+      "bpp": 0.068572998046875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.06396484375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 8,
+      "quality": 0.6,
+      "bpp": 0.093719482421875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.089111328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 8,
+      "quality": 0.8,
+      "bpp": 0.127777099609375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1231689453125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 8,
+      "quality": 1.0,
+      "bpp": 0.168670654296875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1640625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 9,
+      "quality": 0.0,
+      "bpp": 0.021820068359375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0172119140625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 9,
+      "quality": 0.2,
+      "bpp": 0.038421630859375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0338134765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 9,
+      "quality": 0.4,
+      "bpp": 0.057342529296875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.052734375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 9,
+      "quality": 0.6,
+      "bpp": 0.078704833984375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0740966796875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 9,
+      "quality": 0.8,
+      "bpp": 0.107025146484375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1024169921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 9,
+      "quality": 1.0,
+      "bpp": 0.146209716796875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1416015625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 10,
+      "quality": 0.0,
+      "bpp": 0.030609130859375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0263671875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 10,
+      "quality": 0.2,
+      "bpp": 0.048553466796875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0443115234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 10,
+      "quality": 0.4,
+      "bpp": 0.067596435546875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0633544921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 10,
+      "quality": 0.6,
+      "bpp": 0.092010498046875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0877685546875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 10,
+      "quality": 0.8,
+      "bpp": 0.126556396484375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.122314453125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 10,
+      "quality": 1.0,
+      "bpp": 0.166595458984375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.162353515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 11,
+      "quality": 0.0,
+      "bpp": 0.035491943359375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.0306396484375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 11,
+      "quality": 0.2,
+      "bpp": 0.053680419921875,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.048828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 11,
+      "quality": 0.4,
+      "bpp": 0.073822021484375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.0689697265625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 11,
+      "quality": 0.6,
+      "bpp": 0.099212646484375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.0943603515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 11,
+      "quality": 0.8,
+      "bpp": 0.133636474609375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.1287841796875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 11,
+      "quality": 1.0,
+      "bpp": 0.175628662109375,
+      "component_bpp": {
+        "hyper": 0.00244140625,
+        "main": 0.1707763671875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 12,
+      "quality": 0.0,
+      "bpp": 0.040008544921875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.035400390625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 12,
+      "quality": 0.2,
+      "bpp": 0.057952880859375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0533447265625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 12,
+      "quality": 0.4,
+      "bpp": 0.079803466796875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0751953125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 12,
+      "quality": 0.6,
+      "bpp": 0.108978271484375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1043701171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 12,
+      "quality": 0.8,
+      "bpp": 0.146453857421875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.141845703125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 12,
+      "quality": 1.0,
+      "bpp": 0.187713623046875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.18310546875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 13,
+      "quality": 0.0,
+      "bpp": 0.025360107421875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.02099609375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 13,
+      "quality": 0.2,
+      "bpp": 0.040374755859375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0360107421875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 13,
+      "quality": 0.4,
+      "bpp": 0.059417724609375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0550537109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 13,
+      "quality": 0.6,
+      "bpp": 0.083099365234375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0787353515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 13,
+      "quality": 0.8,
+      "bpp": 0.114105224609375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1097412109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 13,
+      "quality": 1.0,
+      "bpp": 0.152313232421875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.14794921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 14,
+      "quality": 0.0,
+      "bpp": 0.034027099609375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.029296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 14,
+      "quality": 0.2,
+      "bpp": 0.052459716796875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.0477294921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 14,
+      "quality": 0.4,
+      "bpp": 0.072235107421875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.0675048828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 14,
+      "quality": 0.6,
+      "bpp": 0.098846435546875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.0941162109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 14,
+      "quality": 0.8,
+      "bpp": 0.134613037109375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.1298828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 14,
+      "quality": 1.0,
+      "bpp": 0.175872802734375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.171142578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 15,
+      "quality": 0.0,
+      "bpp": 0.033660888671875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.029541015625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 15,
+      "quality": 0.2,
+      "bpp": 0.051361083984375,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.0472412109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 15,
+      "quality": 0.4,
+      "bpp": 0.070526123046875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.06640625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 15,
+      "quality": 0.6,
+      "bpp": 0.095306396484375,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.0911865234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 15,
+      "quality": 0.8,
+      "bpp": 0.129730224609375,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.1256103515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 15,
+      "quality": 1.0,
+      "bpp": 0.170623779296875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.16650390625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 16,
+      "quality": 0.0,
+      "bpp": 0.038787841796875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0341796875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 16,
+      "quality": 0.2,
+      "bpp": 0.057098388671875,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.052490234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 16,
+      "quality": 0.4,
+      "bpp": 0.078216552734375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.0736083984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 16,
+      "quality": 0.6,
+      "bpp": 0.106781005859375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1021728515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 16,
+      "quality": 0.8,
+      "bpp": 0.144622802734375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1400146484375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 16,
+      "quality": 1.0,
+      "bpp": 0.185882568359375,
+      "component_bpp": {
+        "hyper": 0.002197265625,
+        "main": 0.1812744140625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 17,
+      "quality": 0.0,
+      "bpp": 0.040740966796875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0362548828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 17,
+      "quality": 0.2,
+      "bpp": 0.058929443359375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.054443359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 17,
+      "quality": 0.4,
+      "bpp": 0.080413818359375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.075927734375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 17,
+      "quality": 0.6,
+      "bpp": 0.109100341796875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1046142578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 17,
+      "quality": 0.8,
+      "bpp": 0.147674560546875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1431884765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 17,
+      "quality": 1.0,
+      "bpp": 0.189056396484375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1845703125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 18,
+      "quality": 0.0,
+      "bpp": 0.039764404296875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0355224609375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 18,
+      "quality": 0.2,
+      "bpp": 0.058807373046875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0545654296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 18,
+      "quality": 0.4,
+      "bpp": 0.080047607421875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0758056640625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 18,
+      "quality": 0.6,
+      "bpp": 0.108245849609375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.10400390625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 18,
+      "quality": 0.8,
+      "bpp": 0.146820068359375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.142578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 18,
+      "quality": 1.0,
+      "bpp": 0.188446044921875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.1842041015625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 19,
+      "quality": 0.0,
+      "bpp": 0.038055419921875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0335693359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 19,
+      "quality": 0.2,
+      "bpp": 0.056610107421875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0521240234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 19,
+      "quality": 0.4,
+      "bpp": 0.076995849609375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.072509765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 19,
+      "quality": 0.6,
+      "bpp": 0.103485107421875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0989990234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 19,
+      "quality": 0.8,
+      "bpp": 0.139495849609375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.135009765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 19,
+      "quality": 1.0,
+      "bpp": 0.181243896484375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1767578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 20,
+      "quality": 0.0,
+      "bpp": 0.045867919921875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0413818359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 20,
+      "quality": 0.2,
+      "bpp": 0.064422607421875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0599365234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 20,
+      "quality": 0.4,
+      "bpp": 0.087615966796875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0831298828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 20,
+      "quality": 0.6,
+      "bpp": 0.117523193359375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.113037109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 20,
+      "quality": 0.8,
+      "bpp": 0.157806396484375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1533203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 20,
+      "quality": 1.0,
+      "bpp": 0.199066162109375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.194580078125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 21,
+      "quality": 0.0,
+      "bpp": 0.033782958984375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.029296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 21,
+      "quality": 0.2,
+      "bpp": 0.052337646484375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0478515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 21,
+      "quality": 0.4,
+      "bpp": 0.071990966796875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0675048828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 21,
+      "quality": 0.6,
+      "bpp": 0.097503662109375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.093017578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 21,
+      "quality": 0.8,
+      "bpp": 0.133758544921875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1292724609375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 21,
+      "quality": 1.0,
+      "bpp": 0.174774169921875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1702880859375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 22,
+      "quality": 0.0,
+      "bpp": 0.036590576171875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0323486328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 22,
+      "quality": 0.2,
+      "bpp": 0.054901123046875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0506591796875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 22,
+      "quality": 0.4,
+      "bpp": 0.076751708984375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.072509765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 22,
+      "quality": 0.6,
+      "bpp": 0.105682373046875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.1014404296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 22,
+      "quality": 0.8,
+      "bpp": 0.141815185546875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.1375732421875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 22,
+      "quality": 1.0,
+      "bpp": 0.182586669921875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.1783447265625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 23,
+      "quality": 0.0,
+      "bpp": 0.044403076171875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0399169921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 23,
+      "quality": 0.2,
+      "bpp": 0.063201904296875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.0587158203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 23,
+      "quality": 0.4,
+      "bpp": 0.085296630859375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.080810546875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 23,
+      "quality": 0.6,
+      "bpp": 0.115936279296875,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1114501953125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 23,
+      "quality": 0.8,
+      "bpp": 0.155853271484375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.1513671875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 23,
+      "quality": 1.0,
+      "bpp": 0.197601318359375,
+      "component_bpp": {
+        "hyper": 0.0020751953125,
+        "main": 0.193115234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 24,
+      "quality": 0.0,
+      "bpp": 0.044891357421875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.0406494140625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 24,
+      "quality": 0.2,
+      "bpp": 0.063568115234375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.059326171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 24,
+      "quality": 0.4,
+      "bpp": 0.086273193359375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.08203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 24,
+      "quality": 0.6,
+      "bpp": 0.117034912109375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.11279296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 24,
+      "quality": 0.8,
+      "bpp": 0.155364990234375,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.151123046875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 24,
+      "quality": 1.0,
+      "bpp": 0.196990966796875,
+      "component_bpp": {
+        "hyper": 0.0018310546875,
+        "main": 0.1927490234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 25,
+      "quality": 0.0,
+      "bpp": 0.036712646484375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0323486328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 25,
+      "quality": 0.2,
+      "bpp": 0.054779052734375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0504150390625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 25,
+      "quality": 0.4,
+      "bpp": 0.075775146484375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0714111328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 25,
+      "quality": 0.6,
+      "bpp": 0.103118896484375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0987548828125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 25,
+      "quality": 0.8,
+      "bpp": 0.139373779296875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.135009765625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 25,
+      "quality": 1.0,
+      "bpp": 0.180999755859375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1766357421875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 26,
+      "quality": 0.0,
+      "bpp": 0.033050537109375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0286865234375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 26,
+      "quality": 0.2,
+      "bpp": 0.051361083984375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0469970703125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 26,
+      "quality": 0.4,
+      "bpp": 0.071014404296875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.066650390625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 26,
+      "quality": 0.6,
+      "bpp": 0.095672607421875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.09130859375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 26,
+      "quality": 0.8,
+      "bpp": 0.129730224609375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1253662109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 26,
+      "quality": 1.0,
+      "bpp": 0.171478271484375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1671142578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 27,
+      "quality": 0.0,
+      "bpp": 0.036468505859375,
+      "component_bpp": {
+        "hyper": 0.0030517578125,
+        "main": 0.031005859375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 27,
+      "quality": 0.2,
+      "bpp": 0.054656982421875,
+      "component_bpp": {
+        "hyper": 0.0030517578125,
+        "main": 0.0491943359375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 27,
+      "quality": 0.4,
+      "bpp": 0.076141357421875,
+      "component_bpp": {
+        "hyper": 0.0030517578125,
+        "main": 0.0706787109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 27,
+      "quality": 0.6,
+      "bpp": 0.104095458984375,
+      "component_bpp": {
+        "hyper": 0.0030517578125,
+        "main": 0.0986328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 27,
+      "quality": 0.8,
+      "bpp": 0.142547607421875,
+      "component_bpp": {
+        "hyper": 0.0030517578125,
+        "main": 0.1370849609375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 27,
+      "quality": 1.0,
+      "bpp": 0.184295654296875,
+      "component_bpp": {
+        "hyper": 0.0030517578125,
+        "main": 0.1788330078125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 28,
+      "quality": 0.0,
+      "bpp": 0.037445068359375,
+      "component_bpp": {
+        "hyper": 0.002685546875,
+        "main": 0.0323486328125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 28,
+      "quality": 0.2,
+      "bpp": 0.055999755859375,
+      "component_bpp": {
+        "hyper": 0.002685546875,
+        "main": 0.0509033203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 28,
+      "quality": 0.4,
+      "bpp": 0.076629638671875,
+      "component_bpp": {
+        "hyper": 0.002685546875,
+        "main": 0.071533203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 28,
+      "quality": 0.6,
+      "bpp": 0.104705810546875,
+      "component_bpp": {
+        "hyper": 0.002685546875,
+        "main": 0.099609375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 28,
+      "quality": 0.8,
+      "bpp": 0.141937255859375,
+      "component_bpp": {
+        "hyper": 0.002685546875,
+        "main": 0.1368408203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 28,
+      "quality": 1.0,
+      "bpp": 0.183319091796875,
+      "component_bpp": {
+        "hyper": 0.002685546875,
+        "main": 0.17822265625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 29,
+      "quality": 0.0,
+      "bpp": 0.034881591796875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.03076171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 29,
+      "quality": 0.2,
+      "bpp": 0.052703857421875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.048583984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 29,
+      "quality": 0.4,
+      "bpp": 0.072723388671875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.068603515625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 29,
+      "quality": 0.6,
+      "bpp": 0.097869873046875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.09375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 29,
+      "quality": 0.8,
+      "bpp": 0.132415771484375,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.1282958984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 29,
+      "quality": 1.0,
+      "bpp": 0.174285888671875,
+      "component_bpp": {
+        "hyper": 0.001708984375,
+        "main": 0.170166015625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 30,
+      "quality": 0.0,
+      "bpp": 0.040985107421875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.03662109375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 30,
+      "quality": 0.2,
+      "bpp": 0.058685302734375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.0543212890625,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 30,
+      "quality": 0.4,
+      "bpp": 0.080535888671875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.076171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 30,
+      "quality": 0.6,
+      "bpp": 0.108734130859375,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.1043701171875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 30,
+      "quality": 0.8,
+      "bpp": 0.146697998046875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.142333984375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 30,
+      "quality": 1.0,
+      "bpp": 0.188446044921875,
+      "component_bpp": {
+        "hyper": 0.001953125,
+        "main": 0.18408203125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 31,
+      "quality": 0.0,
+      "bpp": 0.041717529296875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.0369873046875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 31,
+      "quality": 0.2,
+      "bpp": 0.060272216796875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.0555419921875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 31,
+      "quality": 0.4,
+      "bpp": 0.082122802734375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.077392578125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 31,
+      "quality": 0.6,
+      "bpp": 0.112274169921875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.1075439453125,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 31,
+      "quality": 0.8,
+      "bpp": 0.150726318359375,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.14599609375,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    },
+    {
+      "index": 31,
+      "quality": 1.0,
+      "bpp": 0.192108154296875,
+      "component_bpp": {
+        "hyper": 0.0023193359375,
+        "main": 0.1873779296875,
+        "allocation": 0.000732421875,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.001678466796875
+      }
+    }
+  ]
+}

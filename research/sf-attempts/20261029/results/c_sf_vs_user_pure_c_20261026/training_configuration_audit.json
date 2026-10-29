@@ -1,0 +1,224 @@
+{
+  "checked_at": "2026-10-26T05:19:48.877470+00:00",
+  "manifest": {
+    "repository": "/data2/ls/code/DiT-IC-c-sf-residual-20261025",
+    "commit": "ff9bc592e9fd43ba66f22ef5b53f60cd4bcafc58",
+    "gpus": [
+      "0",
+      "1"
+    ],
+    "python": "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "initialization": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_50k_20261022/backend_init.pt",
+    "initialization_sha256": "72021789824591baa47ce4913f754068d5c0b2ec858278ecd8d15659afe2d5c1",
+    "config": {
+      "data": {
+        "train": [
+          "/data2/ls/data/DIV2K_train_HR_clean",
+          "/data2/ls/data/Flickr2K/Flickr2K_png",
+          "/data2/ls/data/LSDIR",
+          "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+        ],
+        "valid": [
+          "/data2/ls/data/Kodak"
+        ],
+        "crop": 512,
+        "valid_crop": 0,
+        "workers": 8,
+        "valid_limit": 24
+      },
+      "model": {
+        "sana_path": "/data2/ls/checkpoints/SANA",
+        "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+        "backend": "C",
+        "dit_rank": 128,
+        "vae_rank": 32,
+        "checkpoint_blocks": true,
+        "codec": {
+          "ch_emd": 32,
+          "channel": 320,
+          "channel_out": 32,
+          "delta_coarse": 4.0,
+          "delta_fine": 0.5,
+          "kappa": 0.6931471805599453,
+          "precision_conditioning": true,
+          "rate_likelihood": "noise"
+        }
+      },
+      "optimizer": {
+        "codec_lr": 0.0001,
+        "joint_codec_lr": 0.0001,
+        "backend_lr": 0.0001,
+        "vae_lr": 0.0001,
+        "aux_lr": 0.001,
+        "max_grad_norm": 4.0,
+        "warmup": 0,
+        "schedule": "milestone",
+        "milestones": [
+          100000,
+          160000,
+          190000
+        ],
+        "factors": [
+          0.5,
+          0.2,
+          0.1
+        ]
+      },
+      "image_loss": {
+        "mse_weight": 4.0,
+        "lpips_weight": 1.0,
+        "dists_weight": 1.0
+      },
+      "self_flow": {
+        "method": "quantization_residual_v1",
+        "enabled": true,
+        "mixed_sampling": false,
+        "student_layer": 8,
+        "teacher_layer": 20,
+        "warmup": 10000,
+        "ramp": 2000,
+        "cell_fraction": 0.25,
+        "gradient_target": 0.05,
+        "calibration_samples_per_q": 4,
+        "teacher_decay": 0.999
+      },
+      "train": {
+        "phase": "joint",
+        "steps": 200000,
+        "output": "/data2/ls/checkpoints/c_quant_residual_sf_stable_20261026/joint",
+        "batch_size": 4,
+        "effective_batch": 16,
+        "accumulation_steps": 2,
+        "seed": 903,
+        "eval_every": 2000,
+        "save_every": 500,
+        "validation_actual_bpp": true,
+        "log_every": 50,
+        "packet_samples": 2,
+        "data_scale_samples": 512,
+        "calibration_samples": 512,
+        "require_quality_span": true,
+        "router_uniform_steps": 0,
+        "router_ramp_steps": 0,
+        "full_decode_every": 10000,
+        "keep_last_checkpoints": 2,
+        "tensorboard": true
+      },
+      "quality": {
+        "values": [
+          0.0,
+          0.2,
+          0.4,
+          0.6,
+          0.8,
+          1.0
+        ],
+        "rate_coefficients": [
+          16.0,
+          8.0,
+          4.0,
+          2.0,
+          1.0,
+          0.5
+        ]
+      },
+      "objective": {
+        "base_weight": 0.1,
+        "repaired_weight": 0.0
+      }
+    }
+  },
+  "continuation": {
+    "created_at": "2026-10-25T16:27:15.876459+00:00",
+    "source_run": "/data2/ls/checkpoints/c_quant_residual_sf_recovery_20261025",
+    "source_checkpoint": "/data2/ls/checkpoints/c_quant_residual_sf_recovery_20261025/joint/paused.pt",
+    "resume_step": 11332,
+    "reason": "validated numerical stability and bounded DDP FP32 replay",
+    "probe_updates_discarded": true,
+    "save_every": 500,
+    "world_size": 2,
+    "batch_per_gpu": 4,
+    "accumulation_steps": 2,
+    "optimization": "unchanged; restore all optimizer/EMA/teacher/RNG state"
+  },
+  "implementation_defaults": {
+    "main_optimizer": {
+      "name": "AdamW",
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0
+    },
+    "auxiliary_optimizer": {
+      "name": "AdamW",
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0,
+      "lr": 0.001,
+      "scheduled": false
+    },
+    "deployment_ema_decay": 0.999,
+    "teacher_ema_decay": 0.999,
+    "residual_head_seed": 3903,
+    "residual_head": {
+      "normalization": "LayerNorm",
+      "trunk": "Linear(hidden+1,2*hidden) -> SiLU",
+      "mean": "Linear(2*hidden,hidden), zero initialization",
+      "variance": "minimum_std**2 + softplus(Linear(2*hidden,hidden))",
+      "initial_std": 0.5,
+      "minimum_std": 0.05
+    },
+    "sf_alpha": 1.1796276990645218,
+    "sf_alpha_calibration": "one time at 10K, gradient_target * median(rd_gradient_norm / sf_gradient_norm), capped at10",
+    "sf_loss": "ramp * alpha / 0.5 * whole_batch_mean_valid_gaussian_nll",
+    "mask_participation": "0.5 * ramp",
+    "mask_cell_fraction": 0.25,
+    "mask_grid": [
+      8,
+      8
+    ],
+    "mask_cells_per_selected_sample": 16,
+    "q_sampling": "balanced shuffled cycles of6 updates, same q on both ranks and both accumulated microbatches",
+    "image_range": [
+      -1,
+      1
+    ],
+    "mse": "mean squared error on[-1,1] RGB; weight4 equals weight16 on[0,1] RGB",
+    "perceptual_losses": {
+      "lpips": "Alex,[-1,1]",
+      "dists": "pyiqa DISTS,[0,1]"
+    },
+    "main_lr_schedule_cumulative": [
+      {
+        "step": 0,
+        "lr": 0.0001
+      },
+      {
+        "step": 100000,
+        "lr": 5e-05
+      },
+      {
+        "step": 160000,
+        "lr": 1e-05
+      },
+      {
+        "step": 190000,
+        "lr": 1e-06
+      }
+    ],
+    "devices": [
+      "V100S 32GiB GPU0",
+      "V100S 32GiB GPU1"
+    ],
+    "gpu_distribution": "DDP: complete student and one local EMA teacher on each GPU",
+    "precision": "FP16 AMP+GradScaler on V100, FP32 SANA attention/caption/MLP and perceptual/likelihood-sensitive arithmetic",
+    "bounded_recovery": "fresh complete DDP checkpoint -> rebuild workers -> same-update FP32 replay -> AMP;3 persisted numerical restarts maximum",
+    "augmentation": "random512x512crop;50%horizontalflip;50%verticalflip;resize_short_side_if_needed",
+    "source_code": "/data2/ls/code/DiT-IC-c-sf-residual-20261025"
+  }
+}

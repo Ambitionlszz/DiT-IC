@@ -1,0 +1,27 @@
+{
+  "detected_at": "2026-10-19T15:39:36.505499+08:00",
+  "host_boot_id": "ebd1ee90-1be4-4c41-a0d8-f35a528b6be4",
+  "cause": "host_reboot_with_lost_tmp_runtime",
+  "restoring_original_environment": true,
+  "target_updates": 200000,
+  "config_changes": false,
+  "resume_checkpoints": {
+    "C": {
+      "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0036000.pt",
+      "step": 36000,
+      "bytes": 3746076218,
+      "last_logged_before_reboot": 36900
+    },
+    "D": {
+      "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0038000.pt",
+      "step": 38000,
+      "bytes": 3918484501,
+      "last_logged_before_reboot": 38800
+    }
+  },
+  "log_offsets": {
+    "C": 178977,
+    "D": 188801
+  },
+  "environment_copy_method": "e2image -ra -c -p -f: compare/update allocated blocks in the disposable local copy"
+}

@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-16T09:24:01.042429+00:00",
+  "reason": "Fix nonfinite forward recovery and peer status; rerun both arms from shared initialization",
+  "commit": "a24427911f56cde8052d58fc35deb9233e684c5b",
+  "previous_commit": "6ed25a43173aaa6dbec9e42e024b94e2d02a4d80",
+  "archive": "/data2/ls/checkpoints/bt_self_flow_v1/history_failed_joint_20261016_1542",
+  "previous_D_paused_update": 324,
+  "previous_C_joint_recovery_available": false,
+  "rerun_start": {
+    "C": 0,
+    "D": 0
+  },
+  "common_50000_preserved": true,
+  "shared_initialization": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+  "configuration_unchanged": true,
+  "python": "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+  "runtime_copy": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261016/runtime_copy.json",
+  "tests": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261016/recovery_tests.xml",
+  "gpu_acceptance": [
+    "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261016/C_recovery_acceptance.json",
+    "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261016/D_recovery_acceptance.json"
+  ]
+}

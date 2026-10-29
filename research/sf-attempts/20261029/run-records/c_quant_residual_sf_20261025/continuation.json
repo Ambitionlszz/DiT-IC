@@ -1,0 +1,7 @@
+{
+  "continuation_run": "/data2/ls/checkpoints/c_quant_residual_sf_continue_20261025",
+  "source_checkpoint": "/data2/ls/checkpoints/c_quant_residual_sf_20261025/joint/pre_sf.pt",
+  "resume_step": 10000,
+  "commit": "35dbdac5afb44c7a75da57204893f1cd257ccf27",
+  "reason": "user_requested_SF_training_with_diagnostic_warning"
+}

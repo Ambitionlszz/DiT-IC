@@ -1,0 +1,104 @@
+{
+  "ranks": [
+    {
+      "step": 13642,
+      "micro": 0,
+      "rank": 0,
+      "backend": "C",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": NaN,
+        "lpips": NaN,
+        "dists": NaN,
+        "psnr": NaN,
+        "base": 0.10744518041610718,
+        "latent": NaN,
+        "rate_est": 0.053072817623615265,
+        "weighted_base": 0.010744518600404263,
+        "weighted_repaired": NaN,
+        "weighted_rate": 0.21229127049446106,
+        "weighted_mse": NaN,
+        "weighted_lpips": NaN,
+        "weighted_dists": NaN,
+        "sf_native": NaN,
+        "sf_loss": NaN,
+        "sf_mixed": 0.0,
+        "sf_weight": 1.0,
+        "sf_native_view_weight": 0.5,
+        "sf_q_b": 0.0,
+        "sf_mixed_fraction": 0.25,
+        "sf_teacher_spatial_std": 11.923596382141113,
+        "sf_native_spatial_std": NaN
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 3.7699129581451416
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 4.017958164215088
+        },
+        "latent": {
+          "finite": false,
+          "max_abs": NaN
+        },
+        "image": {
+          "finite": false,
+          "max_abs": NaN
+        }
+      },
+      "model_state_finite": true
+    },
+    {
+      "step": 13642,
+      "micro": 0,
+      "rank": 1,
+      "backend": "C",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": NaN,
+        "lpips": NaN,
+        "dists": NaN,
+        "psnr": NaN,
+        "base": 0.11385724693536758,
+        "latent": NaN,
+        "rate_est": 0.05902552604675293,
+        "weighted_base": 0.011385724879801273,
+        "weighted_repaired": NaN,
+        "weighted_rate": 0.23610210418701172,
+        "weighted_mse": NaN,
+        "weighted_lpips": NaN,
+        "weighted_dists": NaN,
+        "sf_native": NaN,
+        "sf_loss": NaN,
+        "sf_mixed": 0.0,
+        "sf_weight": 1.0,
+        "sf_native_view_weight": 0.5,
+        "sf_q_b": 0.0,
+        "sf_mixed_fraction": 0.25,
+        "sf_teacher_spatial_std": 12.127050399780273,
+        "sf_native_spatial_std": NaN
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 4.940222263336182
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 4.685079097747803
+        },
+        "latent": {
+          "finite": false,
+          "max_abs": NaN
+        },
+        "image": {
+          "finite": false,
+          "max_abs": NaN
+        }
+      },
+      "model_state_finite": true
+    }
+  ]
+}

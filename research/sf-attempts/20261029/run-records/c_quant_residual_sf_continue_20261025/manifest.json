@@ -1,0 +1,128 @@
+{
+  "repository": "/data2/ls/code/DiT-IC-c-sf-residual-20261025",
+  "commit": "35dbdac5afb44c7a75da57204893f1cd257ccf27",
+  "gpus": [
+    "0",
+    "1"
+  ],
+  "python": "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+  "initialization": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_50k_20261022/backend_init.pt",
+  "initialization_sha256": "72021789824591baa47ce4913f754068d5c0b2ec858278ecd8d15659afe2d5c1",
+  "config": {
+    "data": {
+      "train": [
+        "/data2/ls/data/DIV2K_train_HR_clean",
+        "/data2/ls/data/Flickr2K/Flickr2K_png",
+        "/data2/ls/data/LSDIR",
+        "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+      ],
+      "valid": [
+        "/data2/ls/data/Kodak"
+      ],
+      "crop": 512,
+      "valid_crop": 0,
+      "workers": 8,
+      "valid_limit": 24
+    },
+    "model": {
+      "sana_path": "/data2/ls/checkpoints/SANA",
+      "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+      "backend": "C",
+      "dit_rank": 128,
+      "vae_rank": 32,
+      "checkpoint_blocks": true,
+      "codec": {
+        "ch_emd": 32,
+        "channel": 320,
+        "channel_out": 32,
+        "delta_coarse": 4.0,
+        "delta_fine": 0.5,
+        "kappa": 0.6931471805599453,
+        "precision_conditioning": true,
+        "rate_likelihood": "noise"
+      }
+    },
+    "optimizer": {
+      "codec_lr": 0.0001,
+      "joint_codec_lr": 0.0001,
+      "backend_lr": 0.0001,
+      "vae_lr": 0.0001,
+      "aux_lr": 0.001,
+      "max_grad_norm": 4.0,
+      "warmup": 0,
+      "schedule": "milestone",
+      "milestones": [
+        100000,
+        160000,
+        190000
+      ],
+      "factors": [
+        0.5,
+        0.2,
+        0.1
+      ]
+    },
+    "image_loss": {
+      "mse_weight": 4.0,
+      "lpips_weight": 1.0,
+      "dists_weight": 1.0
+    },
+    "self_flow": {
+      "method": "quantization_residual_v1",
+      "enabled": true,
+      "mixed_sampling": false,
+      "student_layer": 8,
+      "teacher_layer": 20,
+      "warmup": 10000,
+      "ramp": 2000,
+      "cell_fraction": 0.25,
+      "gradient_target": 0.05,
+      "calibration_samples_per_q": 4,
+      "teacher_decay": 0.999
+    },
+    "train": {
+      "phase": "joint",
+      "steps": 200000,
+      "output": "/data2/ls/checkpoints/c_quant_residual_sf_continue_20261025/joint",
+      "batch_size": 4,
+      "effective_batch": 16,
+      "accumulation_steps": 2,
+      "seed": 903,
+      "eval_every": 2000,
+      "save_every": 10000,
+      "validation_actual_bpp": true,
+      "log_every": 50,
+      "packet_samples": 2,
+      "data_scale_samples": 512,
+      "calibration_samples": 512,
+      "require_quality_span": true,
+      "router_uniform_steps": 0,
+      "router_ramp_steps": 0,
+      "full_decode_every": 10000,
+      "keep_last_checkpoints": 2,
+      "tensorboard": true
+    },
+    "quality": {
+      "values": [
+        0.0,
+        0.2,
+        0.4,
+        0.6,
+        0.8,
+        1.0
+      ],
+      "rate_coefficients": [
+        16.0,
+        8.0,
+        4.0,
+        2.0,
+        1.0,
+        0.5
+      ]
+    },
+    "objective": {
+      "base_weight": 0.1,
+      "repaired_weight": 0.0
+    }
+  }
+}

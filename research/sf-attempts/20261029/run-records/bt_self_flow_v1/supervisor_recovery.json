@@ -1,0 +1,43 @@
+{
+  "at": "2026-10-15T15:03:37.603651+00:00",
+  "reason": "verify graceful checkpoint resume and update supervisor signal handling; training computation/config unchanged",
+  "old_commit": "b8a98279f31d0957beffea949efbfe1fb52570e3",
+  "launcher": 67427,
+  "workers": [
+    {
+      "pid": 67445,
+      "args": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "-u",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/common.yaml"
+      ],
+      "starttime": "2118113"
+    },
+    {
+      "pid": 67446,
+      "args": [
+        "/data2/ls/code/venvs/ditic/bin/python",
+        "-u",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/common.yaml"
+      ],
+      "starttime": "2118113"
+    }
+  ],
+  "last_log": {
+    "step": 200,
+    "attempts": 200,
+    "lambda_low": 0.5000076295109483,
+    "mixed": false,
+    "transition": 1.0,
+    "grad_norm": 1.0189905166625977,
+    "seconds_per_update": 0.7932281180001155,
+    "steady_seconds_per_update": 0.7308469696001626,
+    "max_memory_bytes": 5414881792,
+    "base": 0.6258059740066528,
+    "rate_est": 0.06068526580929756
+  }
+}

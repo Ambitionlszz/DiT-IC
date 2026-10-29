@@ -1,0 +1,7 @@
+{
+  "action": "graceful_pause_original_C_for_new_common_warmup",
+  "pid": 17252,
+  "configuration": "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+  "timestamp": 1792402611.2141871,
+  "preserve_all_checkpoints": true
+}

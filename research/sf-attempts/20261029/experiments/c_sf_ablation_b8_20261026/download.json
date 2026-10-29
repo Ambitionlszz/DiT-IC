@@ -1,0 +1,12 @@
+{
+  "repo": "Ambitionls/ditic-50k-warmups",
+  "revision": "3e96cf9492dd5ce86a3fc72f6aa4c9269209f531",
+  "filename": "c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+  "bytes": 3750335720,
+  "expected_sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+  "status": "verified",
+  "started_at": 1792997075.9145546,
+  "path": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+  "actual_sha256": "21d23b3beef59a9b30e08a11776b14720041f994f742c6de961c0ee2375c8ab6",
+  "completed_at": 1793000943.1811118
+}

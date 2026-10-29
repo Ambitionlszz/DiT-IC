@@ -1,0 +1,201 @@
+--- a/train_bt_self_flow.py
++++ b/train_bt_self_flow.py
+@@ -406,6 +406,14 @@
+     try:
+         while step < settings["steps"] and not stop:
+             if sf.get("enabled") and teacher is None and step >= sf_start:
++                if phase == "joint":
++                    # Preserve the pure-RD boundary before creating its teacher.
++                    # This alias survives routine numbered-checkpoint pruning.
++                    prefix_name = f"pre_sf_{step:07d}.pt"
++                    save(prefix_name, reuse_last=True)
++                    if rank == 0:
++                        print(json.dumps(dict(self_flow_prefix_checkpoint=str(output/prefix_name),
++                                              step=step, teacher_present=False)), flush=True)
+                 # Copy the current raw student at the boundary, not a stale
+                 # teacher averaged through the entire RD-only prefix.
+                 teacher = BTCrossRateTeacher(model.DiT, model.text_proj, model.quality_conditioner,
+--- a/configs/bt_self_flow/joint_sf_after20k.yaml
++++ b/configs/bt_self_flow/joint_sf_after20k.yaml
+@@ -13,7 +13,7 @@
+   repaired_weight: 0.0
+ self_flow:
+   enabled: true
+-  start_step: 20000
++  start_step: 10000
+   mixed_sampling: true
+   mixed_every: 2
+   high_fraction: 0.25
+@@ -30,7 +30,7 @@
+ train:
+   phase: joint
+   steps: 200000
+-  output: /data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint
++  output: /data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint
+   batch_size: 4
+   accumulation_steps: 2
+   effective_batch: 16
+--- a/scripts/launch_delayed_self_flow.py
++++ b/scripts/launch_delayed_self_flow.py
+@@ -67,7 +67,7 @@
+ 
+ def main():
+     parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("--root", type=Path, default=Path("/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022"))
++    parser.add_argument("--root", type=Path, default=Path("/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023"))
+     parser.add_argument("--gpus", default="0,1")
+     parser.add_argument("--prepare", action="store_true")
+     parser.add_argument("--preflight", action="store_true")
+--- /dev/null
++++ b/scripts/migrate_sf_start.py
+@@ -0,0 +1,78 @@
++"""Move the delayed SF boundary to 10K without resetting training state."""
++import argparse
++from copy import deepcopy
++import json
++import os
++from pathlib import Path
++import shutil
++import sys
++
++REPO = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(REPO))
++
++from models.bt_self_flow.checkpoint import (read_checkpoint, save_atomic, sha256_file,
++                                          publish_checkpoint_alias)
++from models.bt_self_flow.data import ImageDataset
++from models.bt_self_flow.experiment import load_config, training_contract
++
++
++def migrate_start(state, config, contract):
++    old = state["contract"]
++    if (state["phase"] != "joint" or state["backend"] != "D"
++            or old["self_flow"]["start_step"] != 20000
++            or contract["self_flow"]["start_step"] != 10000):
++        raise ValueError("only the requested joint D 20K -> 10K SF boundary is supported")
++    if state["step"] > 10000 or "teacher" in state or state.get("teacher_initialized_step") is not None:
++        raise ValueError("a pure-RD checkpoint at or before 10K is required")
++    expected = deepcopy(old)
++    expected["self_flow"]["start_step"] = 10000
++    if expected != contract:
++        raise ValueError("settings other than the Self-Flow boundary differ")
++    migrated = dict(state)
++    migrated.update(config=deepcopy(config), contract=deepcopy(contract))
++    report = dict(step=state["step"], old_start_step=20000, new_start_step=10000,
++                  first_sf_update=10001, micro_seen=state["micro_seen"],
++                  optimizer_scheduler_scaler_rng_weights_preserved=True)
++    migrated["self_flow_start_migration"] = report
++    return migrated, report
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--source", required=True, type=Path)
++    parser.add_argument("--root", required=True, type=Path)
++    args = parser.parse_args()
++    root = args.root.resolve()
++    output = root/"joint"
++    target = output/"paused.pt"
++    if target.exists():
++        raise ValueError("migration target already exists")
++    config = load_config(root/"configs/joint.yaml")
++    dataset = ImageDataset(config["data"]["train"], config["data"]["crop"])
++    source = read_checkpoint(args.source)
++    migrated, report = migrate_start(source, config, training_contract(config, dataset, 2))
++    report.update(source_checkpoint=str(args.source.resolve()), source_sha256=sha256_file(args.source),
++                  migrated_checkpoint=str(target))
++    output.mkdir(parents=True, exist_ok=True)
++    best = source.get("validation_best")
++    if best:
++        previous = args.source.parent
++        source_best = previous/best["checkpoint"]
++        if not source_best.is_file():
++            raise ValueError("selected best snapshot is missing")
++        try:
++            os.link(source_best, output/source_best.name)
++        except OSError:
++            shutil.copyfile(source_best, output/source_best.name)
++        publish_checkpoint_alias(output/source_best.name, output/"best.pt")
++        (output/"best.json").write_text(json.dumps(best, indent=2)+"\n")
++        for path in previous.glob("validation_*.json"):
++            if int(path.stem.split("_")[-1]) <= source["step"]:
++                shutil.copyfile(path, output/path.name)
++    save_atomic(target, migrated)
++    (root/"sf_start_migration.json").write_text(json.dumps(report, indent=2)+"\n")
++    print(json.dumps(report), flush=True)
++
++
++if __name__ == "__main__":
++    main()
+--- a/tests/test_bt_delayed_self_flow.py
++++ b/tests/test_bt_delayed_self_flow.py
+@@ -142,6 +142,12 @@
+             births = []
+             def record_teacher(*args, **kwargs):
+                 teacher = BTCrossRateTeacher(*args, **kwargs)
++                if len(births) in (0, 1):
++                    output = "full" if not births else "split"
++                    saved = read_checkpoint(root/output/"pre_sf_0000002.pt")
++                    self.assertEqual(saved["step"], 2)
++                    self.assertNotIn("teacher", saved)
++                    self.assertIsNone(saved["teacher_initialized_step"])
+                 births.append(deepcopy(teacher.get_ema_state_dict()))
+                 return teacher
+             with patch.object(trainer, "make_model", side_effect=factory), \
+@@ -211,7 +217,7 @@
+         config = load_config(path)
+         self.assertEqual(config["image_loss"], dict(mse_weight=4., lpips_weight=1., dists_weight=1.))
+         self.assertEqual(config["objective"], dict(base_weight=.1, repaired_weight=0.))
+-        self.assertEqual(config["self_flow"]["start_step"], 20000)
++        self.assertEqual(config["self_flow"]["start_step"], 10000)
+         self.assertEqual(config["train"]["steps"], 200000)
+         self.assertEqual(config["train"]["batch_size"], 4)
+         self.assertEqual(config["train"]["accumulation_steps"], 2)
+--- /dev/null
++++ b/tests/test_bt_sf_start_migration.py
+@@ -0,0 +1,45 @@
++from copy import deepcopy
++from pathlib import Path
++import unittest
++
++import torch
++
++from models.bt_self_flow.experiment import load_config
++from scripts.migrate_sf_start import migrate_start
++
++
++class SFStartMigrationTest(unittest.TestCase):
++    def fixture(self):
++        config = load_config(Path(__file__).resolve().parents[1]/"configs/bt_self_flow/joint_sf_after20k.yaml")
++        contract = deepcopy(config)
++        contract["world_size"] = 2
++        old = deepcopy(contract)
++        old["self_flow"]["start_step"] = 20000
++        state = dict(phase="joint", backend="D", contract=old, step=8000, micro_seen=15528,
++                     raw={"weight": torch.ones(2)}, ema={"weight": torch.ones(2)*2},
++                     optimizer={"step": 8000}, aux_optimizer={"step": 8000}, scheduler={"step": 8000},
++                     scaler={"scale": 65536.}, rng_by_rank=[{}, {}], attempts=8000)
++        return state, config, contract
++
++    def test_changes_only_boundary_and_preserves_all_training_state(self):
++        state, config, contract = self.fixture()
++        migrated, report = migrate_start(state, config, contract)
++        for key in state.keys()-{"contract"}:
++            self.assertIs(migrated[key], state[key])
++        self.assertEqual(state["contract"]["self_flow"]["start_step"], 20000)
++        self.assertEqual(migrated["contract"]["self_flow"]["start_step"], 10000)
++        self.assertEqual(report["first_sf_update"], 10001)
++
++    def test_rejects_other_changes_and_an_active_teacher(self):
++        state, config, contract = self.fixture()
++        changed = deepcopy(contract)
++        changed["train"]["batch_size"] = 2
++        with self.assertRaisesRegex(ValueError, "other than"):
++            migrate_start(state, config, changed)
++        state["teacher"] = {}
++        with self.assertRaisesRegex(ValueError, "pure-RD"):
++            migrate_start(state, config, contract)
++
++
++if __name__ == "__main__":
++    unittest.main()

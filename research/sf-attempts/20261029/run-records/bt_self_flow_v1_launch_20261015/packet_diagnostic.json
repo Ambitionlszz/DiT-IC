@@ -1,0 +1,102 @@
+{
+  "allocation_recovery": 0.0,
+  "base_repeat": 0.0,
+  "clean_repeat": 0.0,
+  "y_repeat": 0.0,
+  "0.0": {
+    "same_source_encode_mu": 0.0,
+    "forward_encode_mu": 0.0,
+    "encode_decode_mu": 0.0,
+    "g0": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g1": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g2": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g3": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "image_error": 0.0,
+    "same_input_image_error": 0.0,
+    "latent_error": 0.0
+  },
+  "0.4": {
+    "same_source_encode_mu": 0.0,
+    "forward_encode_mu": 0.0,
+    "encode_decode_mu": 0.0,
+    "g0": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g1": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g2": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g3": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "image_error": 0.0,
+    "same_input_image_error": 0.0,
+    "latent_error": 0.0
+  },
+  "1.0": {
+    "same_source_encode_mu": 0.0,
+    "forward_encode_mu": 0.0,
+    "encode_decode_mu": 0.0,
+    "g0": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g1": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g2": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "g3": {
+      "forward_encode_symbols_neq": 0,
+      "encode_decode_symbols_neq": 0,
+      "encode_decode_indexes_neq": 0,
+      "restored_error": 0.0
+    },
+    "image_error": 0.0,
+    "same_input_image_error": 0.0,
+    "latent_error": 0.0
+  }
+}

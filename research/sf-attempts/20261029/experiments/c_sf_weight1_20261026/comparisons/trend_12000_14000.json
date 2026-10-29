@@ -1,0 +1,196 @@
+[
+  {
+    "step": 12000,
+    "same_q_mean_bpp_change_percent": 0.5225723573155835,
+    "same_q_mean_delta": {
+      "psnr": -0.0050608317057297585,
+      "lpips": -0.0003535317050086158,
+      "dists": 0.00014224731259876097,
+      "ms_ssim": 0.0004045036103990096
+    },
+    "C_mean_RD": 0.4674980209933387,
+    "SF_mean_RD": 0.4683374762535095,
+    "aggregate_RD_change_percent": 0.17956338261861937,
+    "matched_bpp": {
+      "method": "Piecewise linear interpolation in log(total bpp), 101 evenly spaced log-rate points inside measured overlap; no extrapolation, not a significance test",
+      "range": [
+        0.0177747942507267,
+        0.09494019548098247
+      ],
+      "mean_delta": {
+        "psnr": -0.016167610015279662,
+        "lpips": -9.261282880608059e-06,
+        "dists": 0.0005222111061064803,
+        "ms_ssim": -0.00014548208880280544
+      }
+    }
+  },
+  {
+    "step": 14000,
+    "same_q_mean_bpp_change_percent": 0.16559745812250726,
+    "same_q_mean_delta": {
+      "psnr": -0.0219374762641061,
+      "lpips": -0.0004044473171234131,
+      "dists": 0.0001359126634067944,
+      "ms_ssim": 3.647804260253906e-05
+    },
+    "C_mean_RD": 0.4662727117538452,
+    "SF_mean_RD": 0.46639015939500594,
+    "aggregate_RD_change_percent": 0.02518861563203245,
+    "matched_bpp": {
+      "method": "Piecewise linear interpolation in log(total bpp), 101 evenly spaced log-rate points inside measured overlap; no extrapolation, not a significance test",
+      "range": [
+        0.017506917317708332,
+        0.09499444564183553
+      ],
+      "mean_delta": {
+        "psnr": -0.022365319664686856,
+        "lpips": -0.00035217320523565004,
+        "dists": 0.0003589164077597699,
+        "ms_ssim": 3.253841015440878e-05
+      }
+    },
+    "source_C": "/home/ls/.codex/attachments/9c35c1ef-9239-4a1b-8838-a7fe0be8e577/all_quality_points.csv",
+    "source_SF": "/data2/ls/checkpoints/c_sf_weight1_20261026/joint/validation_0014000.json",
+    "same_q": [
+      {
+        "q": 0.0,
+        "C_bpp": 0.017506917317708332,
+        "SF_bpp": 0.017476399739583332,
+        "bpp_change_percent": -0.17431725740848503,
+        "C_psnr": 21.76195017496745,
+        "SF_psnr": 21.742635091145832,
+        "delta_psnr": -0.019315083821616952,
+        "C_lpips": 0.22291276852289835,
+        "SF_lpips": 0.221197247505188,
+        "delta_lpips": -0.0017155210177103586,
+        "C_dists": 0.11948633193969727,
+        "SF_dists": 0.11890773971875508,
+        "delta_dists": -0.000578592220942184,
+        "C_ms_ssim": 0.7163213888804117,
+        "SF_ms_ssim": 0.7160444259643555,
+        "delta_ms_ssim": -0.0002769629160562781,
+        "C_RD": 0.7749715646107992,
+        "SF_RD": 0.772554874420166,
+        "RD_change_percent": -0.3118424340958659
+      },
+      {
+        "q": 0.2,
+        "C_bpp": 0.03001912186543147,
+        "SF_bpp": 0.029981824258963268,
+        "bpp_change_percent": -0.12424616094833807,
+        "C_psnr": 22.88865915934245,
+        "SF_psnr": 22.88317362467448,
+        "delta_psnr": -0.00548553466796875,
+        "C_lpips": 0.16739253203074136,
+        "SF_lpips": 0.16745815674463907,
+        "delta_lpips": 6.562471389770508e-05,
+        "C_dists": 0.08932747443517049,
+        "SF_dists": 0.09157892068227132,
+        "delta_dists": 0.00225144624710083,
+        "C_ms_ssim": 0.7783399422963461,
+        "SF_ms_ssim": 0.778700033823649,
+        "delta_ms_ssim": 0.0003600915273029859,
+        "C_RD": 0.6120925347010294,
+        "SF_RD": 0.6142536004384359,
+        "RD_change_percent": 0.35306193343169756
+      },
+      {
+        "q": 0.4,
+        "C_bpp": 0.045362686117490135,
+        "SF_bpp": 0.0455084890127182,
+        "bpp_change_percent": 0.32141592067638225,
+        "C_psnr": 23.872723897298176,
+        "SF_psnr": 23.846420288085938,
+        "delta_psnr": -0.0263036092122384,
+        "C_lpips": 0.13334028919537863,
+        "SF_lpips": 0.13289055228233337,
+        "delta_lpips": -0.00044973691304525665,
+        "C_dists": 0.07255027691523235,
+        "SF_dists": 0.07207162181536357,
+        "delta_dists": -0.0004786550998687744,
+        "C_ms_ssim": 0.82232133547465,
+        "SF_ms_ssim": 0.8226668834686279,
+        "delta_ms_ssim": 0.0003455479939779016,
+        "C_RD": 0.47723225752512616,
+        "SF_RD": 0.47725896040598553,
+        "RD_change_percent": 0.005595363774824058
+      },
+      {
+        "q": 0.6,
+        "C_bpp": 0.0616319477558136,
+        "SF_bpp": 0.06188285847504934,
+        "bpp_change_percent": 0.4071114549711208,
+        "C_psnr": 24.576438903808594,
+        "SF_psnr": 24.54346466064453,
+        "delta_psnr": -0.0329742431640625,
+        "C_lpips": 0.11252057552337646,
+        "SF_lpips": 0.11231906215349834,
+        "delta_lpips": -0.0002015133698781285,
+        "C_dists": 0.06247690816720327,
+        "SF_dists": 0.06150493025779724,
+        "delta_dists": -0.0009719779094060285,
+        "C_ms_ssim": 0.8504869937896729,
+        "SF_ms_ssim": 0.8504737218221029,
+        "delta_ms_ssim": -1.3271967569949972e-05,
+        "C_RD": 0.372891902923584,
+        "SF_RD": 0.37263484795888263,
+        "RD_change_percent": -0.06893551795733588
+      },
+      {
+        "q": 0.8,
+        "C_bpp": 0.0780741423368454,
+        "SF_bpp": 0.07833862801392873,
+        "bpp_change_percent": 0.33876219343176306,
+        "C_psnr": 25.035563151041668,
+        "SF_psnr": 25.01317087809245,
+        "delta_psnr": -0.02239227294921875,
+        "C_lpips": 0.10109012325604756,
+        "SF_lpips": 0.10097485780715942,
+        "delta_lpips": -0.00011526544888813828,
+        "C_dists": 0.05635132392247518,
+        "SF_dists": 0.056655049324035645,
+        "delta_dists": 0.0003037254015604632,
+        "C_ms_ssim": 0.8662075996398926,
+        "SF_ms_ssim": 0.8661506175994873,
+        "delta_ms_ssim": -5.698204040527344e-05,
+        "C_RD": 0.3019907474517822,
+        "SF_RD": 0.3024997313817342,
+        "RD_change_percent": 0.16854288889538438
+      },
+      {
+        "q": 1.0,
+        "C_bpp": 0.09499444564183553,
+        "SF_bpp": 0.0952080488204956,
+        "bpp_change_percent": 0.22485859801260055,
+        "C_psnr": 25.31060791015625,
+        "SF_psnr": 25.28545379638672,
+        "delta_psnr": -0.02515411376953125,
+        "C_lpips": 0.09504658977190654,
+        "SF_lpips": 0.09503631790479024,
+        "delta_lpips": -1.027186711630157e-05,
+        "C_dists": 0.053801203767458596,
+        "SF_dists": 0.054090733329455055,
+        "delta_dists": 0.00028952956199645996,
+        "C_ms_ssim": 0.8748056888580322,
+        "SF_ms_ssim": 0.8746661345163981,
+        "delta_ms_ssim": -0.0001395543416341516,
+        "C_RD": 0.2584572633107503,
+        "SF_RD": 0.25913894176483154,
+        "RD_change_percent": 0.26374900258137046
+      }
+    ],
+    "weight_history": {
+      "10001-13271": "calibrated alpha 0.641302792947235 (ramp ends at 12K)",
+      "13272 onward": "fixed alpha 1",
+      "fixed_weight_updates_at_evaluation": 729
+    },
+    "limitations": [
+      "One Kodak24 evaluation curve, not a multi-seed significance result.",
+      "Pure C used BF16; C+SF uses FP16 with GradScaler on V100.",
+      "User reports same images with changed path/layout; exact data ordering across hosts unverified.",
+      "rate_actual includes all 24 images and all transmitted rate components; packet_bpp at 14K covers only 2 packet-decode check images.",
+      "The 14K result contains only 729 updates with fixed alpha 1; changes cannot be attributed specifically to the weight increase."
+    ]
+  }
+]

@@ -1,0 +1,933 @@
+{
+  "at": "2026-10-16T04:57:10.914050+00:00",
+  "reason": "user requests Kodak original-image validation and best checkpoint every 2k; fix slow rank-zero save NCCL wait",
+  "previous_manifest": {
+    "repository": "/data2/ls/code/DiT-IC-bt-self-flow",
+    "commit": "428015bdc14ae26559722234879f5dee5144d294",
+    "python": "/data2/ls/code/venvs/ditic/bin/python",
+    "gpus": [
+      "0",
+      "1"
+    ],
+    "configs": {
+      "common": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/DIV2K_valid_HR"
+          ],
+          "crop": 512,
+          "workers": 4,
+          "valid_limit": 32
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "C",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": true,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "codec",
+          "steps": 50000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/common",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 2,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 5000,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "c_backend": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/DIV2K_valid_HR"
+          ],
+          "crop": 512,
+          "workers": 4,
+          "valid_limit": 32
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "C",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "backend",
+          "steps": 5000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/C/backend",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 5000,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "d_backend": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/DIV2K_valid_HR"
+          ],
+          "crop": 512,
+          "workers": 4,
+          "valid_limit": 32
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "D",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "backend",
+          "steps": 5000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/D/backend",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 5000,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "c_joint": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/DIV2K_valid_HR"
+          ],
+          "crop": 512,
+          "workers": 4,
+          "valid_limit": 32
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "C",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "joint",
+          "steps": 25000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 5000,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "d_joint": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/DIV2K_valid_HR"
+          ],
+          "crop": 512,
+          "workers": 4,
+          "valid_limit": 32
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "D",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "joint",
+          "steps": 25000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 5000,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      }
+    }
+  },
+  "new_manifest": {
+    "repository": "/data2/ls/code/DiT-IC-bt-self-flow",
+    "commit": "a93099b2c8e442455be0f2fc323e21b477f72cf0",
+    "python": "/data2/ls/code/venvs/ditic/bin/python",
+    "gpus": [
+      "0",
+      "1"
+    ],
+    "configs": {
+      "common": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/Kodak"
+          ],
+          "crop": 512,
+          "valid_crop": 0,
+          "workers": 4,
+          "valid_limit": 24
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "C",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": true,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "codec",
+          "steps": 50000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/common",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 2,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 2000,
+          "validation_actual_bpp": true,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "c_backend": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/Kodak"
+          ],
+          "crop": 512,
+          "valid_crop": 0,
+          "workers": 4,
+          "valid_limit": 24
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "C",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "backend",
+          "steps": 5000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/C/backend",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 2000,
+          "validation_actual_bpp": true,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "d_backend": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/Kodak"
+          ],
+          "crop": 512,
+          "valid_crop": 0,
+          "workers": 4,
+          "valid_limit": 24
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "D",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "backend",
+          "steps": 5000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/D/backend",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 2000,
+          "validation_actual_bpp": true,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "c_joint": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/Kodak"
+          ],
+          "crop": 512,
+          "valid_crop": 0,
+          "workers": 4,
+          "valid_limit": 24
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "C",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "joint",
+          "steps": 25000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 2000,
+          "validation_actual_bpp": true,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      },
+      "d_joint": {
+        "data": {
+          "train": [
+            "/data2/ls/data/DIV2K_train_HR_clean",
+            "/data2/ls/data/Flickr2K/Flickr2K_png",
+            "/data2/ls/data/LSDIR",
+            "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+          ],
+          "valid": [
+            "/data2/ls/data/Kodak"
+          ],
+          "crop": 512,
+          "valid_crop": 0,
+          "workers": 4,
+          "valid_limit": 24
+        },
+        "model": {
+          "sana_path": "/data2/ls/checkpoints/SANA",
+          "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+          "backend": "D",
+          "dit_rank": 128,
+          "vae_rank": 32,
+          "checkpoint_blocks": false,
+          "codec": {
+            "ch_emd": 32,
+            "channel": 320,
+            "channel_out": 32,
+            "delta_coarse": 4.0,
+            "delta_fine": 0.5,
+            "kappa": 0.6931471805599453
+          }
+        },
+        "optimizer": {
+          "codec_lr": 0.0001,
+          "joint_codec_lr": 5e-05,
+          "backend_lr": 0.0001,
+          "vae_lr": 1e-05,
+          "aux_lr": 0.001,
+          "max_grad_norm": 4.0,
+          "warmup": 500
+        },
+        "image_loss": {
+          "mse_weight": 2.0,
+          "lpips_weight": 1.0,
+          "dists_weight": 0.5
+        },
+        "self_flow": {
+          "enabled": false,
+          "mixed_sampling": false,
+          "high_fraction": 0.25,
+          "student_layer": 8,
+          "teacher_layer": 20,
+          "warmup": 1000,
+          "ramp": 2000,
+          "calibrate_every": 500,
+          "gradient_target": 0.05,
+          "gradient_cap": 0.1
+        },
+        "train": {
+          "phase": "joint",
+          "steps": 25000,
+          "output": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint",
+          "batch_size": 2,
+          "effective_batch": 8,
+          "accumulation_steps": 4,
+          "seed": 903,
+          "eval_every": 2000,
+          "save_every": 2000,
+          "validation_actual_bpp": true,
+          "log_every": 100,
+          "packet_samples": 2,
+          "data_scale_samples": 128,
+          "calibration_samples": 512,
+          "require_quality_span": true,
+          "router_uniform_steps": 2000,
+          "router_ramp_steps": 3000
+        }
+      }
+    }
+  },
+  "previous_pipeline": {
+    "supervisor_pid": 6601,
+    "started_at": "2026-10-16T01:43:20.229543+00:00",
+    "status": "failed",
+    "jobs": {
+      "common": {
+        "pid": 6688,
+        "gpus": [
+          "0",
+          "1"
+        ],
+        "command": [
+          "/data2/ls/code/venvs/ditic/bin/python",
+          "-m",
+          "torch.distributed.run",
+          "--standalone",
+          "--nproc_per_node=2",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/common.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/common/0035000.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/common.log",
+        "started_at": "2026-10-16T01:43:20.499040+00:00",
+        "status": "failed",
+        "returncode": 1,
+        "ended_at": "2026-10-16T04:04:59.018086+00:00"
+      }
+    },
+    "updated_at": "2026-10-16T04:04:59.187914+00:00",
+    "error": "RuntimeError: common exited 1; see /data2/ls/checkpoints/bt_self_flow_v1/logs/common.log"
+  },
+  "resume_checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/common/0040000.pt",
+  "resume_step": 40000,
+  "finite_checkpoint_tensors": 1673,
+  "tests": "17 passed; checkpoint_2k_best_kodak_tests.xml",
+  "native_backend_check": "passed, landscape/portrait Kodak, packet image errors zero",
+  "expected_first_resume_record": {
+    "step": 40100,
+    "attempts": 40100,
+    "lambda_low": 0.2929274433508812,
+    "mixed": false,
+    "transition": 1.0,
+    "grad_norm": 0.2909559905529022,
+    "base": 0.06476720422506332,
+    "rate_est": 0.058220986276865005
+  },
+  "div2k_archive": "/data2/ls/checkpoints/bt_self_flow_v1/common/history_div2k_20261016",
+  "restart_status": "resumed_and_verified",
+  "first_resume_comparison": {
+    "step": {
+      "expected": 40100,
+      "actual": 40100,
+      "equal": true
+    },
+    "attempts": {
+      "expected": 40100,
+      "actual": 40100,
+      "equal": true
+    },
+    "lambda_low": {
+      "expected": 0.2929274433508812,
+      "actual": 0.2929274433508812,
+      "equal": true
+    },
+    "mixed": {
+      "expected": false,
+      "actual": false,
+      "equal": true
+    },
+    "transition": {
+      "expected": 1.0,
+      "actual": 1.0,
+      "equal": true
+    },
+    "grad_norm": {
+      "expected": 0.2909559905529022,
+      "actual": 0.2909559905529022,
+      "equal": true
+    },
+    "base": {
+      "expected": 0.06476720422506332,
+      "actual": 0.06476720422506332,
+      "equal": true
+    },
+    "rate_est": {
+      "expected": 0.058220986276865005,
+      "actual": 0.058220986276865005,
+      "equal": true
+    }
+  },
+  "first_verified_step": 40100,
+  "pipeline_after_resume": {
+    "supervisor_pid": 27456,
+    "started_at": "2026-10-16T04:58:34.237885+00:00",
+    "status": "common_frontend",
+    "jobs": {
+      "common": {
+        "pid": 27577,
+        "gpus": [
+          "0",
+          "1"
+        ],
+        "command": [
+          "/data2/ls/code/venvs/ditic/bin/python",
+          "-m",
+          "torch.distributed.run",
+          "--standalone",
+          "--nproc_per_node=2",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/common.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/common/0040000.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/common.log",
+        "started_at": "2026-10-16T04:58:34.243818+00:00",
+        "status": "running"
+      }
+    },
+    "updated_at": "2026-10-16T04:58:34.243830+00:00"
+  },
+  "kodak_best": {
+    "step": 40000,
+    "score": 0.18881412264373568,
+    "metric": "mean_six_quality_validation_rd_loss",
+    "weights": "deployment_ema",
+    "checkpoint": "0040000.pt",
+    "validation_identity": {
+      "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+      "images": 24,
+      "crop": 0,
+      "actual_rate": true
+    }
+  },
+  "training_replay_matches_previous_run": true
+}

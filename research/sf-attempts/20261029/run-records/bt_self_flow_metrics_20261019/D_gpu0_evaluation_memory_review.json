@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-10-19 16:42:12 +0800",
+  "device": "GPU0, which runs C training, after C evaluation fully exited",
+  "cuda_total_bytes": 34079899648,
+  "gpu0_free_bytes": 9040822272,
+  "gpu0_free_mib": 8622,
+  "allocator_cap_bytes": 6645580431,
+  "allocator_cap_mib": 6337.719374656677,
+  "guard_bytes": 1342177280,
+  "guard_mib": 1280,
+  "cap_plus_guard_mib": 7617.719374656677,
+  "remaining_beyond_cap_and_guard_mib": 1004.2806253433228,
+  "prior_D_full144_peak_bytes": 6058153984,
+  "only_one_extra_GPU_process": true,
+  "CPU_evaluation_to_be_stopped_before_start": true,
+  "CPU_evaluation_stopped_at": "2026-10-19 16:42:59 +0800",
+  "CPU_evaluation_stopped_after_GPU0_launch": true
+}

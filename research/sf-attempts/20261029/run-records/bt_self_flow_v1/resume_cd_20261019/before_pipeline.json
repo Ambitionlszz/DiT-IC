@@ -1,0 +1,46 @@
+{
+  "supervisor_pid": null,
+  "started_at": "2026-10-19T08:22:52.566135+00:00",
+  "status": "paused_replaced_by_lowrate_c_ablation",
+  "jobs": {
+    "c_joint": {
+      "pid": 17252,
+      "gpus": [
+        "0"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0036000.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+      "started_at": "2026-10-19T08:22:53.859296+00:00",
+      "status": "paused",
+      "paused_step": 36944
+    },
+    "d_joint": {
+      "pid": 17253,
+      "gpus": [
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0038000.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+      "started_at": "2026-10-19T08:22:54.914879+00:00",
+      "status": "retired",
+      "paused_step": 38403,
+      "restart": false
+    }
+  },
+  "updated_at": "2026-10-19T17:43:31+0800",
+  "replacement_root": "/data2/ls/checkpoints/bt_self_flow_lowrate_20261019"
+}

@@ -1,0 +1,34 @@
+{
+  "supervisor_pid": 5818,
+  "started_at": "2026-10-24T07:08:35.005842+00:00",
+  "status": "paused",
+  "jobs": {
+    "joint": {
+      "pid": 5853,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/configs/joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/0024000.pt"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/logs/joint.log",
+      "started_at": "2026-10-24T07:08:35.040153+00:00",
+      "status": "paused",
+      "returncode": 0,
+      "ended_at": "2026-10-24T19:28:55.703215+00:00"
+    }
+  },
+  "self_flow_start_step": 10000,
+  "updated_at": "2026-10-24T19:28:55.705526+00:00",
+  "error": "InterruptedError: supervisor stop requested"
+}

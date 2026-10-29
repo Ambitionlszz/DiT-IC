@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "scope": "engineering_only_not_research_results",
+  "initialization": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/full_gpu_review_fixed/smoke/backend_init.pt",
+  "updates_per_backend": 2,
+  "backends": {
+    "C": {
+      "updates": 2,
+      "full_conditioning_from_update_one": true,
+      "frontend_max_weight_change": 7.506832480430603e-05,
+      "max_memory_bytes": 24240885760,
+      "six_quality_packet_forward_max_error": 0.0,
+      "complete_checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/direct_e2e_200k_gpu/C/complete.pt",
+      "validation": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/direct_e2e_200k_gpu/C/validation_0000002.json"
+    },
+    "D": {
+      "updates": 2,
+      "full_conditioning_from_update_one": true,
+      "frontend_max_weight_change": 7.506832480430603e-05,
+      "max_memory_bytes": 25208993280,
+      "six_quality_packet_forward_max_error": 0.0,
+      "complete_checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/direct_e2e_200k_gpu/D/complete.pt",
+      "validation": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/direct_e2e_200k_gpu/D/validation_0000002.json"
+    }
+  },
+  "paired_rate_streams_identical": true
+}

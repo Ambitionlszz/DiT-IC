@@ -1,0 +1,31 @@
+{
+  "verified_at": "2026-10-26T10:53:51.015612+00:00",
+  "step": 13271,
+  "first_fixed_weight_update": 13272,
+  "preserved_fields_checked": [
+    "raw",
+    "ema",
+    "teacher",
+    "optimizer",
+    "aux_optimizer",
+    "scaler",
+    "scheduler",
+    "rng_by_rank",
+    "step",
+    "micro_seen",
+    "attempts",
+    "assets",
+    "source_sha256",
+    "validation_best",
+    "full_precision_retry"
+  ],
+  "previous_weight": 0.641302792947235,
+  "weight": 1.0,
+  "teacher_verified": true,
+  "gpus": [
+    0,
+    1
+  ],
+  "effective_batch": 8,
+  "config_only_weight_and_storage_changed": true
+}

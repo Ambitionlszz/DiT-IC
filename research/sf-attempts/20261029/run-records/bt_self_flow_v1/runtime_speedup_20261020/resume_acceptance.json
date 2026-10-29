@@ -1,0 +1,118 @@
+{
+  "status": "passed",
+  "recorded_at": "2026-10-20T16:42:54.167483+08:00",
+  "repository": "/data2/ls/code/DiT-IC-cd-speedup-20261020",
+  "commit": "e86a8fa2dababd11a74b51aced51c2bf30c6b1de",
+  "pipeline": {
+    "supervisor_pid": 202975,
+    "started_at": "2026-10-20T08:36:57.146203+00:00",
+    "status": "paired_training",
+    "jobs": {
+      "c_joint": {
+        "pid": 203043,
+        "gpus": [
+          "0"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+        "started_at": "2026-10-20T08:36:57.249653+00:00",
+        "status": "running"
+      },
+      "d_joint": {
+        "pid": 203044,
+        "gpus": [
+          "1"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+        "started_at": "2026-10-20T08:36:57.270336+00:00",
+        "status": "running"
+      }
+    },
+    "updated_at": "2026-10-20T08:36:57.270366+00:00"
+  },
+  "arms": {
+    "C": {
+      "pid": 203043,
+      "gpu": [
+        "0"
+      ],
+      "resumed_from_step": 52051,
+      "first_completed_update": {
+        "step": 52052,
+        "attempts": 52176,
+        "lambda_low": 0.21037613488975357,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.1402053833007812,
+        "seconds_per_update": 17.47587313000986,
+        "data_wait_seconds": 0.3164042770076776,
+        "steady_seconds_per_update": 17.47587313000986,
+        "max_memory_bytes": 23943188480,
+        "mse": 0.046190593391656876,
+        "lpips": 0.15418501198291779,
+        "dists": 0.10321501642465591,
+        "psnr": 19.67917251586914,
+        "base": 0.10439985245466232,
+        "latent": 0.09940477460622787,
+        "rate_est": 0.05348386988043785
+      },
+      "resolved_commit": "e86a8fa2dababd11a74b51aced51c2bf30c6b1de",
+      "contract_unchanged": true,
+      "assets_unchanged": true,
+      "configuration_unchanged": true,
+      "correct_next_quality_sample": true
+    },
+    "D": {
+      "pid": 203044,
+      "gpu": [
+        "1"
+      ],
+      "resumed_from_step": 54000,
+      "first_completed_update": {
+        "step": 54001,
+        "attempts": 54044,
+        "lambda_low": 0.8144502937361715,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.0113255977630615,
+        "seconds_per_update": 20.68231069900503,
+        "data_wait_seconds": 0.0031549710110994056,
+        "steady_seconds_per_update": 20.68231069900503,
+        "max_memory_bytes": 24941327360,
+        "mse": 0.03778459131717682,
+        "lpips": 0.11562399566173553,
+        "dists": 0.07900293171405792,
+        "psnr": 20.493690490722656,
+        "base": 0.022934457287192345,
+        "latent": 0.021481791511178017,
+        "rate_est": 0.13008034229278564
+      },
+      "resolved_commit": "e86a8fa2dababd11a74b51aced51c2bf30c6b1de",
+      "contract_unchanged": true,
+      "assets_unchanged": true,
+      "configuration_unchanged": true,
+      "correct_next_quality_sample": true
+    }
+  },
+  "gpu_processes": "203043, GPU-cdafe484-8d24-1b2d-acb3-b58cbea116a3, 23868 MiB\n203044, GPU-59f8b473-00e4-85ad-7c43-538a031cc53a, 24804 MiB\n",
+  "regression_tests_passed": 30,
+  "full_training_exact_comparison_updates_per_mode": 16,
+  "full_model_packets_checked": 12,
+  "forward_packet_max_error": 0,
+  "note": "First update includes CUDA warmup; steady timing is in the isolated continuation comparison."
+}

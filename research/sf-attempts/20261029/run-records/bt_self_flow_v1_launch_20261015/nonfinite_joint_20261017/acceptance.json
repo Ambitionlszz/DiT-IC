@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "tests": 32,
+  "actual_failure": "D_step364_micro2_cross_attention_query_fp16_overflow",
+  "actual_failure_fixed": true,
+  "full_512_backward_and_frontend_gradients": true,
+  "C_full_512_two_update_smoke": true,
+  "C_original_failure_reproduced": false,
+  "C_checkpoint_after_reboot": "unreadable_preserved",
+  "scope": "engineering_checks_not_rd_results"
+}

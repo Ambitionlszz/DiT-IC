@@ -1,0 +1,18 @@
+{
+  "supervisor_pid": 397369,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_dual_rate_task.py",
+    "--root",
+    "/data2/ls/checkpoints/c_dual_rate_task_sf_20261027",
+    "--config",
+    "/data2/ls/code/DiT-IC-c-dual-rate-task-sf-20261027/configs/bt_self_flow/c_dual_rate_task.json",
+    "--init-checkpoint",
+    "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+    "--gpus",
+    "0,1"
+  ],
+  "stage": "continuous_training_from_verified_10020",
+  "target_step": 200000,
+  "started_at": "2026-10-27T01:58:56.559812+08:00"
+}

@@ -1,0 +1,54 @@
+{
+  "supervisor_pid": 682443,
+  "started_at": "2026-10-22T14:49:12.707147+00:00",
+  "status": "interrupted",
+  "jobs": {
+    "joint": {
+      "pid": 682514,
+      "gpus": [
+        "0",
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nproc_per_node=2",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/configs/joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint/paused.pt"
+      ],
+      "log": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/logs/joint.log",
+      "started_at": "2026-10-22T14:49:12.711704+00:00",
+      "status": "interrupted"
+    }
+  },
+  "self_flow_start_step": 20000,
+  "updated_at": "2026-10-22T14:49:12.711733+00:00",
+  "reboot_recovery": {
+    "host_boot_at": "2026-10-23T10:14:57+08:00",
+    "previous_run": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022",
+    "previous_save_interrupted_at": 9056,
+    "previous_partial_file": "joint/paused.pt.tmp",
+    "partial_file_io_error": true,
+    "recovery_source": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint/0008000.pt",
+    "recovery_step": 8000,
+    "new_self_flow_start_step": 10000,
+    "new_first_sf_update": 10001,
+    "new_run": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023",
+    "source": "/data2/ls/code/DiT-IC-self-flow-sf10k-recovery-20261023",
+    "runtime_recovery": "copy original ext4 image to /tmp; validate/repair only disposable copy"
+  },
+  "continued_as": {
+    "reason": "User moved Self-Flow start to 10K; host reboot interrupted 9056-step pause save",
+    "source_complete_step": 8000,
+    "new_run": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023",
+    "new_source": "/data2/ls/code/DiT-IC-self-flow-sf10k-recovery-20261023",
+    "new_log": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/logs/joint.log",
+    "sf_start_step": 10000,
+    "permanent_pure_rd_checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/pre_sf_0010000.pt"
+  }
+}

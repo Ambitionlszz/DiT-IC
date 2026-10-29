@@ -1,0 +1,6 @@
+{
+  "source": "/data2/ls/checkpoints/c_quant_residual_sf_recovery_20261025/joint/paused.pt",
+  "step": 11332,
+  "target": 11334,
+  "updates_discarded": true
+}

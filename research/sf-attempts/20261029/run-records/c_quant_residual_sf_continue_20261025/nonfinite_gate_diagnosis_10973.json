@@ -1,0 +1,92 @@
+{
+  "step": 10973,
+  "rank": 1,
+  "keys": [
+    [
+      40344,
+      3657427255129028264
+    ],
+    [
+      8137,
+      5569118342668983155
+    ],
+    [
+      39417,
+      6830657243978781899
+    ],
+    [
+      65274,
+      7679807744245068429
+    ]
+  ],
+  "model_state_finite": true,
+  "trials": [
+    {
+      "amp": true,
+      "quality": 0.8,
+      "mask_cells": 16,
+      "first_nonfinite": [
+        {
+          "module": "transformer_blocks.26",
+          "type": "SanaTransformerBlock",
+          "shape": [
+            4,
+            256,
+            1152
+          ],
+          "dtype": "torch.float32",
+          "finite_fraction": 0.9999991655349731,
+          "input_max": [
+            1637.3536376953125,
+            0.27932095527648926,
+            7.5078125
+          ]
+        }
+      ],
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 6.261002063751221
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.7750468254089355
+        },
+        "latent": {
+          "finite": false,
+          "max_abs": NaN
+        },
+        "image": {
+          "finite": false,
+          "max_abs": NaN
+        }
+      },
+      "peak_allocated": 7334802944
+    },
+    {
+      "amp": false,
+      "quality": 0.8,
+      "mask_cells": 16,
+      "first_nonfinite": [],
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 6.261002063751221
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.7750468254089355
+        },
+        "latent": {
+          "finite": true,
+          "max_abs": 5.815097332000732
+        },
+        "image": {
+          "finite": true,
+          "max_abs": 1.0
+        }
+      },
+      "peak_allocated": 8162577408
+    }
+  ]
+}

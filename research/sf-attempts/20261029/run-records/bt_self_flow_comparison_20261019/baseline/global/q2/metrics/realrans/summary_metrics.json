@@ -1,0 +1,99 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+  "checkpoint_sha256": "563b0ed9840b2d93d2b25028fe1f088b297712b1b24f8e6013086f5a2779b0f6",
+  "config": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline_train.yaml",
+  "config_sha256": "c16c1b7e65c85a3a6e64146a3028fa2da11af0b6e8b68a9d2abf83798922b292",
+  "checkpoint_step": 30000,
+  "use_ema": true,
+  "distortion_weights": {
+    "pixel": 4,
+    "perceptual": 1,
+    "dists": 1
+  },
+  "training_contract": {
+    "version": "phase1_warmup_e2e_nogan_gan_v1",
+    "phase": "nogan",
+    "rate_weights": [
+      8.0,
+      4.0,
+      2.0,
+      1.0,
+      0.5,
+      0.25
+    ],
+    "freeze_codec": false,
+    "loss_form": "pixel_perceptual_plus_quality_rate",
+    "variable_rate_mechanism": "dcvc_fm_endpoint_interp_qe_qd_we_wd_v2",
+    "distortion_weights": {
+      "pixel": 4.0,
+      "perceptual": 1.0,
+      "dists": 1.0
+    },
+    "training_mode": "phase1_warmup_e2e",
+    "freeze_quality_endpoints": true,
+    "window_training": false,
+    "eval_window": true,
+    "training_crop": [
+      512,
+      512
+    ],
+    "window_rule": "latent_8x8_stride4_triangular_v1"
+  },
+  "dataset": "/data2/ls/data/Kodak",
+  "image_names": [
+    "kodim01.png",
+    "kodim02.png",
+    "kodim03.png",
+    "kodim04.png",
+    "kodim05.png",
+    "kodim06.png",
+    "kodim07.png",
+    "kodim08.png",
+    "kodim09.png",
+    "kodim10.png",
+    "kodim11.png",
+    "kodim12.png",
+    "kodim13.png",
+    "kodim14.png",
+    "kodim15.png",
+    "kodim16.png",
+    "kodim17.png",
+    "kodim18.png",
+    "kodim19.png",
+    "kodim20.png",
+    "kodim21.png",
+    "kodim22.png",
+    "kodim23.png",
+    "kodim24.png"
+  ],
+  "qualities": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "entropy_estimation": false,
+  "eval_crop": "none; original full image",
+  "padding": "reflect bottom/right to multiple of 256",
+  "bitstream_root": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/baseline/packets",
+  "comparison_contract": "both decoders receive the exact same serialized packet; all header bytes billed",
+  "window_width": 8,
+  "window_stride": 4,
+  "decoder_variants": [
+    "global"
+  ],
+  "variant": "global",
+  "quality_index": 2,
+  "num_images": 24,
+  "avg_bpp": 0.05085584852430555,
+  "psnr": 23.717658201853435,
+  "ms_ssim": 0.8335530311738656,
+  "dists": 0.07621141771475475,
+  "lpips": 0.1320911512399713,
+  "encode_seconds": 0.18260149362502412,
+  "decode_seconds": 0.38195157725002105,
+  "image_to_image_seconds": 0.5645530708750451,
+  "peak_allocated_gib": 5.5939106941223145
+}

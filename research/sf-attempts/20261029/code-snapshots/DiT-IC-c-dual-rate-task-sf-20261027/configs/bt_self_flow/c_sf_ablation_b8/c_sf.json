@@ -1,0 +1,19 @@
+{
+  "base": "pure_c.json",
+  "self_flow": {
+    "method": "quantization_residual_v1",
+    "enabled": true,
+    "mixed_sampling": false,
+    "student_layer": 8,
+    "teacher_layer": 20,
+    "warmup": 10000,
+    "ramp": 2000,
+    "cell_fraction": 0.25,
+    "gradient_target": 0.05,
+    "calibration_samples_per_q": 4,
+    "teacher_decay": 0.999
+  },
+  "train": {
+    "output": "${C_SF_B8_ROOT:-/data2/ls/checkpoints/c_sf_ablation_b8_20261026}/c_sf/joint"
+  }
+}

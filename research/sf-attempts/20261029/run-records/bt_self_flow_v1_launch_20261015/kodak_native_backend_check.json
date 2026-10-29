@@ -1,0 +1,66 @@
+{
+  "scope": "engineering smoke from 14-update checkpoint; not research result",
+  "backend": "D",
+  "shapes": [
+    [
+      3,
+      512,
+      768
+    ],
+    [
+      3,
+      768,
+      512
+    ]
+  ],
+  "image_names": [
+    "kodim01.png",
+    "kodim04.png"
+  ],
+  "report": {
+    "0.0": {
+      "mse": 0.12659111618995667,
+      "lpips": 0.6918982267379761,
+      "dists": 0.6076513528823853,
+      "psnr": 14.997690200805664,
+      "base": 1.1256959438323975,
+      "latent": 1.7712833881378174,
+      "rate_est": 0.016018744558095932,
+      "rate_actual": 0.01625569723546505,
+      "loss": 1.668649673461914,
+      "scale_saturation": 0.02083333395421505,
+      "packet_forward_max_error": 0.0,
+      "packet_bpp": 0.016255696614583332
+    },
+    "0.6": {
+      "mse": 0.12144528329372406,
+      "lpips": 0.7009907364845276,
+      "dists": 0.5900765061378479,
+      "psnr": 15.206073760986328,
+      "base": 1.0968581438064575,
+      "latent": 1.680587887763977,
+      "rate_est": 0.06951633840799332,
+      "rate_actual": 0.07208251953125,
+      "loss": 1.5887466669082642,
+      "scale_saturation": 0.015625,
+      "packet_forward_max_error": 0.0,
+      "packet_bpp": 0.07208251953125
+    },
+    "1.0": {
+      "mse": 0.1256391555070877,
+      "lpips": 0.7061498761177063,
+      "dists": 0.5894218683242798,
+      "psnr": 15.077250480651855,
+      "base": 1.0907201766967773,
+      "latent": 1.6584022045135498,
+      "rate_est": 0.15376898646354675,
+      "rate_actual": 0.1567179262638092,
+      "loss": 1.5662307739257812,
+      "scale_saturation": 0.015625,
+      "packet_forward_max_error": 0.0,
+      "packet_bpp": 0.15671793619791669
+    }
+  },
+  "peak_memory_bytes": 6060956672,
+  "prediction_calls": 12
+}

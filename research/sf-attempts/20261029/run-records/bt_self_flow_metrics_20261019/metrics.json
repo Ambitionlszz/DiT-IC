@@ -1,0 +1,175 @@
+{
+  "protocols": {
+    "C": {
+      "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0036000.pt",
+      "checkpoint_sha256": "8146d84adc642fda46e6936063309942323e80884f81a0810ca146d921d889df",
+      "weights": "ema",
+      "backend": "C",
+      "step": 36000,
+      "phase": "joint",
+      "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+      "images": 24,
+      "metric_protocol": "float RGB [-1,1], PSNR dynamic range 2, LPIPS alex, DISTS [0,1]",
+      "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+      "codec_precision": "fp32",
+      "nfe": 1,
+      "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included",
+      "ms_ssim_protocol": {
+        "implementation": "pyiqa.create_metric('ms_ssim')",
+        "pyiqa_version": "0.1.16",
+        "test_y_channel": true,
+        "color_space": "yiq",
+        "range": "float RGB inputs mapped to [0,1], pyiqa default luminance conversion",
+        "device": "cpu",
+        "same_float_reconstruction_as_other_metrics": true
+      }
+    },
+    "D": {
+      "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0038000.pt",
+      "checkpoint_sha256": "34d3c1d74cb3cd7fbedb805496cd49368c0fbe7d86d7192e8cdd5bfecc926cf0",
+      "weights": "ema",
+      "backend": "D",
+      "step": 38000,
+      "phase": "joint",
+      "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+      "images": 24,
+      "metric_protocol": "float RGB [-1,1], PSNR dynamic range 2, LPIPS alex, DISTS [0,1]",
+      "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+      "codec_precision": "fp32",
+      "nfe": 1,
+      "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included",
+      "ms_ssim_protocol": {
+        "implementation": "pyiqa.create_metric('ms_ssim')",
+        "pyiqa_version": "0.1.16",
+        "test_y_channel": true,
+        "color_space": "yiq",
+        "range": "float RGB inputs mapped to [0,1], pyiqa default luminance conversion",
+        "device": "cpu",
+        "same_float_reconstruction_as_other_metrics": true
+      },
+      "evaluation_device": "cuda"
+    }
+  },
+  "rows": [
+    {
+      "backend": "C",
+      "step": 36000,
+      "quality": 0.0,
+      "bpp": 0.03173828125,
+      "psnr": 22.294012546539307,
+      "lpips": 0.1837203549221158,
+      "ms_ssim": 0.7712179111697882,
+      "dists": 0.09979355583588283
+    },
+    {
+      "backend": "C",
+      "step": 36000,
+      "quality": 0.2,
+      "bpp": 0.04937405056423611,
+      "psnr": 23.466377178827923,
+      "lpips": 0.13607130696376166,
+      "ms_ssim": 0.822454884871382,
+      "dists": 0.07626256843407948
+    },
+    {
+      "backend": "C",
+      "step": 36000,
+      "quality": 0.4,
+      "bpp": 0.06895277235243055,
+      "psnr": 24.32421366373698,
+      "lpips": 0.11271225133289893,
+      "ms_ssim": 0.8537377483182399,
+      "dists": 0.06222244600454966
+    },
+    {
+      "backend": "C",
+      "step": 36000,
+      "quality": 0.6,
+      "bpp": 0.09243096245659722,
+      "psnr": 24.85469166437785,
+      "lpips": 0.09867374117796619,
+      "ms_ssim": 0.8715197393543215,
+      "dists": 0.056345666448275246
+    },
+    {
+      "backend": "C",
+      "step": 36000,
+      "quality": 0.8,
+      "bpp": 0.12330796983506943,
+      "psnr": 25.14694873491923,
+      "lpips": 0.09314856476460893,
+      "ms_ssim": 0.8808120157418863,
+      "dists": 0.0535662571589152
+    },
+    {
+      "backend": "C",
+      "step": 36000,
+      "quality": 1.0,
+      "bpp": 0.16194322374131945,
+      "psnr": 25.318156401316326,
+      "lpips": 0.09037436932946245,
+      "ms_ssim": 0.8854571252378788,
+      "dists": 0.051381113628546395
+    },
+    {
+      "backend": "D",
+      "step": 38000,
+      "quality": 0.0,
+      "bpp": 0.029927571614583332,
+      "psnr": 22.449110587437946,
+      "lpips": 0.17115561322619519,
+      "ms_ssim": 0.7775846138586329,
+      "dists": 0.092498945693175
+    },
+    {
+      "backend": "D",
+      "step": 38000,
+      "quality": 0.2,
+      "bpp": 0.047149658203125,
+      "psnr": 23.47253402074178,
+      "lpips": 0.13318737441052994,
+      "ms_ssim": 0.8230827753305148,
+      "dists": 0.07326765606800716
+    },
+    {
+      "backend": "D",
+      "step": 38000,
+      "quality": 0.4,
+      "bpp": 0.06647406684027778,
+      "psnr": 24.229212045669556,
+      "lpips": 0.11222706983486812,
+      "ms_ssim": 0.8522297335038028,
+      "dists": 0.06130426128705343
+    },
+    {
+      "backend": "D",
+      "step": 38000,
+      "quality": 0.6,
+      "bpp": 0.08958943684895833,
+      "psnr": 24.756645441055298,
+      "lpips": 0.09983500791713595,
+      "ms_ssim": 0.8700766686057212,
+      "dists": 0.05538731316725413
+    },
+    {
+      "backend": "D",
+      "step": 38000,
+      "quality": 0.8,
+      "bpp": 0.11959160698784722,
+      "psnr": 25.065956592559814,
+      "lpips": 0.09308243434255321,
+      "ms_ssim": 0.8799749475014513,
+      "dists": 0.052983696262041725
+    },
+    {
+      "backend": "D",
+      "step": 38000,
+      "quality": 1.0,
+      "bpp": 0.1576775444878472,
+      "psnr": 25.233896732330322,
+      "lpips": 0.08975562080740929,
+      "ms_ssim": 0.8847045193579589,
+      "dists": 0.05100031445423762
+    }
+  ]
+}

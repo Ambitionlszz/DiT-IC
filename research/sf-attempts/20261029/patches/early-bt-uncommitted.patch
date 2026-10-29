@@ -1,0 +1,80 @@
+diff --git a/models/bt_self_flow/checkpoint.py b/models/bt_self_flow/checkpoint.py
+index 3ec73f3..e7e16df 100644
+--- a/models/bt_self_flow/checkpoint.py
++++ b/models/bt_self_flow/checkpoint.py
+@@ -181,16 +181,24 @@ class BestCheckpoint:
+ 
+ 
+ @contextmanager
+-def evaluation_state(model, state=None):
++def evaluation_state(model, state=None, *, deployment=False):
+     training = model.training
+     saved = clone_state(model.export_state()) if state is not None else None
++    router_strength = model.codec.router_strength.detach().clone() if deployment else None
+     try:
+         if state is not None:
+             model.load_bt_state(state)
+         model.eval()
++        if deployment:
++            # Router strength is a training curriculum, not transmitted packet
++            # metadata. Evaluate the deployable model on both the hard forward
++            # and entropy paths; never weaken the codec's encode/decode guard.
++            model.codec.router_strength.fill_(1.)
+         model.codec.update(force=True)
+         yield
+     finally:
+         if saved is not None:
+             model.load_bt_state(saved)
++        elif router_strength is not None:
++            model.codec.router_strength.copy_(router_strength)
+         model.train(training)
+diff --git a/models/bt_self_flow/validation.py b/models/bt_self_flow/validation.py
+index 612c15e..383ed3f 100644
+--- a/models/bt_self_flow/validation.py
++++ b/models/bt_self_flow/validation.py
+@@ -30,7 +30,7 @@ def calibrate_interface(model, dataset, output, samples=512, seed=903, packet_sa
+     scales, rates = [], {str(q): [] for q in (0., .2, .4, .6, .8, 1.)}
+     distortion = {quality: torch.zeros((), device=next(model.parameters()).device) for quality in rates}
+     device = next(model.parameters()).device
+-    with evaluation_state(model):
++    with evaluation_state(model, deployment=True):
+         for index in range(samples):
+             image = dataset[(index % len(dataset), counter_seed(seed, index, 702))].unsqueeze(0).to(device)
+             clean = model.encode_clean_latent(image)
+@@ -68,7 +68,7 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
+     device = next(model.parameters()).device
+     qualities = qualities or (0., .2, .4, .6, .8, 1.)
+     sums_by_quality = {str(quality): {} for quality in qualities}
+-    with evaluation_state(model, state):
++    with evaluation_state(model, state, deployment=True):
+         for index in range(len(dataset)):
+             image = dataset[index].unsqueeze(0).to(device)
+             height, width = image.shape[-2:]
+diff --git a/train_bt_self_flow.py b/train_bt_self_flow.py
+index 4141222..4645cc0 100644
+--- a/train_bt_self_flow.py
++++ b/train_bt_self_flow.py
+@@ -470,10 +470,20 @@ def train(config, args, rank, world, device):
+                     print(json.dumps(record), flush=True)
+             improved = False
+             if step % settings["eval_every"] == 0 or step == settings["steps"]:
+-                with rank_zero_section(rank, control_group):
++                try:
++                    with rank_zero_section(rank, control_group):
++                        if rank == 0:
++                            report = validation_report(transition)
++                            improved = best.consider(report, step)
++                except Exception as error:
++                    # A failed validation must not erase the completed main and
++                    # auxiliary optimizer updates. rank_zero_section delivers
++                    # the failure to every rank before this collective save.
+                     if rank == 0:
+-                        report = validation_report(transition)
+-                        improved = best.consider(report, step)
++                        print(json.dumps({"validation_failed": str(error), "step": step,
++                                          "recovery_checkpoint": "paused.pt"}), flush=True)
++                    save("paused.pt")
++                    raise
+                 if world > 1:
+                     selected = [improved]
+                     dist.broadcast_object_list(selected, src=0, group=control_group)

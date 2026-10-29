@@ -1,0 +1,76 @@
+{
+  "detected_at": "2026-10-16T01:41:04.468471+00:00",
+  "cause": "host_reboot",
+  "host_boot_at": "2026-10-16T01:37:03+00:00",
+  "host_boot_id": "16eb097b-b82d-4a9b-8cb4-523cd0eebc63",
+  "previous_supervisor_pid": 87758,
+  "previous_launcher_pid": 87936,
+  "previous_worker_pids": [
+    87960,
+    87961
+  ],
+  "previous_pids_confirmed_missing": true,
+  "last_logged_step": 39700,
+  "code_volume": "/data2/ls/code/volumes/ditic-code.ext4",
+  "code_volume_remounted": true,
+  "recovered_commit": "428015bdc14ae26559722234879f5dee5144d294",
+  "intended_resume": "/data2/ls/checkpoints/bt_self_flow_v1/common/0035000.pt",
+  "protocol_steps": 50000,
+  "status": "resumed_and_verified",
+  "verified_at": "2026-10-16T01:47:24.466981+00:00",
+  "supervisor_pid": 6601,
+  "launcher_pid": 6688,
+  "worker_pids": [
+    6736,
+    6737
+  ],
+  "first_verified_resumed_step": 35100,
+  "exact_replay_comparison": {
+    "step": {
+      "previous": 35100,
+      "resumed": 35100,
+      "exact_match": true
+    },
+    "attempts": {
+      "previous": 35100,
+      "resumed": 35100,
+      "exact_match": true
+    },
+    "lambda_low": {
+      "previous": 0.9833524071107042,
+      "resumed": 0.9833524071107042,
+      "exact_match": true
+    },
+    "mixed": {
+      "previous": false,
+      "resumed": false,
+      "exact_match": true
+    },
+    "transition": {
+      "previous": 1.0,
+      "resumed": 1.0,
+      "exact_match": true
+    },
+    "grad_norm": {
+      "previous": 0.4337449073791504,
+      "resumed": 0.4337449073791504,
+      "exact_match": true
+    },
+    "max_memory_bytes": {
+      "previous": 5430599168,
+      "resumed": 5430599168,
+      "exact_match": true
+    },
+    "base": {
+      "previous": 0.007119901943951845,
+      "resumed": 0.007119901943951845,
+      "exact_match": true
+    },
+    "rate_est": {
+      "previous": 0.16729293763637543,
+      "resumed": 0.16729293763637543,
+      "exact_match": true
+    }
+  },
+  "checkpoint_validation": "checkpoint_35000_reboot_acceptance.json"
+}

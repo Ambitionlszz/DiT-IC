@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-16T06:59:12.515044+00:00",
+  "reason": "User requested paired direct 200k end-to-end training; no bitrate tuning",
+  "previous_commit": "a93099b2c8e442455be0f2fc323e21b477f72cf0",
+  "commit": "6ed25a43173aaa6dbec9e42e024b94e2d02a4d80",
+  "archive": "/data2/ls/checkpoints/bt_self_flow_v1/history_before_direct_e2e_200k_20261016",
+  "resume_checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/common/paused.pt",
+  "resume_update": 49022,
+  "common_configuration_identical": true,
+  "new_joint_updates": 200000,
+  "old_frozen_backend_stage_skipped": true,
+  "joint_keep_recent_checkpoints": 3,
+  "retain_historical_best": true,
+  "quantization_rate_and_loss_parameters_unchanged": true,
+  "tests": {
+    "direct_e2e_200k_tests.xml": {
+      "tests": 19,
+      "failures": 0
+    },
+    "direct_e2e_supervisor_final_tests.xml": {
+      "tests": 3,
+      "failures": 0
+    }
+  },
+  "gpu_acceptance": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/direct_e2e_200k_gpu/acceptance.json"
+}

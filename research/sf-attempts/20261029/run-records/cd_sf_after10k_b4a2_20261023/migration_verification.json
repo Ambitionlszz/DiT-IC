@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "recovered_step": 8000,
+  "tensor_values_compared": 5200,
+  "all_original_training_state_preserved": true,
+  "self_flow_start_step": 10000,
+  "first_sf_update": 10001,
+  "micro_seen": 15528,
+  "effective_batch": 16
+}

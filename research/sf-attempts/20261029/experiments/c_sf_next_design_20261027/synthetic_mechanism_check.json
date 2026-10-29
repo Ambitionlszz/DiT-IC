@@ -1,0 +1,7 @@
+{
+  "scope": "Synthetic algebra example only; no model feature or GPU measurement. Does not establish useful teacher structure or RD gains.",
+  "raw_cosine_loss_spatial_permutation": 2.090934517008647e-06,
+  "centered_relative_relation_error_same_permutation": 1.4057626161388408,
+  "relation_error_orthogonal_channel_permutation": 1.9071313089462434e-32,
+  "relation_error_positive_scale_and_common_shift": 2.677607499936314e-26
+}

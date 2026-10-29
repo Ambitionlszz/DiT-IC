@@ -1,0 +1,33 @@
+{
+  "config_and_syntax_checked": true,
+  "complete_8k_zip_crc_check_passed": true,
+  "zip_crc_check_seconds": 155.9,
+  "runtime_recovery": "passed",
+  "tests": "passed",
+  "previous_batch4_teacher_gpu_preflight": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/preflight/verification.json",
+  "runtime_sha256_checks": 4,
+  "runtime_cuda_available": true,
+  "unit_checks_passed": 8,
+  "unit_log": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/tests.log",
+  "migration_verification": {
+    "passed": true,
+    "recovered_step": 8000,
+    "tensor_values_compared": 5200,
+    "all_original_training_state_preserved": true,
+    "self_flow_start_step": 10000,
+    "first_sf_update": 10001,
+    "micro_seen": 15528,
+    "effective_batch": 16
+  },
+  "updated_at": "2026-10-23T02:30:17.049970+00:00",
+  "production_launch_verified": {
+    "checked_at": "2026-10-23T02:33:48.951682+00:00",
+    "first_resumed_step": 8001,
+    "sf_start_step": 10000,
+    "first_sf_update": 10001,
+    "effective_batch": 16,
+    "finite_loss_and_gradient": true,
+    "supervisor_pid": 6210,
+    "torchrun_pid": 6234
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "pid": 5818,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_delayed_self_flow.py",
+    "--root",
+    "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023",
+    "--gpus",
+    "0,1"
+  ],
+  "started_at": "2026-10-24T07:07:59.726018+00:00",
+  "detached": true,
+  "resume_checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/0024000.pt",
+  "resume_step": 24000,
+  "self_flow_start_step": 10000,
+  "teacher_initialized_step": 10000,
+  "teacher_restored": true,
+  "effective_batch": 16,
+  "recovery_directory": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/recovery/20261024_150006"
+}

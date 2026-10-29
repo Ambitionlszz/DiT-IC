@@ -1,0 +1,65 @@
+{
+  "note": "Source historical BF16 curve vs resumed FP16 EMA baseline; not an SF gain comparison",
+  "rows": [
+    {
+      "q": 0.0,
+      "source_csv_bpp": 0.017846001933018368,
+      "resumed_bpp": 0.017859565714995067,
+      "delta_bpp": 1.3563781976699829e-05,
+      "delta_psnr": -0.004063924153648202,
+      "delta_lpips": -0.00029702981313070587,
+      "delta_dists": -0.0006041725476582799,
+      "packet_forward_max_error": 0.0
+    },
+    {
+      "q": 0.2,
+      "source_csv_bpp": 0.030429417888323467,
+      "resumed_bpp": 0.030426025390625,
+      "delta_bpp": -3.3924976984671396e-06,
+      "delta_psnr": 0.002583821614585702,
+      "delta_lpips": 0.0002671480178833008,
+      "delta_dists": -0.00019949674606323242,
+      "packet_forward_max_error": 0.0
+    },
+    {
+      "q": 0.4,
+      "source_csv_bpp": 0.0457255095243454,
+      "resumed_bpp": 0.045718724528948464,
+      "delta_bpp": -6.784995396934279e-06,
+      "delta_psnr": -0.0087890625,
+      "delta_lpips": 0.00010859966278076172,
+      "delta_dists": -1.6818443934127347e-05,
+      "packet_forward_max_error": 0.0
+    },
+    {
+      "q": 0.6,
+      "source_csv_bpp": 0.061774363120396934,
+      "resumed_bpp": 0.061764185627301536,
+      "delta_bpp": -1.017749309539795e-05,
+      "delta_psnr": -0.001256306966144649,
+      "delta_lpips": -7.016460100810196e-05,
+      "delta_dists": -0.00032936036586761475,
+      "packet_forward_max_error": 0.0
+    },
+    {
+      "q": 0.8,
+      "source_csv_bpp": 0.07809447745482127,
+      "resumed_bpp": 0.07809447745482127,
+      "delta_bpp": 0.0,
+      "delta_psnr": 0.002827962239582149,
+      "delta_lpips": 7.816155751547149e-05,
+      "delta_dists": -9.221831957498955e-05,
+      "packet_forward_max_error": 0.0
+    },
+    {
+      "q": 1.0,
+      "source_csv_bpp": 0.09484185775121053,
+      "resumed_bpp": 0.09484184781710307,
+      "delta_bpp": -9.934107453313246e-09,
+      "delta_psnr": 0.0005162556966133991,
+      "delta_lpips": -3.410379091899063e-05,
+      "delta_dists": 0.00015535950660705566,
+      "packet_forward_max_error": 0.0
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+_base_: dual_rate_self_flow_full.yaml
+
+model:
+  params:
+    self_flow_params:
+      student_input: uniform
+      use_second_view: true
+      teacher_enabled: true
+      teacher_quality: higher
+      representation_enabled: true
+
+train:
+  exp_name: dual_rate_self_flow_ablation_distill_only

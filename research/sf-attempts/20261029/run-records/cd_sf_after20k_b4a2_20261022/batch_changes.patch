@@ -1,0 +1,191 @@
+--- a/configs/bt_self_flow/joint_sf_after20k.yaml
++++ b/configs/bt_self_flow/joint_sf_after20k.yaml
+@@ -30,10 +30,10 @@
+ train:
+   phase: joint
+   steps: 200000
+-  output: /data2/ls/checkpoints/cd_sf_after20k_20261022/joint
+-  batch_size: 2
++  output: /data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint
++  batch_size: 4
+   accumulation_steps: 2
+-  effective_batch: 8
++  effective_batch: 16
+   eval_every: 2000
+   save_every: 2000
+   full_decode_every: 10000
+--- a/scripts/launch_delayed_self_flow.py
++++ b/scripts/launch_delayed_self_flow.py
+@@ -67,7 +67,7 @@
+ 
+ def main():
+     parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("--root", type=Path, default=Path("/data2/ls/checkpoints/cd_sf_after20k_20261022"))
++    parser.add_argument("--root", type=Path, default=Path("/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022"))
+     parser.add_argument("--gpus", default="0,1")
+     parser.add_argument("--prepare", action="store_true")
+     parser.add_argument("--preflight", action="store_true")
+@@ -133,7 +133,7 @@
+                 if not any(r.get("sf_weight", 0) > 0 and r.get("teacher_valid", 0) > 0 for r in rows[2:]):
+                     raise ValueError("no effective Self-Flow supervision in GPU preflight")
+                 write_json(run_root/"verification.json", dict(passed=True, updates=6, world_size=2,
+-                           effective_batch=8, teacher_initialized_step=2,
++                           effective_batch=config["train"]["effective_batch"], teacher_initialized_step=2,
+                            peak_memory_bytes=max(r["max_memory_bytes"] for r in rows), records=rows))
+             run.update("completed")
+         except BaseException as error:
+--- /dev/null
++++ b/scripts/migrate_joint_batch.py
+@@ -0,0 +1,72 @@
++"""Explicitly continue a pre-SF joint checkpoint with batch 2 -> 4 per rank."""
++import argparse
++from copy import deepcopy
++import json
++from pathlib import Path
++import sys
++
++REPO = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(REPO))
++
++from models.bt_self_flow.checkpoint import read_checkpoint, save_atomic, sha256_file
++from models.bt_self_flow.data import ImageDataset
++from models.bt_self_flow.experiment import load_config, training_contract
++
++
++def migrate_batch(state, config, contract):
++    old = state["contract"]
++    old_train, new_train = old["train"], contract["train"]
++    if (state["phase"] != "joint" or state["backend"] != "D"
++            or old["world_size"] != 2 or contract["world_size"] != 2
++            or old_train["batch_size"] != 2 or new_train["batch_size"] != 4
++            or old_train["accumulation_steps"] != 2 or new_train["accumulation_steps"] != 2
++            or old_train["effective_batch"] != 8 or new_train["effective_batch"] != 16):
++        raise ValueError("only the explicit two-rank 2/2 -> 4/2 migration is supported")
++    if state["step"] >= config["self_flow"]["start_step"] or "teacher" in state:
++        raise ValueError("this migration is restricted to the RD-only prefix")
++    expected = deepcopy(old)
++    expected["train"].update(batch_size=4, effective_batch=16)
++    if expected != contract:
++        raise ValueError("migration changes settings other than batch/effective batch")
++    # CounterSampler's global position is micro_seen * world * local_batch.
++    # Preserve it when regrouping images into larger rank-local batches.
++    numerator = state["micro_seen"] * 2
++    if numerator % 4:
++        raise ValueError("data cursor is not aligned with the new batch size")
++    migrated = dict(state)
++    migrated.update(config=deepcopy(config), contract=deepcopy(contract), micro_seen=numerator // 4)
++    report = dict(step=state["step"], world_size=2, old_batch_size=2, new_batch_size=4,
++                  accumulation_steps=2, old_effective_batch=8, new_effective_batch=16,
++                  old_micro_seen=state["micro_seen"], new_micro_seen=migrated["micro_seen"],
++                  global_images_seen=state["micro_seen"]*2*2,
++                  optimizer_scheduler_scaler_rng_weights_preserved=True,
++                  self_flow_start_step=config["self_flow"]["start_step"])
++    migrated["batch_migration"] = report
++    return migrated, report
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--source", required=True, type=Path)
++    parser.add_argument("--root", required=True, type=Path)
++    args = parser.parse_args()
++    root = args.root.resolve()
++    target = root/"joint/paused.pt"
++    if target.exists():
++        raise ValueError("migration target already exists")
++    config = load_config(root/"configs/joint.yaml")
++    dataset = ImageDataset(config["data"]["train"], config["data"]["crop"])
++    contract = training_contract(config, dataset, 2)
++    source = read_checkpoint(args.source)
++    if source.get("validation_best") is not None:
++        raise ValueError("migrate selected best checkpoint files explicitly before using this tool")
++    migrated, report = migrate_batch(source, config, contract)
++    report.update(source_checkpoint=str(args.source.resolve()), source_sha256=sha256_file(args.source),
++                  migrated_checkpoint=str(target))
++    save_atomic(target, migrated)
++    (root/"batch_migration.json").write_text(json.dumps(report, indent=2)+"\n")
++    print(json.dumps(report), flush=True)
++
++
++if __name__ == "__main__":
++    main()
+--- a/tests/test_bt_delayed_self_flow.py
++++ b/tests/test_bt_delayed_self_flow.py
+@@ -213,7 +213,9 @@
+         self.assertEqual(config["objective"], dict(base_weight=.1, repaired_weight=0.))
+         self.assertEqual(config["self_flow"]["start_step"], 20000)
+         self.assertEqual(config["train"]["steps"], 200000)
+-        self.assertEqual(2*config["train"]["batch_size"]*config["train"]["accumulation_steps"], 8)
++        self.assertEqual(config["train"]["batch_size"], 4)
++        self.assertEqual(config["train"]["accumulation_steps"], 2)
++        self.assertEqual(2*config["train"]["batch_size"]*config["train"]["accumulation_steps"], 16)
+         self.assertFalse(config["model"]["codec"].get("precision_conditioning", False))
+ 
+ 
+--- /dev/null
++++ b/tests/test_bt_batch_migration.py
+@@ -0,0 +1,64 @@
++"""The requested batch increase preserves optimizer state and sample position."""
++from copy import deepcopy
++from pathlib import Path
++import unittest
++
++import torch
++
++from scripts.migrate_joint_batch import migrate_batch
++from models.bt_self_flow.data import CounterSampler
++from models.bt_self_flow.experiment import load_config
++
++
++class BatchMigrationTest(unittest.TestCase):
++    def fixture(self):
++        config = load_config(Path(__file__).resolve().parents[1]/"configs/bt_self_flow/joint_sf_after20k.yaml")
++        contract = deepcopy(config)
++        contract["world_size"] = 2
++        old = deepcopy(contract)
++        old["train"].update(batch_size=2, effective_batch=8)
++        state = dict(phase="joint", backend="D", step=472, micro_seen=944,
++                     contract=old, raw={"weight": torch.tensor([1.])}, ema={"weight": torch.tensor([2.])},
++                     optimizer={"state": {0: {"step": 472, "exp_avg": torch.tensor([3.])}}},
++                     aux_optimizer={"step": 472}, scheduler={"last_epoch": 472},
++                     scaler={"scale": 65536.}, rng_by_rank=[{"rank": 0}, {"rank": 1}], attempts=472)
++        return state, config, contract
++
++    def test_preserves_state_and_global_next_images(self):
++        state, config, contract = self.fixture()
++        migrated, report = migrate_batch(state, config, contract)
++        self.assertEqual(migrated["micro_seen"], 472)
++        self.assertEqual(report["global_images_seen"], 3776)
++        for key in ("raw", "ema", "optimizer", "aux_optimizer", "scheduler", "scaler", "rng_by_rank"):
++            self.assertIs(migrated[key], state[key])
++        self.assertEqual(migrated["step"], state["step"])
++        self.assertEqual(state["contract"]["train"]["batch_size"], 2)
++        # A new rank-local batch regroups two old global microbatches. Across
++        # both ranks it must consume exactly the next eight images/crops.
++        old_keys, new_keys = [], []
++        for rank in range(2):
++            old_sampler = iter(CounterSampler(10000, 903, rank, 2, 2, 944, 23))
++            new_sampler = iter(CounterSampler(10000, 903, rank, 2, 4, 472, 23))
++            old_keys.extend(next(old_sampler) for _ in range(4))
++            new_keys.extend(next(new_sampler) for _ in range(4))
++        self.assertCountEqual(new_keys, old_keys)
++
++    def test_rejects_unrelated_changes_or_an_unaligned_cursor(self):
++        state, config, contract = self.fixture()
++        changed = deepcopy(contract)
++        changed["optimizer"]["backend_lr"] *= 2
++        with self.assertRaisesRegex(ValueError, "other than batch"):
++            migrate_batch(state, config, changed)
++        state["micro_seen"] += 1
++        with self.assertRaisesRegex(ValueError, "not aligned"):
++            migrate_batch(state, config, contract)
++
++    def test_rejects_migration_after_teacher_activation(self):
++        state, config, contract = self.fixture()
++        state["teacher"] = {}
++        with self.assertRaisesRegex(ValueError, "RD-only"):
++            migrate_batch(state, config, contract)
++
++
++if __name__ == "__main__":
++    unittest.main()

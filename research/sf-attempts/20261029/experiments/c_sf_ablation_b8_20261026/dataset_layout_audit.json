@@ -1,0 +1,67 @@
+{
+  "roots": [
+    {
+      "source_root": "/data2/luosheng/data/Datasets/DIV2K_train_HR_clean",
+      "local_root": "/data2/ls/data/DIV2K_train_HR_clean",
+      "images": 800,
+      "first": [
+        "0001.png",
+        "0002.png",
+        "0003.png"
+      ],
+      "last": [
+        "0798.png",
+        "0799.png",
+        "0800.png"
+      ]
+    },
+    {
+      "source_root": "/data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png",
+      "local_root": "/data2/ls/data/Flickr2K/Flickr2K_png",
+      "images": 2650,
+      "first": [
+        "000001.png",
+        "000002.png",
+        "000003.png"
+      ],
+      "last": [
+        "002648.png",
+        "002649.png",
+        "002650.png"
+      ]
+    },
+    {
+      "source_root": "/data2/luosheng/data/Datasets/LSDIR",
+      "local_root": "/data2/ls/data/LSDIR",
+      "images": 84991,
+      "first": [
+        "0001000/0000001.png",
+        "0001000/0000002.png",
+        "0001000/0000003.png"
+      ],
+      "last": [
+        "0085000/0084989.png",
+        "0085000/0084990.png",
+        "0085000/0084991.png"
+      ]
+    },
+    {
+      "source_root": "/data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png",
+      "local_root": "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png",
+      "images": 585,
+      "first": [
+        "abigail-keenan-27293.png",
+        "adam-przewoski-193.png",
+        "adam-willoughby-knox-56406.png"
+      ],
+      "last": [
+        "yulia-vambold-20364.png",
+        "zara-walker-71279.png",
+        "zugr-121.png"
+      ]
+    }
+  ],
+  "images": 89026,
+  "source_fingerprint": "277b57a63ecda648707e40dd3a233e2955aa99d300cccb720790b6e16a2ee6b8",
+  "projected_fingerprint": "eb73f948e431fe591250aefbd29ec2deb353dfaafde6d526b7e34995448e4819"
+}

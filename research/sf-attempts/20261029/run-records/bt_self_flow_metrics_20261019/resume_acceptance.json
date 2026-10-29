@@ -1,0 +1,93 @@
+{
+  "checked_at": "2026-10-19 16:34:08 +0800",
+  "pipeline": {
+    "supervisor_pid": 16957,
+    "started_at": "2026-10-19T08:22:52.566135+00:00",
+    "status": "paired_training",
+    "jobs": {
+      "c_joint": {
+        "pid": 17252,
+        "gpus": [
+          "0"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0036000.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+        "started_at": "2026-10-19T08:22:53.859296+00:00",
+        "status": "running"
+      },
+      "d_joint": {
+        "pid": 17253,
+        "gpus": [
+          "1"
+        ],
+        "command": [
+          "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+          "train_bt_self_flow.py",
+          "--config",
+          "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+          "--resume",
+          "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0038000.pt"
+        ],
+        "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+        "started_at": "2026-10-19T08:22:54.914879+00:00",
+        "status": "running"
+      }
+    },
+    "updated_at": "2026-10-19T08:22:54.914918+00:00"
+  },
+  "new_updates": {
+    "C": [
+      {
+        "step": 36001,
+        "attempts": 36118,
+        "lambda_low": 0.6129091325246052,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 1.0323225259780884,
+        "seconds_per_update": 43.2064461760001,
+        "steady_seconds_per_update": 43.2064461760001,
+        "max_memory_bytes": 23943188480,
+        "mse": 0.025037381798028946,
+        "lpips": 0.10611192137002945,
+        "dists": 0.0687321275472641,
+        "psnr": 23.154930114746094,
+        "base": 0.03253030776977539,
+        "latent": 0.032388754189014435,
+        "rate_est": 0.0928889587521553
+      }
+    ],
+    "D": [
+      {
+        "step": 38001,
+        "attempts": 38036,
+        "lambda_low": 0.49739833676661327,
+        "mixed": false,
+        "transition": 1.0,
+        "grad_norm": 0.882826030254364,
+        "seconds_per_update": 25.202608074000636,
+        "steady_seconds_per_update": 25.202608074000636,
+        "max_memory_bytes": 24941327360,
+        "mse": 0.020746255293488503,
+        "lpips": 0.10183563828468323,
+        "dists": 0.07001058012247086,
+        "psnr": 23.160175323486328,
+        "base": 0.051248833537101746,
+        "latent": 0.0451786071062088,
+        "rate_est": 0.0849430039525032
+      }
+    ]
+  },
+  "resume_checkpoints": {
+    "C": 36000,
+    "D": 38000
+  },
+  "target_steps": 200000,
+  "configuration_unchanged": true
+}

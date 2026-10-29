@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-10-17T02:29:29.932131+00:00",
+  "reason": "host_reboot_and_confirmed_SANA_FP16_query_overflow",
+  "old_commit": "a24427911f56cde8052d58fc35deb9233e684c5b",
+  "new_commit": "9ca4514b4161621bed0528953f80de2848ed8b67",
+  "old_outputs": "/data2/ls/checkpoints/bt_self_flow_v1/history_fp16_host_reboot_20261017",
+  "C_recovery_point": "unreadable_after_reboot_preserved",
+  "D_recovery_point": "364_readable_preserved",
+  "paired_restart": "both_from_formal_50k_shared_initialization_step0",
+  "initialization": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+  "common_prefix_retrained": false,
+  "config_changes": {},
+  "engineering_acceptance": "/data2/ls/checkpoints/bt_self_flow_v1_launch_20261015/nonfinite_joint_20261017/acceptance.json"
+}

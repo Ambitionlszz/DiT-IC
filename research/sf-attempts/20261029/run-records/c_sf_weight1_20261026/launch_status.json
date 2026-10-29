@@ -1,0 +1,50 @@
+{
+  "verified_at": "2026-10-26T10:53:51.015612+00:00",
+  "step": 13271,
+  "first_fixed_weight_update": 13272,
+  "preserved_fields_checked": [
+    "raw",
+    "ema",
+    "teacher",
+    "optimizer",
+    "aux_optimizer",
+    "scaler",
+    "scheduler",
+    "rng_by_rank",
+    "step",
+    "micro_seen",
+    "attempts",
+    "assets",
+    "source_sha256",
+    "validation_best",
+    "full_precision_retry"
+  ],
+  "previous_weight": 0.641302792947235,
+  "weight": 1.0,
+  "teacher_verified": true,
+  "gpus": [
+    0,
+    1
+  ],
+  "effective_batch": 8,
+  "config_only_weight_and_storage_changed": true,
+  "status": "training",
+  "supervisor_pid": 326558,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_quantization_residual.py",
+    "--root",
+    "/data2/ls/checkpoints/c_sf_weight1_20261026",
+    "--config",
+    "/data2/ls/checkpoints/c_sf_weight1_20261026/configs/joint.json",
+    "--init-checkpoint",
+    "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_C_joint10k_20261023/0010000.pt",
+    "--gpus",
+    "0,1"
+  ],
+  "launcher_log": "/data2/ls/experiments/c_sf_weight1_20261026/launcher.log",
+  "updated_at": "2026-10-26T10:59:40.793117+00:00",
+  "verified_update": 13300,
+  "sf_weight": 1.0,
+  "sf_loss_multiplier": 2.0
+}

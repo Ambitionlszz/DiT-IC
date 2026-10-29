@@ -1,0 +1,167 @@
+{
+  "repository": "/data2/ls/code/DiT-IC-self-flow-start-20261022",
+  "python": "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+  "gpus": [
+    "0",
+    "1"
+  ],
+  "initialization": {
+    "initialization": "/data2/ls/checkpoints/bt_self_flow_v1/backend_init.pt",
+    "initialization_sha256": "93854d293861fc40b163823ddb978e90d56cdb9abb1e7bf84c4ee9da02d7209e",
+    "warmup": "/data2/ls/checkpoints/bt_self_flow_v1/common/complete.pt",
+    "warmup_sha256": "0e16538d359e11a4da011883d0679c52e049094a6b6f761cf6337cba382f04e5",
+    "warmup_step": 50000,
+    "codec_weights": "raw",
+    "frontend": "bt_explicit_local_step_v1",
+    "assets": {
+      "vae_config_sha256": "4e5669aa03caa77615b73b21c9347c384cb11124a9590683e32a510df0176eb4",
+      "vae_weights_bytes": 1249044836,
+      "vae_weights_sha256": "15a4b09e56d95b768a0ec9da50b702e21d920333fc9b3480d66bb5c7fad9d87f",
+      "transformer_config_sha256": "38916317861688918bee963c296ee0f9e939b6d2fd4f5e9f6908f2b9a9179fa6",
+      "transformer_weights_bytes": 2367054536,
+      "transformer_weights_sha256": "f9db5116ca285dd8a431dc8ee5123a9b74177640f6559c6fea4047c6e8ff5089",
+      "scheduler_config_sha256": "70e8603120cc387316aa3bc7f08cb2872f6b6eb6eff6f25df1b88b6b76389e81",
+      "text_sha256": "e9c904d6325303d0f058b00fa0235887de7e0ab0529797e614704eecbac52b9c"
+    },
+    "old_run_paused_at": 4333
+  },
+  "config": {
+    "data": {
+      "train": [
+        "/data2/ls/data/DIV2K_train_HR_clean",
+        "/data2/ls/data/Flickr2K/Flickr2K_png",
+        "/data2/ls/data/LSDIR",
+        "/data2/ls/data/clic_professional_train_2020/clic_professional_train_2020_png"
+      ],
+      "valid": [
+        "/data2/ls/data/Kodak"
+      ],
+      "crop": 512,
+      "valid_crop": 512,
+      "workers": 0,
+      "valid_limit": 1
+    },
+    "model": {
+      "sana_path": "/data2/ls/checkpoints/SANA",
+      "text_path": "/data2/ls/checkpoints/ditic-50k-warmups/pretrained/fixed_text_embed_gemma.pt",
+      "backend": "D",
+      "dit_rank": 128,
+      "vae_rank": 32,
+      "checkpoint_blocks": true,
+      "codec": {
+        "ch_emd": 32,
+        "channel": 320,
+        "channel_out": 32,
+        "delta_coarse": 4.0,
+        "delta_fine": 0.5,
+        "kappa": 0.6931471805599453
+      }
+    },
+    "optimizer": {
+      "codec_lr": 0.0001,
+      "joint_codec_lr": 5e-05,
+      "backend_lr": 0.0001,
+      "vae_lr": 1e-05,
+      "aux_lr": 0.001,
+      "max_grad_norm": 4.0,
+      "warmup": 500,
+      "schedule": "cosine"
+    },
+    "image_loss": {
+      "mse_weight": 4.0,
+      "lpips_weight": 1.0,
+      "dists_weight": 1.0
+    },
+    "self_flow": {
+      "enabled": true,
+      "mixed_sampling": true,
+      "high_fraction": 0.25,
+      "student_layer": 8,
+      "teacher_layer": 20,
+      "warmup": 0,
+      "ramp": 2,
+      "calibrate_every": 1,
+      "gradient_target": 0.05,
+      "gradient_cap": 0.1,
+      "start_step": 2,
+      "mixed_every": 2,
+      "ema_decay": 0.9999
+    },
+    "train": {
+      "phase": "joint",
+      "steps": 6,
+      "output": "/data2/ls/checkpoints/cd_sf_after20k_20261022/preflight/joint",
+      "batch_size": 2,
+      "effective_batch": 8,
+      "accumulation_steps": 2,
+      "seed": 903,
+      "eval_every": 4,
+      "save_every": 4,
+      "validation_actual_bpp": true,
+      "log_every": 1,
+      "packet_samples": 1,
+      "data_scale_samples": 128,
+      "calibration_samples": 512,
+      "require_quality_span": true,
+      "router_uniform_steps": 2000,
+      "router_ramp_steps": 3000,
+      "full_decode_every": 0,
+      "keep_last_checkpoints": 3,
+      "tensorboard": false
+    },
+    "objective": {
+      "base_weight": 0.1,
+      "repaired_weight": 0.0
+    }
+  },
+  "code_sha256": {
+    "codec_packet.py": "4264c975fd0a09771a7a55c66f55f6b2d802393f2dbecaebf99d7de82108d695",
+    "compress.py": "751e78c7b5ff403c21fb0f98673489de97a1e3dcb2bfb2fd4f83782c5ebc0396",
+    "config_compat.py": "db709a9143ad8f54823250926d2dfc2b4539e57894e06910c224d210c48be906",
+    "decode_modes.py": "150ee4131fcf83b0257c86086caba0c7d2ceacccd77a17a3f104b7c32db7f0dc",
+    "eval_bt_self_flow.py": "2605d3ff670a7c239277dc4acc1b4286d78ba40af949816a8649d2814feeffb8",
+    "merge.py": "73157801b32f9f021ffccf8976fe9812643052676b1518a0de0c38fb3c91459b",
+    "models/DiT_IC.py": "8383aa5e31fe039e10f8fcbe8c929676b3a936fd2f5de8528ea1b3bb062efea7",
+    "models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "models/bt_self_flow/__init__.py": "1fcce3d88143003f7ad06aa2ea5ef22ac04ab32704f58a71bd53f518932dbfb7",
+    "models/bt_self_flow/checkpoint.py": "d458e399f82fba037246411ecb51348c3ca109e0bbacf167b734f719ee07fe68",
+    "models/bt_self_flow/codec.py": "efba5604f76b78483a669bdfb7ada7e94ee92862b5b6eecb066b1244cd5b0068",
+    "models/bt_self_flow/conditioning.py": "a8d3e7a301c3f3798a137da0acddebea0950f5b599e7e58e815daca95c0e8ee5",
+    "models/bt_self_flow/data.py": "5fcae0d2ef5191bdb818b8a54e96ef20e41428529ec87e04e04dc94166709622",
+    "models/bt_self_flow/decoder.py": "a78275257b61412fca77ec706e8a4fa60d3ee5640315cb11bd5f0d0663001d75",
+    "models/bt_self_flow/distributed.py": "798b8dba9558e95816a910781e5d0f43567475d2d420ab5017f3c308b4d92b4a",
+    "models/bt_self_flow/experiment.py": "00376fbc03d8eceeac671e6a0b19da4aa00ffffaba0a36764c5c8db6875c1906",
+    "models/bt_self_flow/losses.py": "54861c2bb67dac51252c248cba47de040dcd0c7a1d351a18ca8c856f71dcc295",
+    "models/bt_self_flow/model.py": "e3eee44dd10d8974d81af7216f69fe12043ccc487cc9505c26134f8a92b306ef",
+    "models/bt_self_flow/packet.py": "52b3660a60c5abf23a25d0d4cb7948897454021147739a29e1b830dfd9e7b258",
+    "models/bt_self_flow/precision.py": "945d1e5e1f540c3d28b264d02bcf99f6309c9fa8bba4f929a3bb336acdea03ab",
+    "models/bt_self_flow/precision_conditioning.py": "1d1cde3a68b3a3748b018c834f87ea4ea2957c64b3f6f043f33b8bfb98ae0297",
+    "models/bt_self_flow/router.py": "6d0890f79170b78d3b550243b3f70fa41fe989885430de9e0461cd214da60593",
+    "models/bt_self_flow/scale.py": "51074548d178f6a1514a67888d07912190fe10fd9257debff2e0f4688076a43f",
+    "models/bt_self_flow/training_precision.py": "bcab35d33f6ad8ed88f7bfe0ff6ef84339e9393d205425114a8bbf16bf825916",
+    "models/bt_self_flow/validation.py": "c0a37f008da6b929359fe83ccc65f1e9000f992c4d0d709f6b3e553671692350",
+    "models/feature_relay.py": "96402777edca025d4f0b2fac1b5f5a2bf560d7d9d7f4c1fab6d2ff4b738b9481",
+    "models/latent_codec.py": "e4c156b0bfbf738a260af711979446740c8b972fc58e10dec67826559143771c",
+    "models/losses.py": "e216682933939b13bd27b7cfa47cd5ab32be2b8c40c7101e4a7dd03aa5feb18f",
+    "models/modules.py": "bff09f263e124a29ca8e5b66f3c651e8eca91c31e82f254c727713420d30e66d",
+    "models/my_utils/devices.py": "2b51bc63afd173cc129459258b1b334c7b0ec1f9c36e44db9f2213412b6d4f1a",
+    "models/my_utils/utils.py": "fc731a959d6ce6bbe85b4f3b79ef4a98b8ccb848cdfdc7867532b92348d74aaf",
+    "models/my_utils/vaehook.py": "2240ea5e262c38d87091b493f79795b3b48bccf723c81ec00558e3037fa5e3b2",
+    "models/sana_self_flow.py": "85758e9903c0ae2e112dba40bbc32a372a66c6986e0bdc4fbe30369dab03df59",
+    "models/scheduler.py": "9b5c9ca39b4ab4169b477dc63aa61bda146decb9119cf158f260c9abbecdc924",
+    "scripts/check_bgfr_equivalence.py": "ca50e438a95da7b294a8a469d3cba15cefc9bc88f8ce9353a5faeb0d2b1b8bf0",
+    "scripts/check_c_precision_full.py": "65ac64c1f17fe5cca74f7e9b62e7ac3395f6baaff230ec18470e86d84e9e594b",
+    "scripts/compare_bitstreams.py": "fa65f64a5a3c6a914b620c878caee02579c6617543625c6617486fb7251f24a2",
+    "scripts/compare_bt_self_flow.py": "7d4423c7aa91e8420305f53f3a985d2a4e5ddc832191eee810cffcb6a707796f",
+    "scripts/eval_variable_rate_lic_direct.py": "e1fc2ebefdfafa79d09960aa89448b85fd67b7b747b34d4ed23b3f968f7016e4",
+    "scripts/launch_bt_pair.py": "b498509bad3737d564f0deefec5319a1d87f8c506a4d5cb8d3b265db4b9ddc19",
+    "scripts/launch_delayed_self_flow.py": "3e7dddb793efdc3e52d67b3bf29a3f0614c69160bb9d4d21a88a7e3c88123d5c",
+    "scripts/preflight_bt_self_flow.py": "4f1dd9abb1006c32232d774a1eec5b5316f50fc3e259b6bc63085354f15164b0",
+    "scripts/variable_rate_gate.py": "88d9045408624631cc6310476bba575ff84e848abd11ad7e0d1857f3a052071e",
+    "self_flow_training.py": "b12f8aa9bbfa7fc8c0ae6468310583e8dc6fe036cc7fd588207658ffe9eef8b7",
+    "train_bt_self_flow.py": "0a52c4c1e0032d8c9f94a279ddfdd0882b098cf87f5a3ab43764b57d39017db9",
+    "train_ddp.py": "af8cd4445daa877c3613013222036b0991b2a6ac9007d6695a9585aa97b5209f",
+    "train_nogan_ddp.py": "d2025af10d01ccd86be1d16e28a37de61e747dc5c610da8d5ca94625be704734",
+    "train_variable_rate_lic_ddp.py": "d34d4d4832c99fe0ea7bf6a34056aac3eadc76e28ee1e46680941eeb444ed44f"
+  }
+}

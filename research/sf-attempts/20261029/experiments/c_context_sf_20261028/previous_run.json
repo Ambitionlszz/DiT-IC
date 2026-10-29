@@ -1,0 +1,6 @@
+{
+  "run": "/data2/ls/checkpoints/c_local_precision_sf_20261028",
+  "saved_checkpoint": "/data2/ls/checkpoints/c_local_precision_sf_20261028/joint/paused.pt",
+  "saved_step": 16351,
+  "status": "gracefully_saved_and_stopped"
+}

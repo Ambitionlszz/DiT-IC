@@ -1,0 +1,9 @@
+{
+  "requested_at": "2026-10-25T03:27:08.633464+08:00",
+  "old_run": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023",
+  "supervisor": 5818,
+  "parent": "PPid:\t1",
+  "signal": "SIGTERM",
+  "expected_action": "supervisor gracefully signals trainer workers; finish update and save paused.pt",
+  "new_run": "/data2/ls/checkpoints/c_quant_residual_sf_20261025"
+}

@@ -1,0 +1,328 @@
+{
+  "method": "bt_self_flow_v1",
+  "schema": 1,
+  "phase": "joint",
+  "backend": "C",
+  "step": 10000,
+  "micro_seen": 20000,
+  "attempts": 10000,
+  "config": {
+    "data": {
+      "train": [
+        "/data2/luosheng/data/Datasets/DIV2K_train_HR_clean",
+        "/data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png",
+        "/data2/luosheng/data/Datasets/LSDIR",
+        "/data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png"
+      ],
+      "valid": [
+        "/data2/luosheng/data/Datasets/Kodak"
+      ],
+      "crop": 512,
+      "valid_crop": 0,
+      "workers": 8,
+      "valid_limit": 24
+    },
+    "model": {
+      "sana_path": "/data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers",
+      "text_path": "/data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers/fixed_text_embed_gemma.pt",
+      "backend": "C",
+      "dit_rank": 128,
+      "vae_rank": 32,
+      "checkpoint_blocks": true,
+      "codec": {
+        "ch_emd": 32,
+        "channel": 320,
+        "channel_out": 32,
+        "delta_coarse": 4.0,
+        "delta_fine": 0.5,
+        "kappa": 0.6931471805599453,
+        "precision_conditioning": true,
+        "rate_likelihood": "noise"
+      }
+    },
+    "optimizer": {
+      "codec_lr": 0.0001,
+      "joint_codec_lr": 0.0001,
+      "backend_lr": 0.0001,
+      "vae_lr": 0.0001,
+      "aux_lr": 0.001,
+      "max_grad_norm": 4.0,
+      "warmup": 0,
+      "schedule": "milestone",
+      "milestones": [
+        100000,
+        160000,
+        190000
+      ],
+      "factors": [
+        0.5,
+        0.2,
+        0.1
+      ]
+    },
+    "image_loss": {
+      "mse_weight": 4.0,
+      "lpips_weight": 1.0,
+      "dists_weight": 1.0
+    },
+    "self_flow": {
+      "enabled": false,
+      "mixed_sampling": false,
+      "high_fraction": 0.25,
+      "student_layer": 8,
+      "teacher_layer": 20,
+      "warmup": 1000,
+      "ramp": 2000,
+      "calibrate_every": 500,
+      "gradient_target": 0.05,
+      "gradient_cap": 0.1
+    },
+    "train": {
+      "phase": "joint",
+      "steps": 200000,
+      "output": "/data2/luosheng/code/DiT-IC/checkpoints/c_precision_v2_C_lambda16_gpu46_b2a2_20261023/C/joint",
+      "batch_size": 2,
+      "effective_batch": 8,
+      "accumulation_steps": 2,
+      "seed": 903,
+      "eval_every": 2000,
+      "save_every": 10000,
+      "validation_actual_bpp": true,
+      "log_every": 100,
+      "packet_samples": 2,
+      "data_scale_samples": 512,
+      "calibration_samples": 512,
+      "require_quality_span": true,
+      "router_uniform_steps": 0,
+      "router_ramp_steps": 0,
+      "full_decode_every": 10000,
+      "keep_last_checkpoints": 2,
+      "tensorboard": true
+    },
+    "quality": {
+      "values": [
+        0.0,
+        0.2,
+        0.4,
+        0.6,
+        0.8,
+        1.0
+      ],
+      "rate_coefficients": [
+        16.0,
+        8.0,
+        4.0,
+        2.0,
+        1.0,
+        0.5
+      ]
+    },
+    "objective": {
+      "base_weight": 0.1,
+      "repaired_weight": 0.0
+    }
+  },
+  "contract": {
+    "data": {
+      "train": [
+        "/data2/luosheng/data/Datasets/DIV2K_train_HR_clean",
+        "/data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png",
+        "/data2/luosheng/data/Datasets/LSDIR",
+        "/data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png"
+      ],
+      "crop": 512,
+      "workers": 8
+    },
+    "model": {
+      "sana_path": "/data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers",
+      "text_path": "/data2/luosheng/hf_models/hub/SANA_600M_1024px_diffusers/fixed_text_embed_gemma.pt",
+      "backend": "C",
+      "dit_rank": 128,
+      "vae_rank": 32,
+      "checkpoint_blocks": true,
+      "codec": {
+        "ch_emd": 32,
+        "channel": 320,
+        "channel_out": 32,
+        "delta_coarse": 4.0,
+        "delta_fine": 0.5,
+        "kappa": 0.6931471805599453,
+        "precision_conditioning": true,
+        "rate_likelihood": "noise"
+      }
+    },
+    "optimizer": {
+      "codec_lr": 0.0001,
+      "joint_codec_lr": 0.0001,
+      "backend_lr": 0.0001,
+      "vae_lr": 0.0001,
+      "aux_lr": 0.001,
+      "max_grad_norm": 4.0,
+      "warmup": 0,
+      "schedule": "milestone",
+      "milestones": [
+        100000,
+        160000,
+        190000
+      ],
+      "factors": [
+        0.5,
+        0.2,
+        0.1
+      ]
+    },
+    "image_loss": {
+      "mse_weight": 4.0,
+      "lpips_weight": 1.0,
+      "dists_weight": 1.0
+    },
+    "self_flow": {
+      "enabled": false,
+      "mixed_sampling": false,
+      "high_fraction": 0.25,
+      "student_layer": 8,
+      "teacher_layer": 20,
+      "warmup": 1000,
+      "ramp": 2000,
+      "calibrate_every": 500,
+      "gradient_target": 0.05,
+      "gradient_cap": 0.1
+    },
+    "train": {
+      "phase": "joint",
+      "steps": 200000,
+      "batch_size": 2,
+      "effective_batch": 8,
+      "accumulation_steps": 2,
+      "seed": 903,
+      "packet_samples": 2,
+      "data_scale_samples": 512,
+      "calibration_samples": 512,
+      "require_quality_span": true,
+      "router_uniform_steps": 0,
+      "router_ramp_steps": 0,
+      "full_decode_every": 10000,
+      "tensorboard": true
+    },
+    "quality": {
+      "values": [
+        0.0,
+        0.2,
+        0.4,
+        0.6,
+        0.8,
+        1.0
+      ],
+      "rate_coefficients": [
+        16.0,
+        8.0,
+        4.0,
+        2.0,
+        1.0,
+        0.5
+      ]
+    },
+    "objective": {
+      "base_weight": 0.1,
+      "repaired_weight": 0.0
+    },
+    "dataset_fingerprint": "277b57a63ecda648707e40dd3a233e2955aa99d300cccb720790b6e16a2ee6b8",
+    "world_size": 2,
+    "format": "bt_packet_v1_q16_a3_s4"
+  },
+  "assets": {
+    "vae_config_sha256": "4e5669aa03caa77615b73b21c9347c384cb11124a9590683e32a510df0176eb4",
+    "vae_weights_bytes": 1249044836,
+    "vae_weights_sha256": "15a4b09e56d95b768a0ec9da50b702e21d920333fc9b3480d66bb5c7fad9d87f",
+    "transformer_config_sha256": "38916317861688918bee963c296ee0f9e939b6d2fd4f5e9f6908f2b9a9179fa6",
+    "transformer_weights_bytes": 2367054536,
+    "transformer_weights_sha256": "f9db5116ca285dd8a431dc8ee5123a9b74177640f6559c6fea4047c6e8ff5089",
+    "scheduler_config_sha256": "70e8603120cc387316aa3bc7f08cb2872f6b6eb6eff6f25df1b88b6b76389e81",
+    "text_sha256": "e9c904d6325303d0f058b00fa0235887de7e0ab0529797e614704eecbac52b9c"
+  },
+  "source_sha256": "72021789824591baa47ce4913f754068d5c0b2ec858278ecd8d15659afe2d5c1",
+  "scheduler": {
+    "base_lrs": [
+      0.0001,
+      0.0001,
+      0.0001
+    ],
+    "last_epoch": 10000,
+    "_step_count": 10001,
+    "_is_initial": false,
+    "_get_lr_called_within_step": false,
+    "_last_lr": [
+      0.0001,
+      0.0001,
+      0.0001
+    ],
+    "lr_lambdas": [
+      null,
+      null,
+      null
+    ]
+  },
+  "scaler": {},
+  "optimizer_groups": [
+    {
+      "name": "vae",
+      "lr": 0.0001,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0,
+      "amsgrad": false,
+      "maximize": false,
+      "foreach": null,
+      "capturable": false,
+      "differentiable": false,
+      "fused": null,
+      "decoupled_weight_decay": true,
+      "initial_lr": 0.0001,
+      "parameter_count": 128
+    },
+    {
+      "name": "backend",
+      "lr": 0.0001,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0,
+      "amsgrad": false,
+      "maximize": false,
+      "foreach": null,
+      "capturable": false,
+      "differentiable": false,
+      "fused": null,
+      "decoupled_weight_decay": true,
+      "initial_lr": 0.0001,
+      "parameter_count": 564
+    },
+    {
+      "name": "codec",
+      "lr": 0.0001,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0,
+      "amsgrad": false,
+      "maximize": false,
+      "foreach": null,
+      "capturable": false,
+      "differentiable": false,
+      "fused": null,
+      "decoupled_weight_decay": true,
+      "initial_lr": 0.0001,
+      "parameter_count": 342
+    }
+  ],
+  "optimizer_state_count": 1034,
+  "rng_ranks": 2,
+  "metadata_only": true
+}

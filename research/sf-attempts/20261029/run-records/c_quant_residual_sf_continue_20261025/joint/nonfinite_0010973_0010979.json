@@ -1,0 +1,98 @@
+{
+  "ranks": [
+    {
+      "step": 10973,
+      "micro": 0,
+      "rank": 0,
+      "backend": "C",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": 0.018040183931589127,
+        "lpips": 0.09035500884056091,
+        "dists": 0.07406163215637207,
+        "psnr": 23.45819091796875,
+        "base": 0.03964272886514664,
+        "latent": 0.04468763619661331,
+        "rate_est": 0.08515965193510056,
+        "weighted_base": 0.003964272793382406,
+        "weighted_repaired": 0.0,
+        "weighted_rate": 0.08515965193510056,
+        "weighted_mse": 0.0721607357263565,
+        "weighted_lpips": 0.09035500884056091,
+        "weighted_dists": 0.07406163215637207,
+        "sf_loss": -1.4918885231018066,
+        "sf_valid": 0.5,
+        "sf_target_rms": 0.005489467177540064,
+        "sf_mean_rms": 0.004789785016328096,
+        "sf_std": 0.050085555762052536,
+        "sf_weight": 0.5744786858558655
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 7.129091262817383
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 7.096384048461914
+        },
+        "latent": {
+          "finite": true,
+          "max_abs": 6.988656997680664
+        },
+        "image": {
+          "finite": true,
+          "max_abs": 1.0
+        }
+      },
+      "model_state_finite": true
+    },
+    {
+      "step": 10973,
+      "micro": 0,
+      "rank": 1,
+      "backend": "C",
+      "precision": "torch.float16",
+      "metrics": {
+        "mse": NaN,
+        "lpips": NaN,
+        "dists": NaN,
+        "psnr": NaN,
+        "base": 0.04089481756091118,
+        "latent": NaN,
+        "rate_est": 0.09512759745121002,
+        "weighted_base": 0.00408948166295886,
+        "weighted_repaired": NaN,
+        "weighted_rate": 0.09512759745121002,
+        "weighted_mse": NaN,
+        "weighted_lpips": NaN,
+        "weighted_dists": NaN,
+        "sf_loss": -0.7463908791542053,
+        "sf_valid": 0.25,
+        "sf_target_rms": 0.004269552417099476,
+        "sf_mean_rms": 0.004582935478538275,
+        "sf_std": 0.0500912219285965,
+        "sf_weight": 0.5744786858558655
+      },
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 6.261002063751221
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.7750468254089355
+        },
+        "latent": {
+          "finite": false,
+          "max_abs": NaN
+        },
+        "image": {
+          "finite": false,
+          "max_abs": NaN
+        }
+      },
+      "model_state_finite": true
+    }
+  ]
+}

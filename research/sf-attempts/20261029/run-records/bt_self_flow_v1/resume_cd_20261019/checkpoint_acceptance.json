@@ -1,0 +1,42 @@
+{
+  "C": {
+    "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt",
+    "step": 36944,
+    "phase": "joint",
+    "target_steps": 200000,
+    "batch_size": 2,
+    "accumulation_steps": 4,
+    "quantization_steps": [
+      4.000000015237235,
+      0.49999999904767284
+    ],
+    "router_strength": 1.0,
+    "rate_weight": 1,
+    "base_weight": 0.1,
+    "latent_weight": 0.1,
+    "optimizer_state_entries": 1018,
+    "scheduler_last_epoch": 36944,
+    "attempts": 37062,
+    "rng_ranks": 1
+  },
+  "D": {
+    "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/paused.pt",
+    "step": 38403,
+    "phase": "joint",
+    "target_steps": 200000,
+    "batch_size": 2,
+    "accumulation_steps": 4,
+    "quantization_steps": [
+      4.000000015237235,
+      0.49999999904767284
+    ],
+    "router_strength": 1.0,
+    "rate_weight": 1,
+    "base_weight": 0.1,
+    "latent_weight": 0.1,
+    "optimizer_state_entries": 1025,
+    "scheduler_last_epoch": 38403,
+    "attempts": 38438,
+    "rng_ranks": 1
+  }
+}

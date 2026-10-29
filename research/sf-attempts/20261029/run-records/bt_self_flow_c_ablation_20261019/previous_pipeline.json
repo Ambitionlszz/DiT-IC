@@ -1,0 +1,42 @@
+{
+  "supervisor_pid": 16957,
+  "started_at": "2026-10-19T08:22:52.566135+00:00",
+  "status": "paired_training",
+  "jobs": {
+    "c_joint": {
+      "pid": 17252,
+      "gpus": [
+        "0"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/c_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0036000.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/c_joint.log",
+      "started_at": "2026-10-19T08:22:53.859296+00:00",
+      "status": "running"
+    },
+    "d_joint": {
+      "pid": 17253,
+      "gpus": [
+        "1"
+      ],
+      "command": [
+        "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+        "train_bt_self_flow.py",
+        "--config",
+        "/data2/ls/checkpoints/bt_self_flow_v1/configs/d_joint.yaml",
+        "--resume",
+        "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0038000.pt"
+      ],
+      "log": "/data2/ls/checkpoints/bt_self_flow_v1/logs/d_joint.log",
+      "started_at": "2026-10-19T08:22:54.914879+00:00",
+      "status": "running"
+    }
+  },
+  "updated_at": "2026-10-19T08:22:54.914918+00:00"
+}

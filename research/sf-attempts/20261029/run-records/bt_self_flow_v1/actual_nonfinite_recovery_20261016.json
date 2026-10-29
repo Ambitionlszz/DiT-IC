@@ -1,0 +1,17 @@
+{
+  "status": "actual_failure_recovered",
+  "commit": "a24427911f56cde8052d58fc35deb9233e684c5b",
+  "backend": "C",
+  "failure_after_update": 321,
+  "failure_microbatch": 2,
+  "source_and_coarse_finite": true,
+  "fp16_repaired_latent_nonfinite": true,
+  "model_state_finite": true,
+  "saved_checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt",
+  "saved_micro_seen": 1284,
+  "saved_scheduler_step": 321,
+  "fp32_replay_completed_update": 322,
+  "attempts_after_recovery": 326,
+  "exact_operator_identified": false,
+  "diagnostic": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/nonfinite_0000321_0000325.json"
+}

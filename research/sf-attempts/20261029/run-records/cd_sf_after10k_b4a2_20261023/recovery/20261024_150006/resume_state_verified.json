@@ -1,0 +1,45 @@
+{
+  "verified_at": "2026-10-24T07:07:39.768827+00:00",
+  "checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/0024000.pt",
+  "step": 24000,
+  "attempts": 24007,
+  "micro_seen": 47528,
+  "teacher_initialized_step": 10000,
+  "teacher_tensors": 410,
+  "rep_weight": 9.482732375561291,
+  "scheduler_last_epoch": 24000,
+  "scaler": {
+    "scale": 524288.0,
+    "growth_factor": 2.0,
+    "backoff_factor": 0.5,
+    "growth_interval": 2000,
+    "_growth_tracker": 749
+  },
+  "rng_ranks": 2,
+  "optimizer_parameter_states": 1031,
+  "aux_optimizer_parameter_states": 1,
+  "raw_components": [
+    "codec",
+    "distortion_scale",
+    "vae",
+    "dit",
+    "text",
+    "conditioner",
+    "projector"
+  ],
+  "ema_components": [
+    "codec",
+    "distortion_scale",
+    "vae",
+    "dit",
+    "text",
+    "conditioner",
+    "projector"
+  ],
+  "full_precision_retry": false,
+  "configuration_matches_frozen_manifest": true,
+  "pretrained_assets_match": true,
+  "python": "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+  "torch": "2.12.0+cu126",
+  "passed": true
+}

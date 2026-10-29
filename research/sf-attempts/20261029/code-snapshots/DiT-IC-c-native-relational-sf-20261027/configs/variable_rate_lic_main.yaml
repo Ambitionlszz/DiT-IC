@@ -1,0 +1,67 @@
+data:
+  data_path:
+    - /data2/luosheng/data/Datasets/DIV2K_train_HR_clean
+    - /data2/luosheng/data/Datasets/Flickr2K/Flickr2K_png
+    - /data2/luosheng/data/Datasets/LSDIR
+    - /data2/luosheng/data/Datasets/clic_professional_train_2020/clic_professional_train_2020_png
+  valid_path:
+    - /data2/luosheng/data/Datasets/Kodak
+  im_exts: [JPEG, png, jpg, jpeg, PNG]
+  num_workers: 8
+  path_size: [256, 256]
+
+model:
+  dit_path: SANA
+  codec_initialization: scratch
+  codec_param:
+    ch_emd: 32
+    channel: 320
+    channel_out: 32
+    num_slices: 5
+    max_support_slices: 5
+    kernel_size: 3
+    drop_path_rate: 0.1
+    depths: [2, 2, 2, 2, 2]
+    num_heads: [16, 16, 16, 16, 16]
+    upsample_mode: pixelshuffle
+    variable_rate: true
+    num_quality_levels: 6
+
+quality_control:
+  num_levels: 6
+  semantic_order: low_to_high_bpp
+  # Set true only after the pilot confirms both phases' lambda values.
+  calibration_confirmed: false
+
+lic_train:
+  # q0->q5 is low-to-high BPP, so lambda values are bound in descending order.
+  # Phase B uses MSE + LPIPS + 0.2 * DISTS, then adds lambda * rate.
+  phase_a:
+    steps: 50000
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    latent_mse_weight: 1.0
+  phase_b:
+    steps: 100000
+    lambda_values: [16.0, 8.0, 4.0, 2.0, 1.0, 0.5]
+    pixel_mse_weight: 1.0
+    lpips_weight: 1.0
+    dists_weight: 0.2
+
+train:
+  output_dir: checkpoints
+  exp_name: variable_rate_lic_v5_main
+  per_gpu_batch_size: 8
+  accumulation_steps: 1
+  max_steps: 150000
+  global_seed: 903
+  log_every: 100
+  eval_every: 2000
+  ckpt_every: 10000
+  resume: false
+
+optimizer:
+  lr: 0.0001
+  aux_lr: 0.001
+  beta2: 0.999
+  step_lr: [100000, 130000, 145000]
+  max_grad_norm: 4.0

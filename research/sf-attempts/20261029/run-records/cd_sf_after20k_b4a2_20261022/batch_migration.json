@@ -1,0 +1,17 @@
+{
+  "step": 472,
+  "world_size": 2,
+  "old_batch_size": 2,
+  "new_batch_size": 4,
+  "accumulation_steps": 2,
+  "old_effective_batch": 8,
+  "new_effective_batch": 16,
+  "old_micro_seen": 944,
+  "new_micro_seen": 472,
+  "global_images_seen": 3776,
+  "optimizer_scheduler_scaler_rng_weights_preserved": true,
+  "self_flow_start_step": 20000,
+  "source_checkpoint": "/data2/ls/checkpoints/cd_sf_after20k_20261022/joint/paused.pt",
+  "source_sha256": "0926814ab7ad4fe036c47078e52841c259195ca197629d6426ce282af3ee884f",
+  "migrated_checkpoint": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint/paused.pt"
+}

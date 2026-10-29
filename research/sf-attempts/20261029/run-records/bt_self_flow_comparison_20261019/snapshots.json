@@ -1,0 +1,20 @@
+{
+  "created_at": "2026-10-19T10:48:27.605900+08:00",
+  "snapshots": {
+    "C_34000": {
+      "source": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0034000.pt",
+      "snapshot": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/C_34000.pt",
+      "bytes": 3746076218
+    },
+    "D_34000": {
+      "source": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0034000.pt",
+      "snapshot": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/D_34000.pt",
+      "bytes": 3918484501
+    },
+    "baseline_30000": {
+      "source": "/data2/ls/checkpoints/baseline512/512-gpu1-e1KlFH/train/512-variable-rate-baseline/checkpoints/best_ckpt.pt",
+      "snapshot": "/data2/ls/checkpoints/bt_self_flow_comparison_20261019/checkpoints/baseline_30000.pt",
+      "bytes": 3742716529
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "launched_at": "2026-10-19T11:09:15.918241+08:00",
+  "reason": "Resume authorized 200K runs following host reboot and completed Kodak comparison",
+  "resume_checkpoints": {
+    "C": {
+      "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/0034000.pt",
+      "step": 34000,
+      "bytes": 3746076218,
+      "config_identical": true,
+      "optimizer_state_present": true,
+      "checkpoint_keys": [
+        "method",
+        "schema",
+        "phase",
+        "backend",
+        "step",
+        "micro_seen",
+        "attempts",
+        "raw",
+        "ema",
+        "optimizer",
+        "aux_optimizer",
+        "scheduler",
+        "scaler",
+        "rng_by_rank",
+        "contract",
+        "config",
+        "assets",
+        "source_sha256",
+        "calibration",
+        "rep_weight",
+        "validation_best",
+        "full_precision_retry"
+      ],
+      "finite_tensor_count": 5133,
+      "finite_element_count": 935689371,
+      "sha256": "f33288806a00e35c392ba990675f21ce863fa19423cb73c0cc0f0bb7b9aa0daa"
+    },
+    "D": {
+      "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0036000.pt",
+      "step": 36000,
+      "bytes": 3918484501,
+      "config_identical": true,
+      "optimizer_state_present": true,
+      "checkpoint_keys": [
+        "method",
+        "schema",
+        "phase",
+        "backend",
+        "step",
+        "micro_seen",
+        "attempts",
+        "raw",
+        "ema",
+        "optimizer",
+        "aux_optimizer",
+        "scheduler",
+        "scaler",
+        "rng_by_rank",
+        "contract",
+        "config",
+        "assets",
+        "source_sha256",
+        "calibration",
+        "rep_weight",
+        "validation_best",
+        "full_precision_retry"
+      ],
+      "finite_tensor_count": 5170,
+      "finite_element_count": 978788802,
+      "sha256": "7a8d9856260e6e777ba91f95938b85c2fb71145c78ae63317557fe7208b673ed"
+    }
+  },
+  "log_offsets": {
+    "C": 164927,
+    "D": 175240
+  },
+  "commit": "552c3fb8e75e5444b6c978f57b5f63b56e84584c"
+}

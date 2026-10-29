@@ -1,0 +1,11 @@
+{
+  "step": 8000,
+  "old_start_step": 20000,
+  "new_start_step": 10000,
+  "first_sf_update": 10001,
+  "micro_seen": 15528,
+  "optimizer_scheduler_scaler_rng_weights_preserved": true,
+  "source_checkpoint": "/data2/ls/checkpoints/cd_sf_after20k_b4a2_20261022/joint/0008000.pt",
+  "source_sha256": "cc01ea2f37fa5adc452f57d44c63dcc1310015f92cfe1ef53e392fbff73b9159",
+  "migrated_checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/paused.pt"
+}

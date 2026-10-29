@@ -1,0 +1,9 @@
+{
+  "reason": "amp_nonfinite_forward",
+  "step": 13643,
+  "attempts": 13647,
+  "world_size": 2,
+  "checkpoint": "paused.pt",
+  "checkpoint_size": 4072531222,
+  "checkpoint_mtime_ns": 1793124552559160700
+}

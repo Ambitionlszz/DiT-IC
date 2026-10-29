@@ -1,0 +1,75 @@
+{
+  "step": 10973,
+  "rank": 1,
+  "keys": [
+    [
+      40344,
+      3657427255129028264
+    ],
+    [
+      8137,
+      5569118342668983155
+    ],
+    [
+      39417,
+      6830657243978781899
+    ],
+    [
+      65274,
+      7679807744245068429
+    ]
+  ],
+  "model_state_finite": true,
+  "trials": [
+    {
+      "amp": true,
+      "quality": 0.8,
+      "mask_cells": 16,
+      "first_nonfinite": [],
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 6.261002063751221
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.7750468254089355
+        },
+        "latent": {
+          "finite": true,
+          "max_abs": 5.8136820793151855
+        },
+        "image": {
+          "finite": true,
+          "max_abs": 1.0
+        }
+      },
+      "peak_allocated": 7334802944
+    },
+    {
+      "amp": false,
+      "quality": 0.8,
+      "mask_cells": 16,
+      "first_nonfinite": [],
+      "tensors": {
+        "clean": {
+          "finite": true,
+          "max_abs": 6.261002063751221
+        },
+        "coarse": {
+          "finite": true,
+          "max_abs": 5.7750468254089355
+        },
+        "latent": {
+          "finite": true,
+          "max_abs": 5.815097332000732
+        },
+        "image": {
+          "finite": true,
+          "max_abs": 1.0
+        }
+      },
+      "peak_allocated": 8162466816
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "cause": "real-packet validation rejected unfinished Router curriculum at update 2000 before the first checkpoint save",
+  "failed_step": 2000,
+  "failure_time_shanghai": "2026-10-19 21:13:24",
+  "main_checkpoint_present": false,
+  "candidate_recovery_checkpoint": "/data2/ls/checkpoints/bt_self_flow_lowrate_20261019/profiles/ddp32/paused.pt",
+  "candidate_step": 6,
+  "contract_comparison": true,
+  "assets_comparison": true,
+  "training_configuration_changes": null
+}

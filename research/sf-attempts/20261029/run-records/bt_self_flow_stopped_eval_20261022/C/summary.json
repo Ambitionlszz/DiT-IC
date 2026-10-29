@@ -1,0 +1,197 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/C/joint/paused.pt",
+  "checkpoint_sha256": "9222174bc01e2482af5133653b3f7000f9b37c51f24aad0294d8756b38c5ea0a",
+  "weights": "ema",
+  "backend": "C",
+  "step": 95542,
+  "phase": "joint",
+  "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+  "images": 24,
+  "metric_protocol": "float RGB [0,1], pyiqa PSNR/MS-SSIM/DISTS and torchmetrics LPIPS alex normalize=True, matching archived 512 evaluator",
+  "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+  "codec_precision": "fp32",
+  "nfe": 1,
+  "summary": {
+    "0": {
+      "bpp": 0.029822455512152776,
+      "psnr": 22.538828134536743,
+      "lpips": 0.16710494924336672,
+      "dists": 0.0921656663219134,
+      "encode_seconds": 0.8953195838718481,
+      "decode_seconds": 0.7076328371670874,
+      "peak_memory_bytes": 6024754517.333333,
+      "ms_ssim": 0.7786816577610804,
+      "base_latent_mse": 0.1677710022777319,
+      "repair_latent_rms": 0.12913093840082487,
+      "high_precision_psnr": 21.892828543980915,
+      "high_precision_area_fraction": 0.8333333482344946,
+      "bytes_by_component": {
+        "hyper": 107.66666666666667,
+        "main": 1267.1666666666667,
+        "allocation": 36.0,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.07345082433200682,
+        "main": 0.8644684479818079,
+        "allocation": 0.024559408754974418,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.03752131893121091
+      }
+    },
+    "13107": {
+      "bpp": 0.047536214192708336,
+      "psnr": 23.60489757855733,
+      "lpips": 0.12999663036316633,
+      "dists": 0.0720059300462405,
+      "encode_seconds": 0.34275294587860117,
+      "decode_seconds": 0.7115585300465076,
+      "peak_memory_bytes": 6025792000.0,
+      "ms_ssim": 0.8259779976226884,
+      "base_latent_mse": 0.08560069402058919,
+      "repair_latent_rms": 0.08278583300610383,
+      "high_precision_psnr": 22.931353251139324,
+      "high_precision_area_fraction": 0.8333333482344946,
+      "bytes_by_component": {
+        "hyper": 107.66666666666667,
+        "main": 2137.8333333333335,
+        "allocation": 36.0,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.046080319566302874,
+        "main": 0.9149725372708467,
+        "allocation": 0.015407661031457309,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.02353948213139311
+      }
+    },
+    "26214": {
+      "bpp": 0.06721666124131945,
+      "psnr": 24.407188177108765,
+      "lpips": 0.1077717044390738,
+      "dists": 0.06075021376212438,
+      "encode_seconds": 0.3574577739661133,
+      "decode_seconds": 0.7194530054572775,
+      "peak_memory_bytes": 6025792000.0,
+      "ms_ssim": 0.8552154849061114,
+      "base_latent_mse": 0.042434874611596264,
+      "repair_latent_rms": 0.047301636232684054,
+      "high_precision_psnr": 23.729864458243053,
+      "high_precision_area_fraction": 0.8333333482344946,
+      "bytes_by_component": {
+        "hyper": 107.66666666666667,
+        "main": 3105.1666666666665,
+        "allocation": 36.0,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.03258840740553902,
+        "main": 0.9398678302981385,
+        "allocation": 0.010896433435907784,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.01664732886041467
+      }
+    },
+    "39321": {
+      "bpp": 0.09018622504340278,
+      "psnr": 24.993595043818157,
+      "lpips": 0.09538695045436422,
+      "dists": 0.053509136041005455,
+      "encode_seconds": 0.3610533280807431,
+      "decode_seconds": 0.7489663599553751,
+      "peak_memory_bytes": 6025792000.0,
+      "ms_ssim": 0.8736705577291953,
+      "base_latent_mse": 0.02208613627590239,
+      "repair_latent_rms": 0.03192071725303928,
+      "high_precision_psnr": 24.30911287665367,
+      "high_precision_area_fraction": 0.8333333482344946,
+      "bytes_by_component": {
+        "hyper": 107.66666666666667,
+        "main": 4234.166666666667,
+        "allocation": 36.0,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.02428845358499079,
+        "main": 0.9551829153663947,
+        "allocation": 0.008121216678572771,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.012407414370041734
+      }
+    },
+    "52428": {
+      "bpp": 0.1193813747829861,
+      "psnr": 25.327685197194416,
+      "lpips": 0.08820833374435703,
+      "dists": 0.04943650464216868,
+      "encode_seconds": 0.38812523812763783,
+      "decode_seconds": 0.8140808719205476,
+      "peak_memory_bytes": 6025792000.0,
+      "ms_ssim": 0.8836084505853679,
+      "base_latent_mse": 0.013215045949133733,
+      "repair_latent_rms": 0.028578017838299274,
+      "high_precision_psnr": 24.63817040125529,
+      "high_precision_area_fraction": 0.8333333482344946,
+      "bytes_by_component": {
+        "hyper": 107.66666666666667,
+        "main": 5669.166666666667,
+        "allocation": 36.0,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.01834862385321101,
+        "main": 0.966143096543301,
+        "allocation": 0.006135143579401823,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.00937313602408612
+      }
+    },
+    "65535": {
+      "bpp": 0.156158447265625,
+      "psnr": 25.492307901382446,
+      "lpips": 0.08523798764993747,
+      "dists": 0.04846680909395218,
+      "encode_seconds": 0.35454252775525674,
+      "decode_seconds": 0.732699793081944,
+      "peak_memory_bytes": 6025792000.0,
+      "ms_ssim": 0.8883778371851782,
+      "base_latent_mse": 0.00945784403787305,
+      "repair_latent_rms": 0.028395466894532245,
+      "high_precision_psnr": 24.798203607400257,
+      "high_precision_area_fraction": 0.8333333482344946,
+      "bytes_by_component": {
+        "hyper": 107.66666666666667,
+        "main": 7476.833333333333,
+        "allocation": 36.0,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.014027316352897749,
+        "main": 0.9741167784943435,
+        "allocation": 0.004690248192300176,
+        "scales": 0.0,
+        "mask": 0.0,
+        "header": 0.007165656960458602
+      }
+    }
+  },
+  "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included"
+}

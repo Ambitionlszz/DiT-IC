@@ -1,0 +1,5 @@
+base: d_mix.yaml
+self_flow:
+  enabled: true
+train:
+  output: /data2/ls/checkpoints/bt_self_flow_v1/E

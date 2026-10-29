@@ -1,0 +1,213 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/bt_self_flow_v1/D/joint/0038000.pt",
+  "checkpoint_sha256": "34d3c1d74cb3cd7fbedb805496cd49368c0fbe7d86d7192e8cdd5bfecc926cf0",
+  "weights": "ema",
+  "backend": "D",
+  "step": 38000,
+  "phase": "joint",
+  "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+  "images": 24,
+  "metric_protocol": "float RGB [-1,1], PSNR dynamic range 2, LPIPS alex, DISTS [0,1]",
+  "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
+  "codec_precision": "fp32",
+  "nfe": 1,
+  "summary": {
+    "0": {
+      "bpp": 0.029927571614583332,
+      "psnr": 22.449110587437946,
+      "lpips": 0.17115561322619519,
+      "dists": 0.092498945693175,
+      "encode_seconds": 0.6313769205417353,
+      "decode_seconds": 0.8324114497917208,
+      "peak_memory_bytes": 6057535488.0,
+      "base_latent_mse": 0.1737344190478325,
+      "repair_latent_rms": 0.1717999099443356,
+      "high_precision_psnr": 20.81698069969813,
+      "high_precision_area_fraction": 0.572916679084301,
+      "scale_saturation": 0.0030381945349896946,
+      "bytes_by_component": {
+        "hyper": 96.66666666666667,
+        "main": 1235.3333333333333,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.06571493315205076,
+        "main": 0.8397915250396556,
+        "allocation": 0.024473147518694765,
+        "scales": 0.03263086335825969,
+        "mask": 0.0,
+        "header": 0.037389530931339225
+      },
+      "ms_ssim": 0.7775846138586329
+    },
+    "13107": {
+      "bpp": 0.047149658203125,
+      "psnr": 23.47253402074178,
+      "lpips": 0.13318737441052994,
+      "dists": 0.07326765606800716,
+      "encode_seconds": 0.3864474998750514,
+      "decode_seconds": 0.8091225834166001,
+      "peak_memory_bytes": 6058152448.0,
+      "base_latent_mse": 0.091456338763237,
+      "repair_latent_rms": 0.1102040084078908,
+      "high_precision_psnr": 21.746513942877453,
+      "high_precision_area_fraction": 0.572916679084301,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 96.66666666666667,
+        "main": 2081.8333333333335,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.041711614527148506,
+        "main": 0.8983099604458827,
+        "allocation": 0.015533980582524271,
+        "scales": 0.020711974110032363,
+        "mask": 0.0,
+        "header": 0.023732470334412083
+      },
+      "ms_ssim": 0.8230827753305148
+    },
+    "26214": {
+      "bpp": 0.06647406684027778,
+      "psnr": 24.229212045669556,
+      "lpips": 0.11222706983486812,
+      "dists": 0.06130426128705343,
+      "encode_seconds": 0.3875380261249954,
+      "decode_seconds": 0.8037963434167068,
+      "peak_memory_bytes": 6058152448.0,
+      "base_latent_mse": 0.04660026682540774,
+      "repair_latent_rms": 0.06619125821938117,
+      "high_precision_psnr": 22.45579406619072,
+      "high_precision_area_fraction": 0.572916679084301,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 96.66666666666667,
+        "main": 3031.6666666666665,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.029585798816568046,
+        "main": 0.9278718628851255,
+        "allocation": 0.011018159559273618,
+        "scales": 0.014690879412364823,
+        "mask": 0.0,
+        "header": 0.016833299326668025
+      },
+      "ms_ssim": 0.8522297335038028
+    },
+    "39321": {
+      "bpp": 0.08958943684895833,
+      "psnr": 24.756645441055298,
+      "lpips": 0.09983500791713595,
+      "dists": 0.05538731316725413,
+      "encode_seconds": 0.39328091487501143,
+      "decode_seconds": 0.8026671540416146,
+      "peak_memory_bytes": 6058152448.0,
+      "base_latent_mse": 0.024783076252788305,
+      "repair_latent_rms": 0.042855316773056984,
+      "high_precision_psnr": 22.956601083278656,
+      "high_precision_area_fraction": 0.572916679084301,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 96.66666666666667,
+        "main": 4167.833333333333,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.021952234964611482,
+        "main": 0.9464819651035161,
+        "allocation": 0.008175315090269104,
+        "scales": 0.010900420120358805,
+        "mask": 0.0,
+        "header": 0.012490064721244464
+      },
+      "ms_ssim": 0.8700766686057212
+    },
+    "52428": {
+      "bpp": 0.11959160698784722,
+      "psnr": 25.065956592559814,
+      "lpips": 0.09308243434255321,
+      "dists": 0.052983696262041725,
+      "encode_seconds": 0.3911228922915673,
+      "decode_seconds": 0.8059552397083584,
+      "peak_memory_bytes": 6058152448.0,
+      "base_latent_mse": 0.014783061691559851,
+      "repair_latent_rms": 0.03467918676324189,
+      "high_precision_psnr": 23.24250693122546,
+      "high_precision_area_fraction": 0.572916679084301,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 96.66666666666667,
+        "main": 5642.5,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.016445036717797498,
+        "main": 0.959908134622473,
+        "allocation": 0.006124358501800448,
+        "scales": 0.00816581133573393,
+        "mask": 0.0,
+        "header": 0.009356658822195128
+      },
+      "ms_ssim": 0.8799749475014513
+    },
+    "65535": {
+      "bpp": 0.1576775444878472,
+      "psnr": 25.233896732330322,
+      "lpips": 0.08975562080740929,
+      "dists": 0.05100031445423762,
+      "encode_seconds": 0.3912448527084204,
+      "decode_seconds": 0.8045463316667186,
+      "peak_memory_bytes": 6058152448.0,
+      "base_latent_mse": 0.01029675651807338,
+      "repair_latent_rms": 0.03288649170038601,
+      "high_precision_psnr": 23.395667771498363,
+      "high_precision_area_fraction": 0.572916679084301,
+      "scale_saturation": 0.0,
+      "bytes_by_component": {
+        "hyper": 96.66666666666667,
+        "main": 7514.5,
+        "allocation": 36.0,
+        "scales": 48.0,
+        "mask": 0.0,
+        "header": 55.0
+      },
+      "byte_fractions": {
+        "hyper": 0.012472850046235565,
+        "main": 0.9695920517838326,
+        "allocation": 0.004645061396529107,
+        "scales": 0.006193415195372143,
+        "mask": 0.0,
+        "header": 0.00709662157803058
+      },
+      "ms_ssim": 0.8847045193579589
+    }
+  },
+  "high_precision_region": "nearest-upsampled transmitted step <= original-image 25th percentile, ties included",
+  "ms_ssim_protocol": {
+    "implementation": "pyiqa.create_metric('ms_ssim')",
+    "pyiqa_version": "0.1.16",
+    "test_y_channel": true,
+    "color_space": "yiq",
+    "range": "float RGB inputs mapped to [0,1], pyiqa default luminance conversion",
+    "device": "cpu",
+    "same_float_reconstruction_as_other_metrics": true
+  },
+  "evaluation_device": "cuda"
+}

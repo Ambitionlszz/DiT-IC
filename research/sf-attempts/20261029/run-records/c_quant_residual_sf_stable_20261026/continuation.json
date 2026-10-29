@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-10-25T16:27:15.876459+00:00",
+  "source_run": "/data2/ls/checkpoints/c_quant_residual_sf_recovery_20261025",
+  "source_checkpoint": "/data2/ls/checkpoints/c_quant_residual_sf_recovery_20261025/joint/paused.pt",
+  "resume_step": 11332,
+  "reason": "validated numerical stability and bounded DDP FP32 replay",
+  "probe_updates_discarded": true,
+  "save_every": 500,
+  "world_size": 2,
+  "batch_per_gpu": 4,
+  "accumulation_steps": 2,
+  "optimization": "unchanged; restore all optimizer/EMA/teacher/RNG state"
+}

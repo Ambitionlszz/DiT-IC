@@ -1,0 +1,78 @@
+{
+  "crop": 512,
+  "batch": 4,
+  "source_step": 10000,
+  "uniform": [
+    {
+      "q": 0.0,
+      "zero_adapter_max_error": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.019622802734375
+    },
+    {
+      "q": 0.2,
+      "zero_adapter_max_error": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.034881591796875
+    },
+    {
+      "q": 0.4,
+      "zero_adapter_max_error": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.051239013671875
+    },
+    {
+      "q": 0.6,
+      "zero_adapter_max_error": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.066986083984375
+    },
+    {
+      "q": 0.8,
+      "zero_adapter_max_error": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.083709716796875
+    },
+    {
+      "q": 1.0,
+      "zero_adapter_max_error": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.100677490234375
+    }
+  ],
+  "mixed": [
+    {
+      "qa": 0.0,
+      "qb": 1.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.052337646484375,
+      "mask_bits": 64
+    },
+    {
+      "qa": 1.0,
+      "qb": 0.0,
+      "packet_max_error": 0.0,
+      "total_bpp": 0.083099365234375,
+      "mask_bits": 64
+    }
+  ],
+  "no_optimizer_update": true,
+  "content": {
+    "correct": 0.5095304250717163,
+    "wrong_image": 0.8143974542617798,
+    "shuffled": 0.9804708957672119,
+    "teacher_base_nmse": 0.10673848539590836,
+    "student_base_nmse": 0.2916611433029175
+  },
+  "sf_only_gradients": {
+    "g_a": 0.15375685691833496,
+    "g_s": 0.29424557089805603,
+    "router": 0.005536671727895737,
+    "precision_adapter": 0.012425418011844158,
+    "prefix8": 0.23798398673534393,
+    "tail20": 0.0,
+    "vae": 0.0
+  },
+  "passed": true,
+  "peak_allocated_bytes": 9729865728
+}

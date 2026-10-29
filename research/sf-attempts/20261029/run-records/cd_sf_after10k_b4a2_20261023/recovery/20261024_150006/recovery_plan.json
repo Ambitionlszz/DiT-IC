@@ -1,0 +1,23 @@
+{
+  "requested_action": "resume the existing two-GPU Self-Flow experiment with its frozen configuration",
+  "prepared_at": "2026-10-24T15:02:19.367725+08:00",
+  "host_boot_at": "2026-10-24T14:51:48+08:00",
+  "resume_checkpoint": "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/0024000.pt",
+  "resume_step": 24000,
+  "last_logged_step_before_interruption": 24501,
+  "logged_updates_to_replay": 501,
+  "teacher_restored_from_checkpoint": true,
+  "source": "/data2/ls/code/DiT-IC-self-flow-sf10k-recovery-20261023",
+  "frozen_source_hashes_verified": true,
+  "configuration_changed": false,
+  "gpus": [
+    0,
+    1
+  ],
+  "per_gpu_batch": 4,
+  "gradient_accumulation": 2,
+  "effective_batch": 16,
+  "training_log_offset_before_resume": 219251,
+  "stdout_log_offset_before_resume": 229052,
+  "runtime_recovery": "copy persistent ext4 image to temporary storage; repair and mount disposable copy only"
+}

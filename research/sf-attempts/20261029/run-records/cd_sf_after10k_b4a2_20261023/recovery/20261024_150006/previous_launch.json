@@ -1,0 +1,15 @@
+{
+  "pid": 6210,
+  "command": [
+    "/tmp/bt-self-flow-runtime-20261016/linux/venvs/ditic/bin/python",
+    "scripts/launch_delayed_self_flow.py",
+    "--gpus",
+    "0,1"
+  ],
+  "started_at": "2026-10-23T02:30:50.319567+00:00",
+  "detached": true,
+  "resume_step": 8000,
+  "self_flow_start_step": 10000,
+  "first_sf_update": 10001,
+  "effective_batch": 16
+}

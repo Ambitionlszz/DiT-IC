@@ -1,0 +1,20 @@
+{
+  "source_commit": "073f54eced8bff354f49f3233da9dca9aee8eccf",
+  "implementation_commit": "d6bb1cd",
+  "initialization": "/data2/ls/checkpoints/ditic-50k-warmups/c_precision_v2_lambda16_50k_20261022/backend_init.pt",
+  "initialization_sha256": "72021789824591baa47ce4913f754068d5c0b2ec858278ecd8d15659afe2d5c1",
+  "probe_order": [
+    [
+      8,
+      1
+    ],
+    [
+      4,
+      2
+    ]
+  ],
+  "effective_batch": 16,
+  "crop": 512,
+  "note": "Capacity probe weights will be discarded; research training starts from shared backend_init.",
+  "final_commit": "a9d96a53e1e5d7c503e2892e970037f607466313"
+}

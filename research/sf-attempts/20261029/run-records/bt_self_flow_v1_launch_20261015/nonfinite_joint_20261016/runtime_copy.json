@@ -1,0 +1,11 @@
+{
+  "source": "/data2/ls/code/linux",
+  "runtime": "/tmp/bt-self-flow-runtime-20261016/linux",
+  "hash_checks": {
+    "python/cpython-3.12.14-linux-x86_64-gnu/bin/python3.12": "5ebcd7993f0e40cb4b16e15d2c4c3c343ecad419966299b8e8f6f9e6a36bf779",
+    "venvs/ditic/lib/python3.12/site-packages/torch/__init__.py": "d9dfff4b75d46e4c75572200a3466b70231d05b0318e38ac1bd121789165fb49",
+    "venvs/ditic/lib/python3.12/site-packages/torch/version.py": "6649c6a5ce8422677b26a529d4af2710f89bdf085054373c7b2881862397fd13",
+    "venvs/ditic/lib/python3.12/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12": "095296727cfb5f51e5b3ae69a3cb88cbd7b6592f314ace0fdfc4e1d758c2aa85"
+  },
+  "source_unchanged": true
+}

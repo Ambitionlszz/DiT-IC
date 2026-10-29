@@ -1,0 +1,9 @@
+{
+  "base": "c_sf.json",
+  "self_flow": {
+    "weight": 1.0
+  },
+  "train": {
+    "output": "${C_SF_WEIGHT1_ROOT:-/data2/ls/checkpoints/c_sf_weight1_20261026}/joint"
+  }
+}

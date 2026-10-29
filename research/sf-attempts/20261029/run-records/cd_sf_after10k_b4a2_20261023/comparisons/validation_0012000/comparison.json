@@ -1,0 +1,503 @@
+{
+  "labels": {
+    "baseline": "512 baseline / 200K",
+    "old_c": "Previous C / 95,542",
+    "old_cd": "Previous C+D / 96,750",
+    "current": "C+D+SF / 12K",
+    "prefix": "C+D before SF / 10K"
+  },
+  "archive_mapping": {
+    "C": "old_c",
+    "D": "old_cd"
+  },
+  "steps": {
+    "baseline": 200000,
+    "old_c": 95542,
+    "old_cd": 96750,
+    "current": 12000,
+    "prefix": 10000
+  },
+  "sf_first_update": 10001,
+  "current_validation_identity": {
+    "dataset_fingerprint": "eb5b6604577d4a3a139a725f3de39256c92f6dee07e5af95e11ae2619804091a",
+    "images": 24,
+    "crop": 0,
+    "actual_rate": true
+  },
+  "interpolation": "PCHIP in log actual total packet bpp, no extrapolation",
+  "bd_rate_sign": "Positive means current requires more bitrate at equal quality",
+  "curves": {
+    "baseline": [
+      {
+        "quality_index": 0,
+        "avg_bpp": 0.02529568142361111,
+        "psnr": 22.90525054931641,
+        "ms_ssim": 0.7798437202641705,
+        "lpips": 0.1652450474599997,
+        "dists": 0.09345257778962453,
+        "num_images": 24
+      },
+      {
+        "quality_index": 1,
+        "avg_bpp": 0.03916083441840278,
+        "psnr": 23.82238181432088,
+        "ms_ssim": 0.8229029761724629,
+        "lpips": 0.1311903096114596,
+        "dists": 0.07497384647528331,
+        "num_images": 24
+      },
+      {
+        "quality_index": 2,
+        "avg_bpp": 0.05450439453125,
+        "psnr": 24.42110951741536,
+        "ms_ssim": 0.8491625126969969,
+        "lpips": 0.1127266326608757,
+        "dists": 0.06468503177165985,
+        "num_images": 24
+      },
+      {
+        "quality_index": 3,
+        "avg_bpp": 0.06880018446180555,
+        "psnr": 24.75815447171529,
+        "ms_ssim": 0.8620985535737834,
+        "lpips": 0.1030255470735331,
+        "dists": 0.0601433739066124,
+        "num_images": 24
+      },
+      {
+        "quality_index": 4,
+        "avg_bpp": 0.08062405056423612,
+        "psnr": 24.90865747133891,
+        "ms_ssim": 0.8677395594956917,
+        "lpips": 0.09881716500967741,
+        "dists": 0.05884183943271637,
+        "num_images": 24
+      },
+      {
+        "quality_index": 5,
+        "avg_bpp": 0.08884345160590278,
+        "psnr": 24.96528323491414,
+        "ms_ssim": 0.8700319516216649,
+        "lpips": 0.09726838100080688,
+        "dists": 0.05818868925174078,
+        "num_images": 24
+      }
+    ],
+    "old_c": [
+      {
+        "bpp": 0.029822455512152776,
+        "psnr": 22.538828134536743,
+        "ms_ssim": 0.7786816577610804,
+        "lpips": 0.16710494924336672,
+        "dists": 0.0921656663219134,
+        "avg_bpp": 0.029822455512152776,
+        "quality_index": 0.0
+      },
+      {
+        "bpp": 0.047536214192708336,
+        "psnr": 23.60489757855733,
+        "ms_ssim": 0.8259779976226884,
+        "lpips": 0.12999663036316633,
+        "dists": 0.0720059300462405,
+        "avg_bpp": 0.047536214192708336,
+        "quality_index": 0.2
+      },
+      {
+        "bpp": 0.06721666124131945,
+        "psnr": 24.407188177108765,
+        "ms_ssim": 0.8552154849061114,
+        "lpips": 0.1077717044390738,
+        "dists": 0.06075021376212438,
+        "avg_bpp": 0.06721666124131945,
+        "quality_index": 0.4
+      },
+      {
+        "bpp": 0.09018622504340278,
+        "psnr": 24.993595043818157,
+        "ms_ssim": 0.8736705577291953,
+        "lpips": 0.09538695045436422,
+        "dists": 0.053509136041005455,
+        "avg_bpp": 0.09018622504340278,
+        "quality_index": 0.6
+      },
+      {
+        "bpp": 0.1193813747829861,
+        "psnr": 25.327685197194416,
+        "ms_ssim": 0.8836084505853679,
+        "lpips": 0.08820833374435703,
+        "dists": 0.04943650464216868,
+        "avg_bpp": 0.1193813747829861,
+        "quality_index": 0.8
+      },
+      {
+        "bpp": 0.156158447265625,
+        "psnr": 25.492307901382446,
+        "ms_ssim": 0.8883778371851782,
+        "lpips": 0.08523798764993747,
+        "dists": 0.04846680909395218,
+        "avg_bpp": 0.156158447265625,
+        "quality_index": 1.0
+      }
+    ],
+    "old_cd": [
+      {
+        "bpp": 0.029069688585069444,
+        "psnr": 22.63884099324544,
+        "ms_ssim": 0.779356973966033,
+        "lpips": 0.1640160291766127,
+        "dists": 0.08985164761543274,
+        "avg_bpp": 0.029069688585069444,
+        "quality_index": 0.0
+      },
+      {
+        "bpp": 0.04671563042534722,
+        "psnr": 23.66287287076314,
+        "ms_ssim": 0.8265185010503505,
+        "lpips": 0.12684039026498795,
+        "dists": 0.0721416821082433,
+        "avg_bpp": 0.04671563042534722,
+        "quality_index": 0.2
+      },
+      {
+        "bpp": 0.06645033094618055,
+        "psnr": 24.417192856470745,
+        "ms_ssim": 0.8549392782861331,
+        "lpips": 0.10665093564117949,
+        "dists": 0.059691657622655235,
+        "avg_bpp": 0.06645033094618055,
+        "quality_index": 0.4
+      },
+      {
+        "bpp": 0.08944023980034722,
+        "psnr": 24.968435366948444,
+        "ms_ssim": 0.8732487700210835,
+        "lpips": 0.09502614149823785,
+        "dists": 0.05371192842721939,
+        "avg_bpp": 0.08944023980034722,
+        "quality_index": 0.6
+      },
+      {
+        "bpp": 0.11872694227430557,
+        "psnr": 25.32304040590922,
+        "ms_ssim": 0.883672877665608,
+        "lpips": 0.08764169675608476,
+        "dists": 0.050338404874006905,
+        "avg_bpp": 0.11872694227430557,
+        "quality_index": 0.8
+      },
+      {
+        "bpp": 0.1555820041232639,
+        "psnr": 25.500592867533367,
+        "ms_ssim": 0.8885143866849203,
+        "lpips": 0.08502301728973786,
+        "dists": 0.048921296993891396,
+        "avg_bpp": 0.1555820041232639,
+        "quality_index": 1.0
+      }
+    ],
+    "current": [
+      {
+        "avg_bpp": 0.03628539790709814,
+        "psnr": 22.60462697347005,
+        "lpips": 0.18168888489405313,
+        "dists": 0.09431389967600505
+      },
+      {
+        "avg_bpp": 0.0537244975566864,
+        "psnr": 23.763753255208332,
+        "lpips": 0.13589800397555032,
+        "dists": 0.06988158822059631
+      },
+      {
+        "avg_bpp": 0.07275729874769847,
+        "psnr": 24.617156982421875,
+        "lpips": 0.11213912566502889,
+        "dists": 0.058277333776156105
+      },
+      {
+        "avg_bpp": 0.09450275699297588,
+        "psnr": 25.123341878255207,
+        "lpips": 0.10015827417373657,
+        "dists": 0.05301989118258158
+      },
+      {
+        "avg_bpp": 0.1216905415058136,
+        "psnr": 25.419960021972656,
+        "lpips": 0.09370369712511699,
+        "dists": 0.05078779657681783
+      },
+      {
+        "avg_bpp": 0.15654839078585306,
+        "psnr": 25.558558146158855,
+        "lpips": 0.09128942092259724,
+        "dists": 0.05010587970415751
+      }
+    ],
+    "prefix": [
+      {
+        "avg_bpp": 0.038160537679990135,
+        "psnr": 22.711931864420574,
+        "lpips": 0.17665141820907593,
+        "dists": 0.09029313921928406
+      },
+      {
+        "avg_bpp": 0.05597940584023794,
+        "psnr": 23.85706075032552,
+        "lpips": 0.13398842016855875,
+        "dists": 0.07044016818205516
+      },
+      {
+        "avg_bpp": 0.07585313419500987,
+        "psnr": 24.655990600585938,
+        "lpips": 0.11057229836781819,
+        "dists": 0.05786071717739105
+      },
+      {
+        "avg_bpp": 0.10000271598498027,
+        "psnr": 25.15662892659505,
+        "lpips": 0.09942081570625305,
+        "dists": 0.05308741331100464
+      },
+      {
+        "avg_bpp": 0.13132391373316446,
+        "psnr": 25.418729146321613,
+        "lpips": 0.0937224527200063,
+        "dists": 0.05155295133590698
+      },
+      {
+        "avg_bpp": 0.16990830500920615,
+        "psnr": 25.54359181722005,
+        "lpips": 0.09108259280522664,
+        "dists": 0.05061058203379313
+      }
+    ]
+  },
+  "matched_rate": {
+    "0.04": {
+      "baseline": {
+        "psnr": 23.863400749280483,
+        "lpips": 0.12983335694341272,
+        "dists": 0.07422129031792798
+      },
+      "old_c": {
+        "psnr": 23.20848366633921,
+        "lpips": 0.1427680562406134,
+        "dists": 0.07878370737430872
+      },
+      "old_cd": {
+        "psnr": 23.328868568572407,
+        "lpips": 0.1376992706508752,
+        "dists": 0.07782077800018937
+      },
+      "current": {
+        "psnr": 22.898175176912336,
+        "lpips": 0.1686947263812186,
+        "dists": 0.0872220217894804
+      },
+      "prefix": {
+        "psnr": 22.860873818622302,
+        "lpips": 0.17061168878601798,
+        "dists": 0.08761344887023846
+      }
+    },
+    "0.06": {
+      "baseline": {
+        "psnr": 24.572481357300177,
+        "lpips": 0.10831239910212911,
+        "dists": 0.062482129044325437
+      },
+      "old_c": {
+        "psnr": 24.152878920876297,
+        "lpips": 0.11419823316079362,
+        "dists": 0.06409669811425854
+      },
+      "old_cd": {
+        "psnr": 24.20686831894345,
+        "lpips": 0.11175605741220816,
+        "dists": 0.0627708086808876
+      },
+      "current": {
+        "psnr": 24.09112757900612,
+        "lpips": 0.1260555381090775,
+        "dists": 0.06495817208312715
+      },
+      "prefix": {
+        "psnr": 24.052106834089543,
+        "lpips": 0.1277919642064706,
+        "dists": 0.06717546873350635
+      }
+    },
+    "0.08": {
+      "baseline": {
+        "psnr": 24.903036462208423,
+        "lpips": 0.09897220646225412,
+        "dists": 0.05889838376264867
+      },
+      "old_c": {
+        "psnr": 24.77995927915423,
+        "lpips": 0.09975703524433742,
+        "dists": 0.056097403657828906
+      },
+      "old_cd": {
+        "psnr": 24.780624849318897,
+        "lpips": 0.0988608900121271,
+        "dists": 0.05559177592199421
+      },
+      "current": {
+        "psnr": 24.824700085293475,
+        "lpips": 0.10705623268317808,
+        "dists": 0.05596369133847311
+      },
+      "prefix": {
+        "psnr": 24.768367228902992,
+        "lpips": 0.10788979172515639,
+        "dists": 0.056627714508068736
+      }
+    }
+  },
+  "bd_rate": {
+    "current_vs_baseline": {
+      "psnr": {
+        "status": "computed",
+        "percent": 34.1619951194942,
+        "increasing_quality_interval": [
+          22.90525054931641,
+          24.96528323491414
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.6973868262890474
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 43.05810859101719,
+        "increasing_quality_interval": [
+          -0.1652450474599997,
+          -0.09726838100080688
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7519587337448906
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 22.551651567586088,
+        "increasing_quality_interval": [
+          -0.09345257778962453,
+          -0.05818868925174078
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.7976807954832725
+      }
+    },
+    "current_vs_old_c": {
+      "psnr": {
+        "status": "computed",
+        "percent": 3.37093959639706,
+        "increasing_quality_interval": [
+          22.60462697347005,
+          25.492307901382446
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9777215880494823,
+        "overlap_fraction_of_candidate_quality_span": 0.9775721772433495
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 23.51752881076619,
+        "increasing_quality_interval": [
+          -0.16710494924336672,
+          -0.09128942092259724
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9260821074231064,
+        "overlap_fraction_of_candidate_quality_span": 0.83867232160479
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 9.122043466818496,
+        "increasing_quality_interval": [
+          -0.0921656663219134,
+          -0.05010587970415751
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9624916825249025,
+        "overlap_fraction_of_candidate_quality_span": 0.951406252633353
+      }
+    },
+    "current_vs_old_cd": {
+      "psnr": {
+        "status": "computed",
+        "percent": 6.151071461483242,
+        "increasing_quality_interval": [
+          22.63884099324544,
+          25.500592867533367
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.9687943648609209
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": 29.763830832092232,
+        "increasing_quality_interval": [
+          -0.1640160291766127,
+          -0.09128942092259724
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9206714178485378,
+        "overlap_fraction_of_candidate_quality_span": 0.8045026492300803
+      },
+      "dists": {
+        "status": "computed",
+        "percent": 11.12005923627755,
+        "increasing_quality_interval": [
+          -0.08985164761543274,
+          -0.05010587970415751
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9710585740830993,
+        "overlap_fraction_of_candidate_quality_span": 0.8990623858880368
+      }
+    },
+    "current_vs_prefix": {
+      "psnr": {
+        "status": "computed",
+        "percent": -2.2198711174394807,
+        "increasing_quality_interval": [
+          22.711931864420574,
+          25.54359181722005
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.9586072888157273
+      },
+      "lpips": {
+        "status": "computed",
+        "percent": -2.2437093621793385,
+        "increasing_quality_interval": [
+          -0.17665141820907593,
+          -0.09128942092259724
+        ],
+        "overlap_fraction_of_reference_quality_span": 0.9975829033950804,
+        "overlap_fraction_of_candidate_quality_span": 0.9442754805872764
+      },
+      "dists": {
+        "status": "computed",
+        "percent": -4.415840375346975,
+        "increasing_quality_interval": [
+          -0.09029313921928406,
+          -0.05061058203379313
+        ],
+        "overlap_fraction_of_reference_quality_span": 1.0,
+        "overlap_fraction_of_candidate_quality_span": 0.8976325384118423
+      }
+    }
+  },
+  "sources_sha256": {
+    "/data2/ls/checkpoints/bt_self_flow_stopped_eval_20261022/comparison.json": "dc1f54420a94f680b0e7d387872462c1ce90b296c81f5ac1ef24040b41f52ac9",
+    "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/validation_0012000.json": "e6ff7a6e9e50743510a10d17897b1cc3120c2a04d364a0bb926f2db6e5e322d0",
+    "/data2/ls/checkpoints/cd_sf_after10k_b4a2_20261023/joint/validation_0010000.json": "fdadb25398a04850764d5117b9d114687e5cc518c628fb152c6da93aa78f44bb",
+    "/data2/ls/code/deployment-bootstrap/compare_baseline512_history.py": "30010e92b39a5080d3caa8fbdc213921f857fe4c7b31e7c45ddbed30acfef402"
+  },
+  "limits": [
+    "Training budgets, loss weights and effective batches differ; this is checkpoint performance, not a controlled SF ablation.",
+    "Historical C/D use 2*MSE+LPIPS+0.5*DISTS plus 0.1 base and 0.1 repaired; current uses 4*MSE+LPIPS+DISTS plus 0.1 base, no repaired.",
+    "Baseline is the archived non-window 512-trained 200K EMA evaluated with global decoding; it was not rerun.",
+    "Historical C/D come from independent full-packet decoding; current validation encodes all 24 images at six qualities and checks decoded versus hard-forward equality on two images per quality.",
+    "Current validation uses upstream LPIPS and MSE-derived RGB PSNR, historical packet evaluation uses torchmetrics LPIPS and pyiqa PSNR. Both use Alex LPIPS, RGB float reconstruction and pyiqa DISTS; this is not a newly unified evaluator run.",
+    "Current versus prefix includes 2000 additional optimization steps and local mixed-quality training, as well as SF alignment.",
+    "BD-rate comparisons integrate different common quality intervals; inspect intervals in JSON and use matched-rate rows to assess differences at a fixed bitrate."
+  ]
+}

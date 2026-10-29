@@ -1,0 +1,158 @@
+{
+  "checkpoint": "/data2/ls/checkpoints/c_native_relational_sf_20261027/joint/paused.pt",
+  "step": 13643,
+  "micro_seen": 13643,
+  "rank": 0,
+  "batch": 4,
+  "q": 0.0,
+  "sample_keys": [
+    [
+      15100,
+      6993810192040941890
+    ],
+    [
+      76003,
+      9178397202942995525
+    ],
+    [
+      83052,
+      1065599058705379519
+    ],
+    [
+      48590,
+      5210083712303805647
+    ]
+  ],
+  "data_fingerprint": "e3d86490abc0f158700aab9288e7214494606d8df27b59b19ec6d40770fb11d1",
+  "no_optimizer_update": true,
+  "cases": {
+    "latest_fp16": {
+      "feature": {
+        "shape": [
+          4,
+          256,
+          1152
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 3242.719970703125,
+        "spatial_std": 10.439836502075195
+      },
+      "image": {
+        "shape": [
+          4,
+          3,
+          512,
+          512
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "max_abs": 1.0,
+        "spatial_std": null
+      }
+    },
+    "latest_fp32": {
+      "clean": {
+        "shape": [
+          4,
+          32,
+          16,
+          16
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 7.846580505371094,
+        "spatial_std": null
+      },
+      "coarse": {
+        "shape": [
+          4,
+          32,
+          16,
+          16
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 7.169330596923828,
+        "spatial_std": null
+      },
+      "feature": {
+        "shape": [
+          4,
+          256,
+          1152
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 3242.6767578125,
+        "spatial_std": 10.439604759216309
+      },
+      "image": {
+        "shape": [
+          4,
+          3,
+          512,
+          512
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 1.0,
+        "spatial_std": null
+      },
+      "teacher_spatial_std": 12.431439399719238,
+      "native_correct_relation": 0.0008514225482940674,
+      "native_wrong_relation": 0.11227379739284515,
+      "teacher_to_wrong_image": 0.11244672536849976,
+      "teacher_to_cross_image_average": 0.04403036832809448
+    },
+    "source_c10k_fp16_same_images": {
+      "clean": {
+        "shape": [
+          4,
+          32,
+          16,
+          16
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 7.846580505371094,
+        "spatial_std": null
+      },
+      "coarse": {
+        "shape": [
+          4,
+          32,
+          16,
+          16
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 7.4509382247924805,
+        "spatial_std": null
+      },
+      "feature": {
+        "shape": [
+          4,
+          256,
+          1152
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "max_abs": 1078.56005859375,
+        "spatial_std": 3.25396466255188
+      },
+      "image": {
+        "shape": [
+          4,
+          3,
+          512,
+          512
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "max_abs": 1.0,
+        "spatial_std": null
+      }
+    }
+  }
+}
