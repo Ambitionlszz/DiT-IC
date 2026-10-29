@@ -179,6 +179,7 @@ def quality_conditioned_sana_forward(
     continuous_conditioning=False,
     checkpoint_blocks=False,
     precision_embedding=None,
+    context_is_projected=False,
 ):
     """Run SANA with spatial q conditioning and optionally expose one layer."""
     batch_size, _, height, width = hidden_states.shape
@@ -202,7 +203,8 @@ def quality_conditioned_sana_forward(
         batch_size=batch_size,
         hidden_dtype=hidden_states.dtype,
     )
-    encoder_hidden_states = sana.caption_projection(encoder_hidden_states)
+    if not context_is_projected:
+        encoder_hidden_states = sana.caption_projection(encoder_hidden_states)
     encoder_hidden_states = encoder_hidden_states.view(
         batch_size, -1, hidden_states.shape[-1]
     )

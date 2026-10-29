@@ -1,0 +1,5 @@
+base: e2_privileged.yaml
+evidence_self_flow:
+  teacher_evidence: low
+train:
+  output: ${SF_RUN_ROOT:-/data1/ls/code/runs/newc_self_flow_ablation_20261030}/E1_interface

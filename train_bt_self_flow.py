@@ -30,6 +30,8 @@ from models.bt_self_flow.experiment import (asset_identity, check_stage_model, l
                                             optimization_contract, optimizer_groups, training_contract)
 from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
+from models.bt_self_flow.evidence_training import (average_gradients, evidence_backward,
+                                                    synchronize_initial_state)
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
 from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
@@ -84,14 +86,15 @@ def sample_control(config, step, rank, shape, device):
 
 def initialize_from(model, checkpoint, phase):
     source_phase = checkpoint["phase"]
+    extra = {"initialize_evidence": True} if hasattr(model, "evidence_projection") else {}
     if phase == "backend":
         if source_phase != "backend_init":
             raise ValueError("C/D backend adaptation requires the shared backend_init checkpoint")
-        model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
+        model.load_bt_state(checkpoint["raw"], initialize_conditioner=True, **extra,
                                 **({"initialize_pixel_adapter": True} if hasattr(model, "pixel_adapter") else {}))
     elif phase == "joint":
         if source_phase == "backend_init" and checkpoint["backend"] == "shared":
-            model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
+            model.load_bt_state(checkpoint["raw"], initialize_conditioner=True, **extra,
                                 **({"initialize_pixel_adapter": True} if hasattr(model, "pixel_adapter") else {}))
         elif source_phase == "backend" and checkpoint["backend"] == model.backend:
             # Keep explicit continuation of earlier staged experiments usable.
@@ -222,6 +225,12 @@ def train(config, args, rank, world, device):
     else:
         initialize_data_scale(model, dataset, settings.get("data_scale_samples", 128), settings["seed"])
     groups, auxiliary = optimizer_groups(model, config)
+    evidence_method = bool(config.get("evidence_self_flow"))
+    main_parameters = [p for group in groups for p in group["params"]]
+    codec_parameters = [p for group in groups if group["name"] == "codec" for p in group["params"]]
+    backend_parameters = [p for group in groups if group["name"] != "codec" for p in group["params"]]
+    if evidence_method:
+        synchronize_initial_state(model, world)
     # Quantiles are auxiliary-only and manually synchronized. Exclude them from
     # DDP's main reducer rather than reusing a reducer after the main backward.
     ignored = [name for name, _ in model.named_parameters() if name.endswith(".quantiles")]
@@ -238,7 +247,8 @@ def train(config, args, rank, world, device):
     amp_dtype = torch.float16 if fp16 else torch.bfloat16
     scaler = torch.amp.GradScaler("cuda", enabled=fp16)
     image_loss = None if phase == "codec" else ImageLoss(
-        **config.get("image_loss", {}), checkpoint_features=hasattr(model, "pixel_adapter")).to(device).eval()
+        **config.get("image_loss", {}),
+        checkpoint_features=hasattr(model, "pixel_adapter") or evidence_method).to(device).eval()
     teacher = None
     if config["self_flow"].get("enabled"):
         teacher = BTCrossRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
@@ -290,7 +300,7 @@ def train(config, args, rank, world, device):
                         persistent_workers=config["data"].get("workers", 4) > 0)
     iterator = iter(loader)
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
-                                      broadcast_buffers=False) if world > 1 else model
+                                      broadcast_buffers=False) if world > 1 and not evidence_method else model
 
     last_saved = {}
 
@@ -350,6 +360,9 @@ def train(config, args, rank, world, device):
                           "precision_consistent": model.codec.precision_consistent,
                           "saved_tensors": config.get("execution", {}).get("saved_tensors", "device"),
                           "checkpoint_perceptual_loss": bool(image_loss and image_loss.checkpoint_features),
+                          "evidence_self_flow": config.get("evidence_self_flow"),
+                          "gradient_synchronization": "explicit_mean" if evidence_method else "native_DDP",
+                          "per_rank_batch": settings["batch_size"],
                           "trainable": sum(p.numel() for p in model.parameters() if p.requires_grad)}), flush=True)
     model.train()
     writer = None
@@ -410,43 +423,48 @@ def train(config, args, rank, world, device):
                     micro_seen += 1
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
-                context = wrapped.no_sync() if world > 1 and not synchronize else nullcontext()
+                context = wrapped.no_sync() if world > 1 and not evidence_method and not synchronize else nullcontext()
                 storage_context = (preserve_stride_cpu_offload(pin_memory=device.type == "cuda")
                                    if config.get("execution", {}).get("saved_tensors") == "stride_preserving_cpu"
                                    else nullcontext())
                 with context, storage_context, full_precision_recompute(model, full_precision_retry):
-                    with torch.autocast(device_type=device.type, dtype=amp_dtype,
-                                        enabled=device.type == "cuda" and not full_precision_retry,
-                                        cache_enabled=not hasattr(model, "pixel_adapter")):
-                        result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
-                        loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
-                                                                 image_loss, objective=config.get("objective"),
-                                                                 quality=config.get("quality"))
-                        if teacher is not None:
-                            with torch.no_grad():
-                                high = model.codec.quantize_analysis(result.source, RateControl(1.))
-                                high_scale = model.distortion_scale(result.clean, high["mean"])
-                                target = teacher(high["mean"], model.fixed_text_embed,
-                                                 model.self_flow_timestep(image.shape[0], device), high_scale["log_rho"])
-                            sf_loss, valid_fraction = cross_rate_loss(result.feature, target,
-                                                                      high_scale["measured"], result.scale_info["measured"])
-                            sf = config["self_flow"]
-                            warmup = sf.get("warmup", 1000)
-                            ramp = max(0., min(1., (step-warmup)/sf.get("ramp", 2000)))
-                            if synchronize and step % sf.get("calibrate_every", 500) == 0:
-                                rd_gradient = torch.autograd.grad(loss, result.coarse, retain_graph=True)[0].float().norm()
-                                sf_gradient = torch.autograd.grad(sf_loss, result.coarse, retain_graph=True)[0].float().norm()
-                                norms = torch.stack([rd_gradient, sf_gradient])
-                                if world > 1:
-                                    dist.all_reduce(norms)
-                                    norms /= world
-                                ratio = (norms[0]/norms[1].clamp_min(1e-12)).item()
-                                candidate = min(10., sf.get("gradient_target", .05)*ratio)
-                                rep_weight = min(.9*rep_weight+.1*candidate, sf.get("gradient_cap", .1)*ratio)
-                            loss = loss+ramp*rep_weight*sf_loss
-                            metrics.update(sf=sf_loss, teacher_valid=valid_fraction,
-                                           sf_weight=sf_loss.new_tensor(ramp*rep_weight),
-                                           student_feature_std=result.feature.float().std(dim=1).mean())
+                    if evidence_method:
+                        result, loss, metrics = evidence_backward(
+                            model, image, control, image_loss, config, step, rank, world, scaler,
+                            codec_parameters, backend_parameters, amp_dtype, full_precision_retry)
+                    else:
+                        with torch.autocast(device_type=device.type, dtype=amp_dtype,
+                                            enabled=device.type == "cuda" and not full_precision_retry,
+                                            cache_enabled=not hasattr(model, "pixel_adapter")):
+                            result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
+                            loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
+                                                                     image_loss, objective=config.get("objective"),
+                                                                     quality=config.get("quality"))
+                            if teacher is not None:
+                                with torch.no_grad():
+                                    high = model.codec.quantize_analysis(result.source, RateControl(1.))
+                                    high_scale = model.distortion_scale(result.clean, high["mean"])
+                                    target = teacher(high["mean"], model.fixed_text_embed,
+                                                     model.self_flow_timestep(image.shape[0], device), high_scale["log_rho"])
+                                sf_loss, valid_fraction = cross_rate_loss(result.feature, target,
+                                                                          high_scale["measured"], result.scale_info["measured"])
+                                sf = config["self_flow"]
+                                warmup = sf.get("warmup", 1000)
+                                ramp = max(0., min(1., (step-warmup)/sf.get("ramp", 2000)))
+                                if synchronize and step % sf.get("calibrate_every", 500) == 0:
+                                    rd_gradient = torch.autograd.grad(loss, result.coarse, retain_graph=True)[0].float().norm()
+                                    sf_gradient = torch.autograd.grad(sf_loss, result.coarse, retain_graph=True)[0].float().norm()
+                                    norms = torch.stack([rd_gradient, sf_gradient])
+                                    if world > 1:
+                                        dist.all_reduce(norms)
+                                        norms /= world
+                                    ratio = (norms[0]/norms[1].clamp_min(1e-12)).item()
+                                    candidate = min(10., sf.get("gradient_target", .05)*ratio)
+                                    rep_weight = min(.9*rep_weight+.1*candidate, sf.get("gradient_cap", .1)*ratio)
+                                loss = loss+ramp*rep_weight*sf_loss
+                                metrics.update(sf=sf_loss, teacher_valid=valid_fraction,
+                                               sf_weight=sf_loss.new_tensor(ramp*rep_weight),
+                                               student_feature_std=result.feature.float().std(dim=1).mean())
                     finite = torch.isfinite(loss).to(torch.int32)
                     if world > 1:
                         dist.all_reduce(finite, op=dist.ReduceOp.MIN)
@@ -457,7 +475,8 @@ def train(config, args, rank, world, device):
                                           **nonfinite_diagnostics(result, metrics))
                         print(json.dumps({"nonfinite_forward": diagnostic, "rank": rank}), flush=True)
                         break
-                    scaler.scale(loss/settings["accumulation_steps"]).backward()
+                    if not evidence_method:
+                        scaler.scale(loss/settings["accumulation_steps"]).backward()
                 for key, value in metrics.items():
                     metrics_sum[key] = metrics_sum.get(key, 0.)+value.detach()/settings["accumulation_steps"]
             if nonfinite_forward:
@@ -492,6 +511,8 @@ def train(config, args, rank, world, device):
                     raise FloatingPointError("nonfinite main loss persists; saved the last completed update for diagnosis")
                 restore_rng(update_rng)
                 continue
+            if evidence_method:
+                average_gradients(main_parameters, world)
             scaler.unscale_(optimizer)
             norm = torch.nn.utils.clip_grad_norm_([p for group in optimizer.param_groups for p in group["params"]],
                                                    config["optimizer"].get("max_grad_norm", 4.))
@@ -543,6 +564,9 @@ def train(config, args, rank, world, device):
                                   q=control.value, rate_coefficient=rate_beta(control, config.get("quality")),
                                   learning_rates={group["name"]: group["lr"] for group in optimizer.param_groups},
                                   **metrics_sum)
+                    if evidence_method:
+                        record["gradient_clip_factor"] = min(1., config["optimizer"].get("max_grad_norm", 4.)
+                                                             /max(float(norm), 1e-12))
                     if model.codec.precision_conditioning:
                         with torch.no_grad():
                             delta = model.codec.steps(control, result.source.allocation)

@@ -1,0 +1,35 @@
+# Native C reference on the same two-rank/effective-batch-8 recipe.
+base: ../precision_v3/c_joint.yaml
+model:
+  sana_path: /data1/ls/pretrained/pretrained/Sana_600M_1024px_diffusers
+  text_path: /data1/ls/pretrained/pretrained/fixed_text_embed_gemma.pt
+data:
+  train:
+  - /data1/ls/data/DIV2K_train_HR_clean
+  - /data1/ls/data/Flickr2K/Flickr2K_png
+  - /data1/ls/data/LSDIR
+  - /data1/ls/data/clic_professional_train_2020/clic_professional_train_2020_png
+  valid:
+  - /data1/ls/data/Kodak
+  crop: 512
+  valid_crop: 0
+  valid_limit: 24
+  workers: 8
+decoder:
+  method: native
+execution:
+  frozen_encoder_batch_size: 0
+  saved_tensors: device
+train:
+  output: ${SF_RUN_ROOT:-/data1/ls/code/runs/newc_self_flow_ablation_20261030}/E0_new_C
+  batch_size: 4
+  accumulation_steps: 1
+  effective_batch: 8
+  log_every: 10
+  eval_every: 2000
+  save_every: 2000
+  validation_actual_bpp: true
+  packet_samples: 2
+  full_decode_every: 10000
+  keep_last_checkpoints: 2
+  tensorboard: true

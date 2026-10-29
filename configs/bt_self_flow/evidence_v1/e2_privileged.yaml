@@ -1,0 +1,5 @@
+base: e3_self_flow.yaml
+evidence_self_flow:
+  sf_enabled: false
+train:
+  output: ${SF_RUN_ROOT:-/data1/ls/code/runs/newc_self_flow_ablation_20261030}/E2_privileged

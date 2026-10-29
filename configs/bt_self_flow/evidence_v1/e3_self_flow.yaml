@@ -1,0 +1,46 @@
+# GPU1+GPU2: two ranks x batch 4 x accumulation 1 = effective batch 8.
+base: ../precision_v3/c_joint.yaml
+model:
+  sana_path: /data1/ls/pretrained/pretrained/Sana_600M_1024px_diffusers
+  text_path: /data1/ls/pretrained/pretrained/fixed_text_embed_gemma.pt
+data:
+  train:
+    - /data1/ls/data/DIV2K_train_HR_clean
+    - /data1/ls/data/Flickr2K/Flickr2K_png
+    - /data1/ls/data/LSDIR
+    - /data1/ls/data/clic_professional_train_2020/clic_professional_train_2020_png
+  valid: [/data1/ls/data/Kodak]
+  crop: 512
+  valid_crop: 0
+  valid_limit: 24
+  workers: 8
+decoder:
+  method: native
+evidence_self_flow:
+  method: cross_rate_evidence_self_flow_v1
+  teacher_evidence: high
+  sf_enabled: true
+  beta: 0.25
+  coefficient: 0.05
+  warmup: 1000
+  ramp: 2000
+  student_layer: 8
+  teacher_layer: 20
+  seed: 2903
+  teacher_stream: 9001
+execution:
+  frozen_encoder_batch_size: 0
+  saved_tensors: device
+train:
+  output: ${SF_RUN_ROOT:-/data1/ls/code/runs/newc_self_flow_gpu12_20261030}/joint
+  batch_size: 4
+  accumulation_steps: 1
+  effective_batch: 8
+  log_every: 10
+  eval_every: 2000
+  save_every: 2000
+  validation_actual_bpp: true
+  packet_samples: 2
+  full_decode_every: 10000
+  keep_last_checkpoints: 2
+  tensorboard: true

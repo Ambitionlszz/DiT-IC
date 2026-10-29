@@ -18,6 +18,34 @@ PIXEL_METHOD = "sana_conditioned_pixel_adapter_v1"
 PRECISION_PIXEL_METHOD = "precision_consistent_pixel_adapter_v1"
 
 
+def validate_evidence(config):
+    settings = config.get("evidence_self_flow")
+    if settings is None:
+        return
+    from .evidence_model import METHOD
+    if settings.get("method") != METHOD:
+        raise ValueError("unknown evidence Self-Flow method")
+    if (config["train"]["phase"] != "joint" or config["model"]["backend"] != "C"
+            or not config["model"].get("codec", {}).get("precision_consistent")
+            or config.get("decoder", {}).get("method", "native") != "native"
+            or config["self_flow"].get("enabled") or config["self_flow"].get("mixed_sampling")):
+        raise ValueError("evidence Self-Flow requires native precision-consistent joint C, without legacy SF")
+    allowed = {"method", "teacher_evidence", "sf_enabled", "beta", "coefficient", "warmup", "ramp",
+               "student_layer", "teacher_layer", "seed", "teacher_stream"}
+    if set(settings) - allowed:
+        raise ValueError("unknown evidence Self-Flow option")
+    if settings.get("teacher_evidence", "high") not in ("low", "high"):
+        raise ValueError("teacher_evidence must be low or high")
+    if settings.get("sf_enabled", True) and settings.get("teacher_evidence", "high") != "high":
+        raise ValueError("Self-Flow requires privileged high-rate evidence")
+    for name, default, lower, upper in (("beta", .25, 0., 1.), ("coefficient", .05, 0., float("inf"))):
+        value = settings.get(name, default)
+        if not isinstance(value, (int, float)) or not math.isfinite(value) or not lower <= value <= upper:
+            raise ValueError(f"invalid evidence {name}")
+    if settings.get("warmup", 1000) < 0 or settings.get("ramp", 2000) <= 0:
+        raise ValueError("invalid evidence Self-Flow schedule")
+
+
 def validate_decoder(config):
     decoder = config.get("decoder", {})
     method = decoder.get("method", "native")
@@ -85,6 +113,7 @@ def load_config(path):
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
     validate_decoder(config)
+    validate_evidence(config)
     storage = config.get("execution", {}).get("saved_tensors", "device")
     if storage not in ("device", "stride_preserving_cpu"):
         raise ValueError("unknown saved tensor storage policy")
@@ -137,6 +166,7 @@ def merge(base, override):
 
 def make_model(config, device):
     validate_decoder(config)
+    validate_evidence(config)
     model = config["model"]
     phase = config["train"]["phase"]
     torch.manual_seed(config["train"]["seed"])
@@ -149,6 +179,11 @@ def make_model(config, device):
     else:
         constructor, decoder_options = BTCodec, {}
         method = config.get("decoder", {}).get("method", "native")
+        evidence = config.get("evidence_self_flow")
+        if evidence:
+            from .evidence_model import EvidenceSelfFlowCodec
+            constructor = EvidenceSelfFlowCodec
+            decoder_options["evidence_config"] = evidence
         if method in (PIXEL_METHOD, PRECISION_PIXEL_METHOD):
             if method == PRECISION_PIXEL_METHOD:
                 from .precision_pixel_model import PrecisionCPixelAdapterCodec
@@ -161,8 +196,8 @@ def make_model(config, device):
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
                          vae_rank=model.get("vae_rank", 32), checkpoint_blocks=model.get("checkpoint_blocks", True),
                          representation=config["self_flow"].get("enabled", False),
-                         student_layer=config["self_flow"].get("student_layer", 8),
-                         teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device),
+                         student_layer=(evidence or config["self_flow"]).get("student_layer", 8),
+                         teacher_layer=(evidence or config["self_flow"]).get("teacher_layer", 20), device=str(device),
                          **decoder_options)
         result.set_codec_frozen(phase == "backend")
     return result.to(device)
