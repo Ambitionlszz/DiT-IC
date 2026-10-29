@@ -14,6 +14,54 @@ from .checkpoint import sha256_file
 from .model import BTCodec, BTCodecStage
 
 
+PIXEL_METHOD = "sana_conditioned_pixel_adapter_v1"
+PRECISION_PIXEL_METHOD = "precision_consistent_pixel_adapter_v1"
+
+
+def validate_decoder(config):
+    decoder = config.get("decoder", {})
+    method = decoder.get("method", "native")
+    if method == "native":
+        if decoder and set(decoder) != {"method"}:
+            raise ValueError("native decoder does not accept PiT options")
+        return
+    if method not in (PIXEL_METHOD, PRECISION_PIXEL_METHOD):
+        raise ValueError("unknown decoder method")
+    if set(decoder) - {"method", "pixel_adapter"}:
+        raise ValueError("unknown PiT decoder settings")
+    if (config["model"]["backend"] != "C" or config["train"]["phase"] not in ("codec", "joint")
+            or config["self_flow"].get("enabled") or config["self_flow"].get("mixed_sampling")):
+        raise ValueError("PiT requires pure C codec/joint stages with Self-Flow disabled")
+    codec = config["model"].get("codec", {})
+    if not codec.get("precision_conditioning"):
+        raise ValueError("PiT requires precision_conditioning")
+    if bool(codec.get("precision_consistent")) != (method == PRECISION_PIXEL_METHOD):
+        raise ValueError("PiT decoder method must match the precision-v2/v3 frontend")
+    settings = decoder.get("pixel_adapter", {})
+    allowed = {"depth", "pixel_dim", "patch_size", "context_dim", "attention_dim", "heads",
+               "use_quantization", "delta_ref", "checkpoint_blocks", "seed"}
+    if set(settings) - allowed:
+        raise ValueError("unknown pixel_adapter option")
+    for name, default in (("depth", 2), ("pixel_dim", 16), ("patch_size", 16),
+                          ("context_dim", 256), ("attention_dim", 256), ("heads", 4)):
+        value = settings.get(name, default)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ValueError(f"pixel_adapter.{name} must be a positive integer")
+    if settings.get("pixel_dim", 16) % 4 or settings.get("context_dim", 256) % 2:
+        raise ValueError("PiT sinusoidal widths must have compatible dimensions")
+    width, heads = settings.get("attention_dim", 256), settings.get("heads", 4)
+    if width % heads or (width // heads) % 4:
+        raise ValueError("PiT attention head dimension must be divisible by four")
+    reference = settings.get("delta_ref", 1.)
+    if not isinstance(reference, (int, float)) or not math.isfinite(reference) or reference <= 0:
+        raise ValueError("pixel_adapter.delta_ref must be finite and positive")
+    for name in ("use_quantization", "checkpoint_blocks"):
+        if name in settings and not isinstance(settings[name], bool):
+            raise ValueError(f"pixel_adapter.{name} must be boolean")
+    if not isinstance(settings.get("seed", 903), int):
+        raise ValueError("pixel_adapter.seed must be an integer")
+
+
 def load_config(path):
     path = Path(path).resolve()
     with path.open() as source:
@@ -36,6 +84,10 @@ def load_config(path):
         if int(config["train"][key]) < 1:
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
+    validate_decoder(config)
+    storage = config.get("execution", {}).get("saved_tensors", "device")
+    if storage not in ("device", "stride_preserving_cpu"):
+        raise ValueError("unknown saved tensor storage policy")
     codec = config["model"].get("codec", {})
     if codec.get("precision_consistent"):
         if not codec.get("precision_conditioning") or config["model"]["backend"] != "C":
@@ -84,6 +136,7 @@ def merge(base, override):
 
 
 def make_model(config, device):
+    validate_decoder(config)
     model = config["model"]
     phase = config["train"]["phase"]
     torch.manual_seed(config["train"]["seed"])
@@ -94,12 +147,23 @@ def make_model(config, device):
             raise ValueError("frozen encoder batch size must be nonnegative")
         result.encoder_batch_size = size
     else:
-        result = BTCodec(model["sana_path"], model["text_path"], backend=model["backend"],
+        constructor, decoder_options = BTCodec, {}
+        method = config.get("decoder", {}).get("method", "native")
+        if method in (PIXEL_METHOD, PRECISION_PIXEL_METHOD):
+            if method == PRECISION_PIXEL_METHOD:
+                from .precision_pixel_model import PrecisionCPixelAdapterCodec
+                constructor = PrecisionCPixelAdapterCodec
+            else:
+                from .pixel_model import CPixelAdapterCodec
+                constructor = CPixelAdapterCodec
+            decoder_options["pixel_config"] = config["decoder"].get("pixel_adapter", {})
+        result = constructor(model["sana_path"], model["text_path"], backend=model["backend"],
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
                          vae_rank=model.get("vae_rank", 32), checkpoint_blocks=model.get("checkpoint_blocks", True),
                          representation=config["self_flow"].get("enabled", False),
                          student_layer=config["self_flow"].get("student_layer", 8),
-                         teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device))
+                         teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device),
+                         **decoder_options)
         result.set_codec_frozen(phase == "backend")
     return result.to(device)
 
@@ -116,6 +180,8 @@ def optimizer_groups(model, config):
             continue
         if name.startswith("codec."):
             label, lr = "codec", opt["codec_lr"] if phase == "codec" else opt["joint_codec_lr"]
+        elif name.startswith("pixel_adapter."):
+            label, lr = "pixel_adapter", opt["backend_lr"]
         elif name.startswith("vae."):
             if "lora_" not in name or "decoder." not in name:
                 raise ValueError(f"unexpected trainable DC-AE parameter: {name}")
@@ -174,11 +240,19 @@ def training_contract(config, dataset, world_size):
 
 
 def optimization_contract(value):
-    """Validation selection can change explicitly without resetting training."""
+    """Exclude validation selection and tensor placement from optimizer identity.
+
+    CPU/GPU saved-tensor placement changes storage, not the model, objective,
+    sample stream or optimizer. Keep all other execution/model settings strict.
+    """
     value = deepcopy(value)
     for key in ("valid", "valid_limit", "valid_crop"):
         value["data"].pop(key, None)
     value["train"].pop("validation_actual_bpp", None)
+    execution = value.get("execution", {})
+    execution.pop("saved_tensors", None)
+    if not execution:
+        value.pop("execution", None)
     return value
 
 
@@ -203,9 +277,14 @@ def _asset_hash(path, size, modified_ns):
     return sha256_file(path)
 
 
-def check_stage_model(config, source):
+def check_stage_model(config, source, source_assets=None):
     """Stage changes may add D conditioning/projectors, not change the codec."""
+    relocated = any(config["model"].get(key) != source["model"].get(key)
+                    for key in ("sana_path", "text_path"))
+    verified_relocation = relocated and source_assets is not None and asset_identity(config) == source_assets
     for key in ("sana_path", "text_path", "codec", "dit_rank", "vae_rank"):
+        if key in ("sana_path", "text_path") and verified_relocation:
+            continue
         if config["model"].get(key) != source["model"].get(key):
             raise ValueError(f"stage handoff model.{key} differs; start a separate experiment")
     if config["model"].get("codec", {}).get("precision_conditioning") and config.get("quality") != source.get("quality"):

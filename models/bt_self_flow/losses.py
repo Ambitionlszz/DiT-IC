@@ -4,6 +4,7 @@ import math
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 
 
 def rate_beta(control, quality=None):
@@ -22,9 +23,10 @@ def estimated_bpp(result, image):
 
 
 class ImageLoss(nn.Module):
-    def __init__(self, lpips_weight=1., dists_weight=.5, mse_weight=2.):
+    def __init__(self, lpips_weight=1., dists_weight=.5, mse_weight=2., checkpoint_features=False):
         super().__init__()
         self.lpips_weight, self.dists_weight, self.mse_weight = lpips_weight, dists_weight, mse_weight
+        self.checkpoint_features = bool(checkpoint_features)
         self.lpips = self.dists = None
         if lpips_weight:
             import lpips
@@ -37,6 +39,11 @@ class ImageLoss(nn.Module):
             self.dists = pyiqa.create_metric("dists", as_loss=True, device="cpu").net.requires_grad_(False).eval()
 
     def forward(self, predicted, target):
+        if self.checkpoint_features and torch.is_grad_enabled() and predicted.requires_grad:
+            return checkpoint(self._forward, predicted, target, use_reentrant=False)
+        return self._forward(predicted, target)
+
+    def _forward(self, predicted, target):
         # Perceptual statistics and losses are evaluated in FP32, with image
         # gradients retained through the frozen perceptual networks.
         with torch.autocast(device_type=predicted.device.type, enabled=False):

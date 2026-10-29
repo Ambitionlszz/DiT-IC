@@ -20,6 +20,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
+from models.bt_self_flow.activation_storage import preserve_stride_cpu_offload
 from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, DeploymentEMA, capture_rng, clone_state,
                                             evaluation_state, prune_checkpoints, publish_checkpoint_alias, read_checkpoint,
                                             restore_rng, save_atomic, sha256_file)
@@ -86,10 +87,12 @@ def initialize_from(model, checkpoint, phase):
     if phase == "backend":
         if source_phase != "backend_init":
             raise ValueError("C/D backend adaptation requires the shared backend_init checkpoint")
-        model.load_bt_state(checkpoint["raw"], initialize_conditioner=True)
+        model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
+                                **({"initialize_pixel_adapter": True} if hasattr(model, "pixel_adapter") else {}))
     elif phase == "joint":
         if source_phase == "backend_init" and checkpoint["backend"] == "shared":
-            model.load_bt_state(checkpoint["raw"], initialize_conditioner=True)
+            model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
+                                **({"initialize_pixel_adapter": True} if hasattr(model, "pixel_adapter") else {}))
         elif source_phase == "backend" and checkpoint["backend"] == model.backend:
             # Keep explicit continuation of earlier staged experiments usable.
             if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
@@ -119,7 +122,7 @@ def prepare_backend(config, source, output, device):
         raise ValueError("common codec has not shown higher bitrate and lower latent distortion at high quality")
     if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
         raise ValueError("shared codec phase has not completed")
-    check_stage_model(config, checkpoint["config"])
+    check_stage_model(config, checkpoint["config"], checkpoint["assets"])
     if checkpoint["assets"] != asset_identity(config):
         raise ValueError("shared initialization pretrained assets differ")
     target = json.loads(json.dumps(config))
@@ -211,7 +214,7 @@ def train(config, args, rank, world, device):
         source = read_checkpoint(args.init_checkpoint)
         if source["assets"] != assets:
             raise ValueError("stage handoff pretrained assets differ")
-        check_stage_model(config, source["config"])
+        check_stage_model(config, source["config"], source["assets"])
         initialize_from(model, source, phase)
         source_hash, calibration = sha256_file(args.init_checkpoint), source.get("calibration")
     elif phase != "codec":
@@ -234,7 +237,8 @@ def train(config, args, rank, world, device):
     fp16 = device.type == "cuda" and not native_bf16
     amp_dtype = torch.float16 if fp16 else torch.bfloat16
     scaler = torch.amp.GradScaler("cuda", enabled=fp16)
-    image_loss = None if phase == "codec" else ImageLoss(**config.get("image_loss", {})).to(device).eval()
+    image_loss = None if phase == "codec" else ImageLoss(
+        **config.get("image_loss", {}), checkpoint_features=hasattr(model, "pixel_adapter")).to(device).eval()
     teacher = None
     if config["self_flow"].get("enabled"):
         teacher = BTCrossRateTeacher(model.DiT, model.text_proj, model.quality_conditioner, model.teacher_layer).to(device)
@@ -342,6 +346,10 @@ def train(config, args, rank, world, device):
         (output/"resolved.json").write_text(json.dumps(dict(config=config, contract=contract, assets=assets, git_commit=commit), indent=2)+"\n")
         print(json.dumps({"phase": phase, "backend": model.backend, "world_size": world,
                           "effective_batch": world*settings["batch_size"]*settings["accumulation_steps"],
+                          "decoder_method": getattr(model, "decoder_method", "native"),
+                          "precision_consistent": model.codec.precision_consistent,
+                          "saved_tensors": config.get("execution", {}).get("saved_tensors", "device"),
+                          "checkpoint_perceptual_loss": bool(image_loss and image_loss.checkpoint_features),
                           "trainable": sum(p.numel() for p in model.parameters() if p.requires_grad)}), flush=True)
     model.train()
     writer = None
@@ -403,9 +411,13 @@ def train(config, args, rank, world, device):
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
                 context = wrapped.no_sync() if world > 1 and not synchronize else nullcontext()
-                with context, full_precision_recompute(model, full_precision_retry):
+                storage_context = (preserve_stride_cpu_offload(pin_memory=device.type == "cuda")
+                                   if config.get("execution", {}).get("saved_tensors") == "stride_preserving_cpu"
+                                   else nullcontext())
+                with context, storage_context, full_precision_recompute(model, full_precision_retry):
                     with torch.autocast(device_type=device.type, dtype=amp_dtype,
-                                        enabled=device.type == "cuda" and not full_precision_retry):
+                                        enabled=device.type == "cuda" and not full_precision_retry,
+                                        cache_enabled=not hasattr(model, "pixel_adapter")):
                         result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
                         loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
                                                                  image_loss, objective=config.get("objective"),
@@ -569,7 +581,7 @@ def train(config, args, rank, world, device):
             # Backend/joint endpoints immediately save complete.pt; do not
             # serialize the same multi-GB state twice. The codec endpoint keeps
             # a pre-calibration recovery file because calibration can be long.
-            if improved or (step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec")):
+            if improved or step in getattr(args, "checkpoint_steps", []) or (step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec")):
                 save(f"{step:07d}.pt")
             if args.max_updates and step >= args.max_updates:
                 stop = True
@@ -627,6 +639,8 @@ def main():
     group.add_argument("--prepare-backend", metavar="COMMON_CODEC_CHECKPOINT")
     parser.add_argument("--output", help="shared backend_init output, with --prepare-backend")
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
+    parser.add_argument("--checkpoint-steps", type=int, nargs="*", default=[],
+                        help="additional early recovery checkpoints, without changing the resume contract")
     parser.add_argument("--max-updates", type=int, help="stop and save without changing the resume contract")
     parser.add_argument("--run-root", help="override storage root consistently for all phases")
     parser.add_argument("--startup-ready", help="publish readiness after model and optimizer initialization")

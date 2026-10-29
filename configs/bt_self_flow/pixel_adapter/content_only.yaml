@@ -1,0 +1,6 @@
+base: joint.yaml
+decoder:
+  pixel_adapter:
+    use_quantization: false
+train:
+  output: ${PIT_RUN_ROOT:-checkpoints/c_pixel_adapter_v1}/content_only

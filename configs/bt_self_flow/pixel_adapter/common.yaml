@@ -1,0 +1,6 @@
+base: ../precision_v2/common.yaml
+train:
+  output: ${PIT_RUN_ROOT:-checkpoints/c_pixel_adapter_v1}/common
+  batch_size: 8
+  accumulation_steps: 1
+  effective_batch: 8
