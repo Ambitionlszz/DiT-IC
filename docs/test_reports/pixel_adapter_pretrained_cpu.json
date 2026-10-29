@@ -1,0 +1,95 @@
+{
+  "scope": "pretrained_sana_dc_ae_codec_perceptual_rd",
+  "steps": [
+    {
+      "step": 1,
+      "loss": 2.5016679763793945,
+      "grad_norm": 12.727385520935059,
+      "seconds": 49.629349750990514,
+      "gradient_norms": {
+        "vae": 0.16794371604919434,
+        "DiT": 0.03554360568523407,
+        "g_a": 1.4966683387756348,
+        "g_s": 3.485119581222534,
+        "h_a": 0.015490763820707798,
+        "h_s": 0.013936196453869343,
+        "adapter_in": 0.00011268375965300947,
+        "g_c": 0.0005384621326811612,
+        "adapter_out": 0.002554365200921893,
+        "LRP": 0.09219072014093399,
+        "entropy_bottleneck": 0.00048778572818264365,
+        "router": 0.021075746044516563,
+        "precision_embedding": 0.0,
+        "analysis_precision": 0.0757114514708519,
+        "synthesis_precision": 1.1285083293914795,
+        "text_proj": 0.5096590518951416,
+        "pixel_adapter": 0.18986278772354126
+      }
+    },
+    {
+      "step": 2,
+      "loss": 5.633740425109863,
+      "grad_norm": 75.83271789550781,
+      "seconds": 52.6308993420098,
+      "gradient_norms": {
+        "vae": 0.088062584400177,
+        "DiT": 0.029994145035743713,
+        "g_a": 1.3454123735427856,
+        "g_s": 3.6009700298309326,
+        "h_a": 0.01986614242196083,
+        "h_s": 0.01198551431298256,
+        "adapter_in": 3.4477336157578975e-05,
+        "g_c": 0.0003455913974903524,
+        "adapter_out": 0.0006032573874108493,
+        "LRP": 0.07201226055622101,
+        "entropy_bottleneck": 2.192342758178711,
+        "router": 0.012810511514544487,
+        "precision_embedding": 0.013049580156803131,
+        "analysis_precision": 0.07259108871221542,
+        "synthesis_precision": 1.0279629230499268,
+        "text_proj": 0.3050627112388611,
+        "pixel_adapter": 0.23057913780212402
+      }
+    }
+  ],
+  "shapes": {
+    "mu": [
+      1,
+      32,
+      16,
+      16
+    ],
+    "delta": [
+      1,
+      1,
+      8,
+      8
+    ],
+    "image": [
+      1,
+      3,
+      512,
+      512
+    ]
+  },
+  "pixel_parameters": 17796592,
+  "ae_feature_channels": 128,
+  "initial_native_max_error": 0.0,
+  "forward_packet_max_error": 0.0,
+  "packet_bytes": {
+    "hyper": 440,
+    "main": 1192,
+    "allocation": 24,
+    "scales": 0,
+    "mask": 0,
+    "header": 55
+  },
+  "prediction_calls_per_packet": 1,
+  "self_flow_enabled": false,
+  "ema_includes_pixel_adapter": true,
+  "status": "passed",
+  "device": "cpu",
+  "batch_size": 1,
+  "research_training": false,
+  "torch": "2.12.0.dev20260331+cu128"
+}

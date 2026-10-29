@@ -14,6 +14,51 @@ from .checkpoint import sha256_file
 from .model import BTCodec, BTCodecStage
 
 
+PIXEL_METHOD = "sana_conditioned_pixel_adapter_v1"
+
+
+def validate_decoder(config):
+    decoder = config.get("decoder", {})
+    method = decoder.get("method", "native")
+    if method == "native":
+        if decoder and set(decoder) != {"method"}:
+            raise ValueError("native decoder does not accept PiT options")
+        return
+    if method != PIXEL_METHOD:
+        raise ValueError("unknown decoder method")
+    if set(decoder) - {"method", "pixel_adapter"}:
+        raise ValueError("unknown PiT decoder settings")
+    if (config["model"]["backend"] != "C" or config["train"]["phase"] not in ("codec", "joint")
+            or config["self_flow"].get("enabled") or config["self_flow"].get("mixed_sampling")):
+        raise ValueError("PiT requires pure C codec/joint stages with Self-Flow disabled")
+    codec = config["model"].get("codec", {})
+    if not codec.get("precision_conditioning") or codec.get("precision_consistent"):
+        raise ValueError("PiT uses the existing precision-v2 C frontend")
+    settings = decoder.get("pixel_adapter", {})
+    allowed = {"depth", "pixel_dim", "patch_size", "context_dim", "attention_dim", "heads",
+               "use_quantization", "delta_ref", "checkpoint_blocks", "seed"}
+    if set(settings) - allowed:
+        raise ValueError("unknown pixel_adapter option")
+    for name, default in (("depth", 2), ("pixel_dim", 16), ("patch_size", 16),
+                          ("context_dim", 256), ("attention_dim", 256), ("heads", 4)):
+        value = settings.get(name, default)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ValueError(f"pixel_adapter.{name} must be a positive integer")
+    if settings.get("pixel_dim", 16) % 4 or settings.get("context_dim", 256) % 2:
+        raise ValueError("PiT sinusoidal widths must have compatible dimensions")
+    width, heads = settings.get("attention_dim", 256), settings.get("heads", 4)
+    if width % heads or (width // heads) % 4:
+        raise ValueError("PiT attention head dimension must be divisible by four")
+    reference = settings.get("delta_ref", 1.)
+    if not isinstance(reference, (int, float)) or not math.isfinite(reference) or reference <= 0:
+        raise ValueError("pixel_adapter.delta_ref must be finite and positive")
+    for name in ("use_quantization", "checkpoint_blocks"):
+        if name in settings and not isinstance(settings[name], bool):
+            raise ValueError(f"pixel_adapter.{name} must be boolean")
+    if not isinstance(settings.get("seed", 903), int):
+        raise ValueError("pixel_adapter.seed must be an integer")
+
+
 def load_config(path):
     path = Path(path).resolve()
     with path.open() as source:
@@ -36,6 +81,7 @@ def load_config(path):
         if int(config["train"][key]) < 1:
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
+    validate_decoder(config)
     if config["model"].get("codec", {}).get("precision_conditioning"):
         if phase not in ("codec", "joint") or sf.get("enabled") or sf.get("mixed_sampling"):
             raise ValueError("precision v2 has exactly codec warmup and joint C/D training")
@@ -80,18 +126,25 @@ def merge(base, override):
 
 
 def make_model(config, device):
+    validate_decoder(config)
     model = config["model"]
     phase = config["train"]["phase"]
     torch.manual_seed(config["train"]["seed"])
     if phase == "codec":
         result = BTCodecStage(model["sana_path"], model.get("codec"))
     else:
-        result = BTCodec(model["sana_path"], model["text_path"], backend=model["backend"],
+        constructor, decoder_options = BTCodec, {}
+        if config.get("decoder", {}).get("method") == PIXEL_METHOD:
+            from .pixel_model import CPixelAdapterCodec
+            constructor = CPixelAdapterCodec
+            decoder_options["pixel_config"] = config["decoder"].get("pixel_adapter", {})
+        result = constructor(model["sana_path"], model["text_path"], backend=model["backend"],
                          codec_params=model.get("codec"), dit_rank=model.get("dit_rank", 128),
                          vae_rank=model.get("vae_rank", 32), checkpoint_blocks=model.get("checkpoint_blocks", True),
                          representation=config["self_flow"].get("enabled", False),
                          student_layer=config["self_flow"].get("student_layer", 8),
-                         teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device))
+                         teacher_layer=config["self_flow"].get("teacher_layer", 20), device=str(device),
+                         **decoder_options)
         result.set_codec_frozen(phase == "backend")
     return result.to(device)
 
@@ -112,6 +165,8 @@ def optimizer_groups(model, config):
             if "lora_" not in name or "decoder." not in name:
                 raise ValueError(f"unexpected trainable DC-AE parameter: {name}")
             label, lr = "vae", opt["vae_lr"]
+        elif name.startswith("pixel_adapter."):
+            label, lr = "pixel_adapter", opt["backend_lr"]
         else:
             label, lr = "backend", opt["backend_lr"]
         if id(parameter) in seen:

@@ -89,7 +89,10 @@ def initialize_from(model, checkpoint, phase):
         model.load_bt_state(checkpoint["raw"], initialize_conditioner=True)
     elif phase == "joint":
         if source_phase == "backend_init" and checkpoint["backend"] == "shared":
-            model.load_bt_state(checkpoint["raw"], initialize_conditioner=True)
+            options = {"initialize_conditioner": True}
+            if getattr(model, "decoder_method", None) == "sana_conditioned_pixel_adapter_v1":
+                options["initialize_pixel_adapter"] = True
+            model.load_bt_state(checkpoint["raw"], **options)
         elif source_phase == "backend" and checkpoint["backend"] == model.backend:
             # Keep explicit continuation of earlier staged experiments usable.
             if checkpoint["step"] != checkpoint["config"]["train"]["steps"]:
@@ -342,6 +345,11 @@ def train(config, args, rank, world, device):
         (output/"resolved.json").write_text(json.dumps(dict(config=config, contract=contract, assets=assets, git_commit=commit), indent=2)+"\n")
         print(json.dumps({"phase": phase, "backend": model.backend, "world_size": world,
                           "effective_batch": world*settings["batch_size"]*settings["accumulation_steps"],
+                          "decoder_method": getattr(model, "decoder_method", "native"),
+                          "self_flow_enabled": bool(config["self_flow"].get("enabled", False)),
+                          "pixel_depth": len(model.pixel_adapter.blocks) if hasattr(model, "pixel_adapter") else 0,
+                          "pixel_quantization_condition": bool(getattr(getattr(model, "pixel_adapter", None),
+                                                                      "use_quantization", False)),
                           "trainable": sum(p.numel() for p in model.parameters() if p.requires_grad)}), flush=True)
     model.train()
     writer = None
@@ -390,7 +398,8 @@ def train(config, args, rank, world, device):
                 context = wrapped.no_sync() if world > 1 and not synchronize else nullcontext()
                 with context, full_precision_recompute(model, full_precision_retry):
                     with torch.autocast(device_type=device.type, dtype=amp_dtype,
-                                        enabled=device.type == "cuda" and not full_precision_retry):
+                                        enabled=device.type == "cuda" and not full_precision_retry,
+                                        cache_enabled=not hasattr(model, "pixel_adapter")):
                         result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
                         loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
                                                                  image_loss, objective=config.get("objective"),
@@ -554,7 +563,8 @@ def train(config, args, rank, world, device):
             # Backend/joint endpoints immediately save complete.pt; do not
             # serialize the same multi-GB state twice. The codec endpoint keeps
             # a pre-calibration recovery file because calibration can be long.
-            if improved or (step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec")):
+            early_snapshot = step in (getattr(args, "checkpoint_steps", None) or ())
+            if improved or early_snapshot or (step % settings["save_every"] == 0 and (step < settings["steps"] or phase == "codec")):
                 save(f"{step:07d}.pt")
             if args.max_updates and step >= args.max_updates:
                 stop = True
@@ -613,6 +623,7 @@ def main():
     parser.add_argument("--output", help="shared backend_init output, with --prepare-backend")
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--max-updates", type=int, help="stop and save without changing the resume contract")
+    parser.add_argument("--checkpoint-steps", type=int, nargs="*", help="additional recovery snapshots; no optimizer changes")
     parser.add_argument("--run-root", help="override storage root consistently for all phases")
     args = parser.parse_args()
     config = load_config(args.config)

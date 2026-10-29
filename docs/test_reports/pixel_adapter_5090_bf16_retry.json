@@ -1,0 +1,42 @@
+{
+  "scope": "production_width_pixel_adapter_only",
+  "pixel_parameters": 17796592,
+  "feature_shape": [
+    1,
+    128,
+    512,
+    512
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "loss": 1.000230312347412,
+      "grad_norm": 0.035537924617528915,
+      "gradients": {
+        "block_0": 0.0,
+        "block_1": 0.0,
+        "content": 0.0,
+        "scale": 0.0
+      }
+    },
+    {
+      "step": 2,
+      "loss": 1.0000910758972168,
+      "grad_norm": 0.03548562899231911,
+      "gradients": {
+        "block_0": 2.4424128497457787e-08,
+        "block_1": 2.4302345025262184e-08,
+        "content": 3.32307706685242e-07,
+        "scale": 1.6727751983580674e-07
+      }
+    }
+  ],
+  "zero_initialization_exact": true,
+  "status": "passed",
+  "device": "cuda:0",
+  "batch_size": 1,
+  "research_training": false,
+  "torch": "2.12.0.dev20260331+cu128",
+  "peak_allocated_bytes": 1203965952,
+  "peak_reserved_bytes": 1342177280
+}
