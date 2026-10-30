@@ -10,6 +10,7 @@ by the BT models.
 """
 
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch import nn
 from torch.nn import functional as F
 from diffusers.models.attention_processor import (
@@ -17,6 +18,13 @@ from diffusers.models.attention_processor import (
 )
 from diffusers.models.transformers.sana_transformer import SanaAttnProcessor2_0
 from diffusers.models.embeddings import PixArtAlphaTextProjection
+
+# ReLU-gated linear attention can produce an exactly-zero normalization
+# denominator for a token. The usual "+1e-15" keeps the forward output at zero
+# but lets the backward divide by 1e-15, amplifying gradients by up to 1e15.
+# Treat such degenerate tokens as contributing nothing instead: the forward is
+# zero and the gradient through the division is masked.
+_LINEAR_ATTENTION_DENOMINATOR_FLOOR = 1e-4
 
 
 class StableSanaCaptionProjection(PixArtAlphaTextProjection):
@@ -54,7 +62,12 @@ class StableSanaLinearAttention(SanaLinearAttnProcessor2_0):
         with torch.autocast(device_type=hidden_states.device.type, enabled=False):
             augmented = F.pad(value.float(), (0, 0, 0, 1), value=1.)
             product = (augmented @ key.float()) @ query.float()
-            normalized = product[:, :, :-1] / (product[:, :, -1:] + 1e-15)
+            denominator = product[:, :, -1:]
+            normalized = torch.where(
+                denominator > _LINEAR_ATTENTION_DENOMINATOR_FLOOR,
+                product[:, :, :-1] / (denominator + 1e-15),
+                torch.zeros_like(product[:, :, :-1]),
+            )
         output = normalized.flatten(1, 2).transpose(1, 2).to(dtype)
         output = attn.to_out[1](attn.to_out[0](output))
         return output.clamp(-65504, 65504) if dtype == torch.float16 else output
@@ -69,7 +82,10 @@ class StableSanaCrossAttention(SanaAttnProcessor2_0):
     """
 
     def __call__(self, attn, hidden_states, encoder_hidden_states=None, attention_mask=None):
-        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+        # Memory-efficient CUDA backward reconstructs softmax from logsumexp;
+        # large finite SANA queries can lose the subtraction's precision.
+        # The math backend retains normalized probabilities for backward.
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False), sdpa_kernel(SDPBackend.MATH):
             context = None if encoder_hidden_states is None else encoder_hidden_states.float()
             return super().__call__(attn, hidden_states.float(), context, attention_mask)
 
@@ -84,7 +100,17 @@ class _FloatContractions:
 
     def apply_linear_attention(self, query, key, value):
         with torch.autocast(device_type=query.device.type, enabled=False):
-            return self.attention.apply_linear_attention(query.float(), key.float(), value.float())
+            query, key, value = query.float(), key.float(), value.float()
+            augmented = F.pad(value, (0, 0, 0, 1), value=1.)
+            scores = torch.matmul(augmented, key.transpose(-1, -2))
+            hidden = torch.matmul(scores, query)
+            denominator = hidden[:, :, -1:]
+            numerator = hidden[:, :, :-1]
+            return torch.where(
+                denominator > _LINEAR_ATTENTION_DENOMINATOR_FLOOR,
+                numerator / (denominator + self.attention.eps),
+                torch.zeros_like(numerator),
+            )
 
     def apply_quadratic_attention(self, query, key, value):
         with torch.autocast(device_type=query.device.type, enabled=False):
