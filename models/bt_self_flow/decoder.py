@@ -23,6 +23,17 @@ def decode_latent(vae, latent, checkpoint_blocks=False):
 
 def decode_latent_with_pixel_adapter(vae, latent, adapter, sana_tokens, token_hw, delta,
                                     checkpoint_blocks=False, return_features=False):
+    return _decode_with_adapter(vae, latent, adapter, (sana_tokens, token_hw, delta),
+                                checkpoint_blocks, return_features)
+
+
+def decode_latent_with_received_update(vae, latent, adapter, mu, update, precision_features, s_data,
+                                       checkpoint_blocks=False, return_features=False):
+    return _decode_with_adapter(vae, latent, adapter, (mu, update, precision_features, s_data),
+                                checkpoint_blocks, return_features)
+
+
+def _decode_with_adapter(vae, latent, adapter, conditions, checkpoint_blocks, return_features):
     """One native AE pass, with an explicit update before norm/activation/RGB."""
     base = vae.get_base_model() if hasattr(vae, "get_base_model") else vae
     if base.use_slicing or base.use_tiling:
@@ -40,18 +51,18 @@ def decode_latent_with_pixel_adapter(vae, latent, adapter, sana_tokens, token_hw
     for block in reversed(decoder.up_blocks):
         hidden = run(block, hidden)
 
-    def rgb_tail(value, tokens, steps):
+    def rgb_tail(value, *received):
         # One checkpoint covers PiT and the high-resolution norm/activation/RGB
         # head. Inner PiT checkpoints would repeat that recomputation again.
         features = None
         options = {"checkpoint_blocks": False} if checkpoint_blocks else {}
         if return_features:
-            value, features = adapter(value, tokens, token_hw, steps, return_features=True, **options)
+            value, features = adapter(value, *received, return_features=True, **options)
         else:
-            value = adapter(value, tokens, token_hw, steps, **options)
+            value = adapter(value, *received, **options)
         value = decoder.norm_out(value.movedim(1, -1)).movedim(-1, 1)
         return decoder.conv_out(decoder.conv_act(value)), features
 
     if checkpoint_blocks and torch.is_grad_enabled():
-        return checkpoint(rgb_tail, hidden, sana_tokens, delta, use_reentrant=False)
-    return rgb_tail(hidden, sana_tokens, delta)
+        return checkpoint(rgb_tail, hidden, *conditions, use_reentrant=False)
+    return rgb_tail(hidden, *conditions)

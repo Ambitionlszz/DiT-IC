@@ -1,5 +1,10 @@
 # New C + PiT experiment
 
+For the next receiver/update-conditioned D experiment, use
+[PiT v2](NEW_C_PIT_V2_IMPLEMENTATION.md) and
+`configs/bt_self_flow/precision_v3/pixel_v2_joint.yaml`. This document describes
+the existing raw-SANA-hidden v1 experiment; its configuration remains unchanged.
+
 This combines precision-consistent C commit
 `9d8bab744cc5f12b4e4d9610067fdb34f476b752` with the two-block PiT decoder from
 `codex/c-pit-pixel-adapter-20261028`, commit

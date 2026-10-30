@@ -16,6 +16,8 @@ from .model import BTCodec, BTCodecStage
 
 PIXEL_METHOD = "sana_conditioned_pixel_adapter_v1"
 PRECISION_PIXEL_METHOD = "precision_consistent_pixel_adapter_v1"
+RECEIVED_UPDATE_PIXEL_METHOD = "precision_consistent_received_update_pixel_adapter_v2"
+PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD)
 
 
 def validate_decoder(config):
@@ -25,7 +27,7 @@ def validate_decoder(config):
         if decoder and set(decoder) != {"method"}:
             raise ValueError("native decoder does not accept PiT options")
         return
-    if method not in (PIXEL_METHOD, PRECISION_PIXEL_METHOD):
+    if method not in PIXEL_METHODS:
         raise ValueError("unknown decoder method")
     if set(decoder) - {"method", "pixel_adapter"}:
         raise ValueError("unknown PiT decoder settings")
@@ -35,11 +37,13 @@ def validate_decoder(config):
     codec = config["model"].get("codec", {})
     if not codec.get("precision_conditioning"):
         raise ValueError("PiT requires precision_conditioning")
-    if bool(codec.get("precision_consistent")) != (method == PRECISION_PIXEL_METHOD):
+    if bool(codec.get("precision_consistent")) != (method != PIXEL_METHOD):
         raise ValueError("PiT decoder method must match the precision-v2/v3 frontend")
     settings = decoder.get("pixel_adapter", {})
     allowed = {"depth", "pixel_dim", "patch_size", "context_dim", "attention_dim", "heads",
                "use_quantization", "delta_ref", "checkpoint_blocks", "seed"}
+    if method == RECEIVED_UPDATE_PIXEL_METHOD:
+        allowed -= {"use_quantization", "delta_ref"}
     if set(settings) - allowed:
         raise ValueError("unknown pixel_adapter option")
     for name, default in (("depth", 2), ("pixel_dim", 16), ("patch_size", 16),
@@ -149,8 +153,11 @@ def make_model(config, device):
     else:
         constructor, decoder_options = BTCodec, {}
         method = config.get("decoder", {}).get("method", "native")
-        if method in (PIXEL_METHOD, PRECISION_PIXEL_METHOD):
-            if method == PRECISION_PIXEL_METHOD:
+        if method in PIXEL_METHODS:
+            if method == RECEIVED_UPDATE_PIXEL_METHOD:
+                from .received_update_pixel_model import ReceivedUpdateCPixelCodec
+                constructor = ReceivedUpdateCPixelCodec
+            elif method == PRECISION_PIXEL_METHOD:
                 from .precision_pixel_model import PrecisionCPixelAdapterCodec
                 constructor = PrecisionCPixelAdapterCodec
             else:

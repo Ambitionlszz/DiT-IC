@@ -14,11 +14,14 @@ import torch
 
 from models.bt_self_flow.checkpoint import DeploymentEMA
 from models.bt_self_flow.data import ImageDataset
-from models.bt_self_flow.experiment import load_config, make_model, optimizer_groups
+from models.bt_self_flow.experiment import (load_config, make_model, optimizer_groups,
+                                            RECEIVED_UPDATE_PIXEL_METHOD)
 from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.model import BTCodec
 from models.bt_self_flow.packet import RateControl
-from models.bt_self_flow.pixel_adapter import PixelDecoderAdapter
+from models.bt_self_flow.pixel_adapter import PixelDecoderAdapter, ReceivedUpdatePixelAdapter
+from models.bt_self_flow.precision_conditioning import PrecisionEmbedding
+from models.bt_self_flow.training_precision import clip_grad_norm_safe_
 from train_bt_self_flow import auxiliary_update, gradient_diagnostics, seed_all, initialize_from
 from models.bt_self_flow.checkpoint import read_checkpoint, sha256_file
 from models.bt_self_flow.experiment import asset_identity, check_stage_model
@@ -42,29 +45,54 @@ def autocast(device):
 
 
 def check_adapter(args, device):
-    adapter = PixelDecoderAdapter(128, 1152).to(device)
+    config = load_config(args.config)
+    use_update = config.get("decoder", {}).get("method") == RECEIVED_UPDATE_PIXEL_METHOD
+    if use_update and args.updates < 4:
+        raise ValueError("PiT v2 adapter preflight needs at least four updates to open all zero-initialized exits")
+    settings = dict(config.get("decoder", {}).get("pixel_adapter", {}))
+    seed = settings.pop("seed", 903)
+    torch.manual_seed(seed)
+    adapter = (ReceivedUpdatePixelAdapter(128, 32, **settings) if use_update else
+               PixelDecoderAdapter(128, 1152, **settings)).to(device)
+    precision_embedding = PrecisionEmbedding().to(device) if use_update else None
     features = torch.randn(args.batch_size, 128, 512, 512, device=device, requires_grad=True)
     tokens = torch.randn(args.batch_size, 256, 1152, device=device, requires_grad=True)
+    mu = torch.randn(args.batch_size, 32, 16, 16, device=device, requires_grad=True) if use_update else None
+    update = torch.randn_like(mu, requires_grad=True) if use_update else None
+    s_data = torch.tensor(1., device=device)
     delta = torch.full((args.batch_size, 1, 8, 8), 1.5, device=device, requires_grad=True)
-    optimizer = torch.optim.AdamW(adapter.parameters(), lr=1e-4, weight_decay=0)
+    parameters = list(adapter.parameters())
+    if use_update:
+        parameters += list(precision_embedding.parameters())
+    optimizer = torch.optim.AdamW(parameters, lr=1e-4, weight_decay=0)
     steps = []
     for step in range(args.updates):
         optimizer.zero_grad(set_to_none=True)
         features.grad = tokens.grad = delta.grad = None
+        if use_update:
+            mu.grad = update.grad = None
         with autocast(device):
-            updated = adapter(features, tokens, (16, 16), delta)
+            updated = (adapter(features, mu, update, precision_embedding(delta.log()), s_data) if use_update else
+                       adapter(features, tokens, (16, 16), delta))
             if step == 0 and not torch.equal(updated, features):
                 raise AssertionError("zero initialization changed AE features")
             loss = updated.square().mean()
         loss.backward()
-        norm = torch.nn.utils.clip_grad_norm_(adapter.parameters(), 4.)
+        norm = clip_grad_norm_safe_(parameters, 4.)
         if not torch.isfinite(norm):
             raise FloatingPointError("nonfinite PiT gradient")
         gradients = {"block_0": float(adapter.blocks[0].attn.qkv.weight.grad.float().norm()),
-                     "block_1": float(adapter.blocks[1].attn.qkv.weight.grad.float().norm()),
-                     "content": float(adapter.content_projection.weight.grad.float().norm()),
-                     "scale": float(adapter.scale_embedding.mlp[0].weight.grad.float().norm())}
-        if step > 0 and any(value <= 0 for value in gradients.values()):
+                     "block_1": float(adapter.blocks[1].attn.qkv.weight.grad.float().norm())}
+        if use_update:
+            gradients.update(mu=float(adapter.mu_projection.weight.grad.float().norm()),
+                             update=float(adapter.r_projection.weight.grad.float().norm()),
+                             gate=float(adapter.gate_mlp[0].weight.grad.float().norm()))
+        else:
+            gradients.update(content=float(adapter.content_projection.weight.grad.float().norm()),
+                             scale=float(adapter.scale_embedding.mlp[0].weight.grad.float().norm()))
+        # v2 has zero writeback, modulation and gate exits: normal updates open
+        # these paths successively, rather than demanding all gradients at step 1.
+        if step >= (3 if use_update else 1) and any(value <= 0 for value in gradients.values()):
             raise AssertionError(f"missing PiT/condition gradient: {gradients}")
         optimizer.step()
         steps.append(dict(step=step + 1, loss=float(loss.detach()), grad_norm=float(norm), gradients=gradients))
@@ -113,8 +141,8 @@ def check_full(args, device):
             loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
                                                      image_loss, objective=config["objective"], quality=config["quality"])
         loss.backward()
-        norm = torch.nn.utils.clip_grad_norm_([p for group in groups for p in group["params"]],
-                                             config["optimizer"]["max_grad_norm"])
+        norm = clip_grad_norm_safe_([p for group in groups for p in group["params"]],
+                                   config["optimizer"]["max_grad_norm"])
         if not torch.isfinite(loss) or not torch.isfinite(norm):
             raise FloatingPointError("nonfinite full-backbone loss/gradient")
         gradients = gradient_diagnostics(model)
@@ -173,7 +201,7 @@ def main():
         parser.error("report exists; choose a new output")
     try:
         device = setup(args)
-        config = load_config(args.config) if args.scope == "full" else {}
+        config = load_config(args.config)
         storage = config.get("execution", {}).get("saved_tensors", "device")
         context = (preserve_stride_cpu_offload(pin_memory=device.type == "cuda")
                    if storage == "stride_preserving_cpu" else nullcontext())

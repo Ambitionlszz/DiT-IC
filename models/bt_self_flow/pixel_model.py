@@ -55,8 +55,11 @@ class CPixelAdapterCodec(BTCodec):
         hidden = int(sana.config.num_attention_heads * sana.config.attention_head_dim)
         with torch.random.fork_rng(devices=[]):
             torch.random.default_generator.manual_seed(self.pixel_seed)
-            self.pixel_adapter = PixelDecoderAdapter(feature_channels, hidden, **settings)
+            self.pixel_adapter = self.make_pixel_adapter(feature_channels, hidden, settings)
         self.self_flow_enabled = False
+
+    def make_pixel_adapter(self, feature_channels, sana_dim, settings):
+        return PixelDecoderAdapter(feature_channels, sana_dim, **settings)
 
     def sana_features(self, mu, delta):
         return native_sana_features(
@@ -89,8 +92,8 @@ class CPixelAdapterCodec(BTCodec):
                                  view["likelihoods"], fixed_side_bits(h, w, "C", False),
                                  view["allocation_codes"], source=source)
         if capture:
-            result.pixel_features = {name: output[name] for name in
-                                     ("sana_tokens", "sana_token_hw", "pixel_tokens", "token_hw")}
+            result.pixel_features = {name: value for name, value in output.items()
+                                     if name not in ("prediction", "latent", "image")}
         return result
 
     @torch.no_grad()

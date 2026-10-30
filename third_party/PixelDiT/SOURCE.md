@@ -15,3 +15,10 @@ attention; activation checkpointing; explicit rectangular-grid interfaces;
 zero output initialization with normally initialized internal gates.
 
 No upstream weights or large Patch DiT backbone are loaded.
+
+PiT v2 additionally follows the optional four-way post-modulation and final
+RMSNorm from NVlabs/PixelDiT PR #8, merge revision
+`f5ed1f6014c93def68bba38866b8da4077e6f678`:
+https://github.com/NVlabs/PixelDiT/pull/8.
+Its receiver/update/precision condition interface is specific to this codec;
+the v1 six-way modulation and checkpoint shapes remain unchanged.

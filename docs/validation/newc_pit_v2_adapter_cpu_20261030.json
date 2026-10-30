@@ -1,0 +1,76 @@
+{
+  "scope": "production_width_pixel_adapter_only",
+  "pixel_parameters": 13199232,
+  "feature_shape": [
+    1,
+    128,
+    512,
+    512
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "loss": 0.999930739402771,
+      "grad_norm": 0.0350157804787159,
+      "gradients": {
+        "block_0": 0.0,
+        "block_1": 0.0,
+        "mu": 0.0,
+        "update": 0.0,
+        "gate": 0.0
+      }
+    },
+    {
+      "step": 2,
+      "loss": 0.9997950196266174,
+      "grad_norm": 0.034951698035001755,
+      "gradients": {
+        "block_0": 1.6218689324887237e-06,
+        "block_1": 2.281361958011985e-06,
+        "mu": 0.0,
+        "update": 0.0,
+        "gate": 0.0
+      }
+    },
+    {
+      "step": 3,
+      "loss": 0.9996582269668579,
+      "grad_norm": 0.035042792558670044,
+      "gradients": {
+        "block_0": 2.933893256340525e-06,
+        "block_1": 3.868553903885186e-06,
+        "mu": 5.7335940439884325e-09,
+        "update": 7.089170583896021e-09,
+        "gate": 0.0
+      }
+    },
+    {
+      "step": 4,
+      "loss": 0.9995203018188477,
+      "grad_norm": 0.03516183793544769,
+      "gradients": {
+        "block_0": 3.905709945684066e-06,
+        "block_1": 4.725288818008266e-06,
+        "mu": 2.4339106730053572e-08,
+        "update": 2.99367606260148e-08,
+        "gate": 1.034083402403057e-14
+      }
+    }
+  ],
+  "zero_initialization_exact": true,
+  "saved_tensors": "device",
+  "decoder_method": "precision_consistent_received_update_pixel_adapter_v2",
+  "initialization_sha256": null,
+  "status": "passed",
+  "device": "cpu",
+  "batch_size": 1,
+  "research_training": false,
+  "torch": "2.12.0.dev20260331+cu128",
+  "source_baseline": "4a0e582b5845ec9069972d74aae912ece812bc1d",
+  "upstream_numerical_fixes": "de13052138e8061db0bd8c783fc67393344ab43a",
+  "config": "configs/bt_self_flow/precision_v3/pixel_v2_joint.yaml",
+  "limitations": [
+    "Adapter-only random feature objective; no full pretrained-model RD evaluation.",
+    "CPU batch 1; no production batch-8 GPU memory or throughput measurement."
+  ]
+}

@@ -1,0 +1,20 @@
+# New C + received-base / actual-update conditioned, post-modulation PiT.
+# Initialize via the existing shared backend_init handoff; PiT starts at zero.
+base: c_joint.yaml
+decoder:
+  method: precision_consistent_received_update_pixel_adapter_v2
+  pixel_adapter:
+    depth: 2
+    pixel_dim: 16
+    patch_size: 16
+    context_dim: 256
+    attention_dim: 256
+    heads: 4
+    checkpoint_blocks: true
+    seed: 903
+execution:
+  saved_tensors: device
+train:
+  output: ${NEWC_PIT_V2_RUN_ROOT:-checkpoints/newc_pit_v2}/joint
+  log_every: 10
+  save_every: 2000
