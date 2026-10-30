@@ -12,6 +12,7 @@ by the BT models.
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from diffusers.models.attention_processor import (
     SanaLinearAttnProcessor2_0, SanaMultiscaleAttnProcessor2_0, SanaMultiscaleLinearAttention,
 )
@@ -69,7 +70,10 @@ class StableSanaCrossAttention(SanaAttnProcessor2_0):
     """
 
     def __call__(self, attn, hidden_states, encoder_hidden_states=None, attention_mask=None):
-        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+        # Memory-efficient CUDA backward reconstructs softmax from logsumexp;
+        # large finite SANA queries can lose the subtraction's precision.
+        # The math backend retains normalized probabilities for backward.
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False), sdpa_kernel(SDPBackend.MATH):
             context = None if encoder_hidden_states is None else encoder_hidden_states.float()
             return super().__call__(attn, hidden_states.float(), context, attention_mask)
 

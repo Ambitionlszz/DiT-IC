@@ -119,6 +119,10 @@ contract records `bt_packet_v3_q16_a3_precision_consistent`.
 
 ## Validation
 
+The [2026-10-30 numerical repair report](C_V3_NUMERICS_20261030.md) records the
+reproduced CUDA cross-attention backward failure, its repair and live joint
+continuation from the effective-batch-16 warmup experiment.
+
 Executed on 2026-10-27: **102 distinct tests passed**:
 
 - 12 new C v3 CPU contracts;

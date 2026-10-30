@@ -27,8 +27,8 @@ class ImageLoss(nn.Module):
         self.lpips_weight, self.dists_weight, self.mse_weight = lpips_weight, dists_weight, mse_weight
         self.lpips = self.dists = None
         if lpips_weight:
-            import lpips
-            self.lpips = lpips.LPIPS(net="alex").requires_grad_(False).eval()
+            from .perceptual import StableLPIPS
+            self.lpips = StableLPIPS(net="alex").requires_grad_(False).eval()
         if dists_weight:
             import pyiqa
             # pyiqa 0.1.16's wrapper keeps a device sentinel outside registered

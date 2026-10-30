@@ -30,7 +30,9 @@ from models.bt_self_flow.experiment import (asset_identity, check_stage_model, l
 from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
-from models.bt_self_flow.training_precision import finite_state, full_precision_recompute, nonfinite_diagnostics
+from models.bt_self_flow.training_precision import (can_retry_fp32, clip_grad_norm_safe_, finite_state, full_precision_recompute,
+                                                   nonfinite_diagnostics, nonfinite_gradient_diagnostics,
+                                                   resume_requires_fp32)
 from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
 
 
@@ -353,7 +355,41 @@ def train(config, args, rank, world, device):
     pending_images = []
     update_rng = None
     update_rep_weight = rep_weight
-    full_precision_retry = bool(resume and resume.get("full_precision_retry", False))
+    full_precision_retry = resume_requires_fp32(resume, output)
+    if resume and resume.get("full_precision_retry") and not full_precision_retry and rank == 0:
+        print(json.dumps({"finite_gradient_norm_resume": step,
+                          "precision": str(amp_dtype), "stable_clipping": True}), flush=True)
+
+    def recover_nonfinite(diagnostic, kind):
+        nonlocal attempts, rep_weight, full_precision_retry
+        attempts += 1
+        rep_weight = update_rep_weight
+        optimizer.zero_grad(set_to_none=True)
+        state_ok = torch.tensor(int(finite_state(model)), device=device)
+        if world > 1:
+            dist.all_reduce(state_ok, op=dist.ReduceOp.MIN)
+        diagnostic["model_state_finite"] = bool(state_ok.item())
+        diagnostics = [None]*world
+        if world > 1:
+            dist.all_gather_object(diagnostics, diagnostic, group=control_group)
+        else:
+            diagnostics[0] = diagnostic
+        with rank_zero_section(rank, control_group):
+            if rank == 0:
+                (output/f"nonfinite_{step:07d}_{attempts:07d}.json").write_text(
+                    json.dumps({"kind": kind, "ranks": diagnostics}, indent=2)+"\n")
+        if not state_ok.item():
+            raise FloatingPointError("nonfinite model state; refusing to overwrite a valid recovery point")
+        # DDP cannot reuse an abandoned synchronized forward. Single-GPU AMP
+        # replays the same accumulated batches once, including unscaled BF16.
+        retry = can_retry_fp32(device, world, full_precision_retry, scaler.is_enabled())
+        full_precision_retry = full_precision_retry or retry
+        save("paused.pt", micro_seen-len(pending_images), update_rng)
+        if not retry:
+            raise FloatingPointError(
+                f"nonfinite main {kind} persists; saved the last completed update for diagnosis")
+        restore_rng(update_rng)
+
     first_update_step = step + 1
     consecutive_amp_skips = 0
     stop = False
@@ -449,42 +485,28 @@ def train(config, args, rank, world, device):
                 for key, value in metrics.items():
                     metrics_sum[key] = metrics_sum.get(key, 0.)+value.detach()/settings["accumulation_steps"]
             if nonfinite_forward:
-                attempts += 1
-                rep_weight = update_rep_weight
-                optimizer.zero_grad(set_to_none=True)
-                # No optimizer or EMA update has occurred. A saved retry must
-                # replay all pending batches and the RNG from this update's start.
-                state_ok = torch.tensor(int(finite_state(model)), device=device)
-                if world > 1:
-                    dist.all_reduce(state_ok, op=dist.ReduceOp.MIN)
-                diagnostic["model_state_finite"] = bool(state_ok.item())
-                diagnostics = [None]*world
-                if world > 1:
-                    dist.all_gather_object(diagnostics, diagnostic, group=control_group)
-                else:
-                    diagnostics[0] = diagnostic
-                with rank_zero_section(rank, control_group):
-                    if rank == 0:
-                        (output/f"nonfinite_{step:07d}_{attempts:07d}.json").write_text(
-                            json.dumps({"ranks": diagnostics}, indent=2)+"\n")
-                if not state_ok.item():
-                    raise FloatingPointError("nonfinite model state; refusing to overwrite a valid recovery point")
-                # C/D run one process per model. A DDP synchronized forward
-                # cannot be abandoned and reused without rebuilding its reducer;
-                # distributed failures therefore stop at a valid recovery point.
-                can_retry = scaler.is_enabled() and world == 1 and not full_precision_retry
-                full_precision_retry = scaler.is_enabled() and world == 1
                 del result, loss, metrics
-                save("paused.pt", micro_seen-len(pending_images), update_rng)
-                if not can_retry:
-                    raise FloatingPointError("nonfinite main loss persists; saved the last completed update for diagnosis")
-                restore_rng(update_rng)
+                recover_nonfinite(diagnostic, "loss")
                 continue
             scaler.unscale_(optimizer)
-            norm = torch.nn.utils.clip_grad_norm_([p for group in optimizer.param_groups for p in group["params"]],
-                                                   config["optimizer"].get("max_grad_norm", 4.))
-            if not scaler.is_enabled() and not torch.isfinite(norm).item():
-                raise FloatingPointError("nonfinite main gradient norm")
+            try:
+                norm = clip_grad_norm_safe_(
+                    [p for group in optimizer.param_groups for p in group["params"]],
+                    config["optimizer"].get("max_grad_norm", 4.),
+                    error_if_nonfinite=not scaler.is_enabled())
+            except RuntimeError as error:
+                if "non-finite" not in str(error):
+                    raise
+                diagnostic = dict(step=step, rank=rank, backend=model.backend,
+                                  precision="fp32" if full_precision_retry or device.type != "cuda" else str(amp_dtype),
+                                  **nonfinite_gradient_diagnostics(model))
+                print(json.dumps({"nonfinite_gradient": diagnostic, "rank": rank}), flush=True)
+                del result, loss, metrics
+                recover_nonfinite(diagnostic, "gradient")
+                continue
+            if norm.dtype == torch.float64 and torch.isfinite(norm) and rank == 0:
+                print(json.dumps({"stable_gradient_norm": float(norm), "step": step,
+                                  "precision": "fp32" if full_precision_retry else str(amp_dtype)}), flush=True)
             previous_scale = scaler.get_scale()
             scaler.step(optimizer)
             scaler.update()
