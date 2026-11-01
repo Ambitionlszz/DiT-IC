@@ -18,11 +18,12 @@ from models.bt_self_flow.packet import RateControl
 
 
 @torch.no_grad()
-def capture_packet_tail(model, packet):
+def capture_packet_tail(model, packet, return_precision=False):
     """Cache actual receiver inputs immediately before D; run SANA once."""
     saved = {}
     def capture(module, inputs):
-        saved["features"], saved["mu"] = [value.detach().clone() for value in inputs]
+        saved["features"], saved["mu"] = [value.detach().clone() for value in inputs[:2]]
+        saved["precision"] = inputs[2].detach().clone() if len(inputs) == 3 else None
     handle = model.pixel_adapter.register_forward_pre_hook(capture)
     before = model.prediction_calls
     try:
@@ -31,14 +32,18 @@ def capture_packet_tail(model, packet):
         handle.remove()
     if model.prediction_calls - before != 1 or not saved:
         raise AssertionError("mu PiT diagnosis requires one formal receiver prediction")
-    return image, saved["features"], saved["mu"]
+    values = (image, saved["features"], saved["mu"])
+    return (*values, saved["precision"]) if return_precision else values
 
 
 @torch.no_grad()
-def decode_cached_tail(model, features, mu, original_hw, bypass=False):
+def decode_cached_tail(model, features, mu, original_hw, bypass=False, precision_features=None):
     """Replay only D and the original RGB tail; no codec/SANA/AE upsampling."""
     base = model.vae.get_base_model() if hasattr(model.vae, "get_base_model") else model.vae
-    value = features if bypass else model.pixel_adapter(features, mu, checkpoint_blocks=False)
+    conditions = (mu, precision_features) if hasattr(model.pixel_adapter, "precision_adaln_version") else (mu,)
+    if not bypass and len(conditions) == 2 and precision_features is None:
+        raise ValueError("precision B diagnosis must retain the formal receiver precision features")
+    value = features if bypass else model.pixel_adapter(features, *conditions, checkpoint_blocks=False)
     value = base.decoder.norm_out(value.movedim(1, -1)).movedim(-1, 1)
     image = base.decoder.conv_out(base.decoder.conv_act(value)).clamp(-1, 1)
     height, width = original_hw
@@ -50,7 +55,7 @@ def diagnose(args):
     checkpoint = read_checkpoint(args.checkpoint)
     config = checkpoint["config"]
     if config.get("decoder", {}).get("method") not in MU_PIXEL_METHODS:
-        raise ValueError("diagnosis requires a mu-only PiT A/B checkpoint")
+        raise ValueError("diagnosis requires a mu PiT checkpoint")
     if args.sana_path:
         config["model"]["sana_path"] = args.sana_path
     if args.text_path:
@@ -79,14 +84,15 @@ def diagnose(args):
             received.append(model.codec.decompress(packet)["mean"])
         for index, data in enumerate(packets):
             target = dataset[index].unsqueeze(0).to(device)
-            normal, features, mu = capture_packet_tail(model, data)
+            normal, features, mu, precision = capture_packet_tail(model, data, return_precision=True)
             before = model.prediction_calls
             wrong = (index + 1) % len(dataset)
             interventions = dict(normal=mu, zero_mu=torch.zeros_like(mu), wrong_mu=received[wrong],
                                  shifted_mu=mu.roll(1, dims=-1), bypass=mu)
             normal_d = None
             for name, condition in interventions.items():
-                image = decode_cached_tail(model, features, condition, target.shape[-2:], bypass=name == "bypass")
+                image = decode_cached_tail(model, features, condition, target.shape[-2:], bypass=name == "bypass",
+                                           precision_features=precision)
                 if name == "normal":
                     torch.testing.assert_close(image, normal, atol=2e-6, rtol=2e-6)
                 distortion, metrics = loss(image, target)

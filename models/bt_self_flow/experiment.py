@@ -19,7 +19,8 @@ PRECISION_PIXEL_METHOD = "precision_consistent_pixel_adapter_v1"
 RECEIVED_UPDATE_PIXEL_METHOD = "precision_consistent_received_update_pixel_adapter_v2"
 MU_PIXEL_METHOD = "precision_consistent_mu_qk_pixel_adapter_v3"
 MU_PIXEL_CONTROL_METHOD = "precision_consistent_mu_adaln_pixel_adapter_v3"
-MU_PIXEL_METHODS = (MU_PIXEL_METHOD, MU_PIXEL_CONTROL_METHOD)
+PRECISION_MU_PIXEL_METHOD = "precision_consistent_mu_qk_precision_adaln_pixel_adapter_v4"
+MU_PIXEL_METHODS = (MU_PIXEL_METHOD, MU_PIXEL_CONTROL_METHOD, PRECISION_MU_PIXEL_METHOD)
 PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS)
 
 
@@ -160,8 +161,9 @@ def make_model(config, device):
         method = config.get("decoder", {}).get("method", "native")
         if method in PIXEL_METHODS:
             if method in MU_PIXEL_METHODS:
-                from .mu_pixel_model import MuQKCPixelCodec, MuPixelQKCPixelCodec
-                constructor = MuQKCPixelCodec if method == MU_PIXEL_METHOD else MuPixelQKCPixelCodec
+                from .mu_pixel_model import MuQKCPixelCodec, MuPixelQKCPixelCodec, PrecisionMuQKCPixelCodec
+                constructor = {MU_PIXEL_METHOD: MuQKCPixelCodec, MU_PIXEL_CONTROL_METHOD: MuPixelQKCPixelCodec,
+                               PRECISION_MU_PIXEL_METHOD: PrecisionMuQKCPixelCodec}[method]
             elif method == RECEIVED_UPDATE_PIXEL_METHOD:
                 from .received_update_pixel_model import ReceivedUpdateCPixelCodec
                 constructor = ReceivedUpdateCPixelCodec

@@ -1,0 +1,6 @@
+# B + C's shared precision embedding: additive scale/shift only, mu Q/K unchanged.
+base: mu_pit_b_joint.yaml
+decoder:
+  method: precision_consistent_mu_qk_precision_adaln_pixel_adapter_v4
+train:
+  output: ${NEWC_MU_PIT_PRECISION_RUN_ROOT:-checkpoints/newc_mu_pit_precision}/B/joint

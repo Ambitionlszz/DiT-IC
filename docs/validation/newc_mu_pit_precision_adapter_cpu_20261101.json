@@ -1,0 +1,88 @@
+{
+  "scope": "production_width_pixel_adapter_only",
+  "pixel_parameters": 17393968,
+  "feature_shape": [
+    1,
+    128,
+    512,
+    512
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "loss": 0.9999502301216125,
+      "grad_norm": 0.03596244752407074,
+      "gradients": {
+        "block_0_q": 0.0,
+        "block_0_k": 0.0,
+        "block_0_v": 0.0,
+        "block_0_adaln": 0.0,
+        "block_0_mlp": 0.0,
+        "block_1_q": 0.0,
+        "block_1_k": 0.0,
+        "block_1_v": 0.0,
+        "block_1_adaln": 0.0,
+        "block_1_mlp": 0.0,
+        "content": 0.0,
+        "block_0_precision": 0.0,
+        "block_1_precision": 0.0
+      }
+    },
+    {
+      "step": 2,
+      "loss": 0.9998093247413635,
+      "grad_norm": 0.035904981195926666,
+      "gradients": {
+        "block_0_q": 9.665929390223482e-09,
+        "block_0_k": 9.535483513900544e-09,
+        "block_0_v": 1.1269418109804974e-07,
+        "block_0_adaln": 9.784946541913087e-07,
+        "block_0_mlp": 2.038791535596829e-07,
+        "block_1_q": 9.383517074468273e-09,
+        "block_1_k": 9.58774304393728e-09,
+        "block_1_v": 9.75195177943533e-08,
+        "block_1_adaln": 8.319210564877721e-07,
+        "block_1_mlp": 1.983034394470451e-07,
+        "content": 3.7904979421909957e-07,
+        "block_0_precision": 4.616025606196672e-08,
+        "block_1_precision": 3.1261549793271115e-08
+      }
+    },
+    {
+      "step": 3,
+      "loss": 0.9996683597564697,
+      "grad_norm": 0.035895563662052155,
+      "gradients": {
+        "block_0_q": 1.9296320985517923e-08,
+        "block_0_k": 1.903758395371824e-08,
+        "block_0_v": 2.2486243267394457e-07,
+        "block_0_adaln": 1.956544792847126e-06,
+        "block_0_mlp": 4.074869366377243e-07,
+        "block_1_q": 1.87307929166991e-08,
+        "block_1_k": 1.913855207646975e-08,
+        "block_1_v": 1.947042846950353e-07,
+        "block_1_adaln": 1.6620734868411091e-06,
+        "block_1_mlp": 3.9693327380518895e-07,
+        "content": 7.573614766442915e-07,
+        "block_0_precision": 9.270193856991682e-08,
+        "block_1_precision": 6.381380046605045e-08
+      }
+    }
+  ],
+  "zero_initialization_exact": true,
+  "saved_tensors": "device",
+  "decoder_method": "precision_consistent_mu_qk_precision_adaln_pixel_adapter_v4",
+  "initialization_sha256": null,
+  "status": "passed",
+  "device": "cpu",
+  "batch_size": 1,
+  "research_training": false,
+  "torch": "2.12.0.dev20260331+cu128",
+  "source_baseline": "f2853dea09d4469c5123d46ccee8193bd0d152a4",
+  "upstream_numerical_fixes": "de13052138e8061db0bd8c783fc67393344ab43a",
+  "config": "configs/bt_self_flow/precision_v3/mu_pit_b_precision_joint.yaml",
+  "limitations": [
+    "CPU adapter-only random feature objective; no measured RD gain.",
+    "Pretrained batch-8 GPU check is performed by the queue when GPU2 is idle."
+  ]
+}

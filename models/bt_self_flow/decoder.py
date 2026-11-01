@@ -37,6 +37,11 @@ def decode_latent_with_mu_adapter(vae, latent, adapter, mu, checkpoint_blocks=Fa
     return _decode_with_adapter(vae, latent, adapter, (mu,), checkpoint_blocks, return_features)
 
 
+def decode_latent_with_precision_mu_adapter(vae, latent, adapter, mu, precision_features,
+                                          checkpoint_blocks=False, return_features=False):
+    return _decode_with_adapter(vae, latent, adapter, (mu, precision_features), checkpoint_blocks, return_features)
+
+
 def _decode_with_adapter(vae, latent, adapter, conditions, checkpoint_blocks, return_features):
     """One native AE pass, with an explicit update before norm/activation/RGB."""
     base = vae.get_base_model() if hasattr(vae, "get_base_model") else vae

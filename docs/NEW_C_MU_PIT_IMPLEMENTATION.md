@@ -1,5 +1,8 @@
 # New C + mu-conditioned LayerNorm PiT (A/B)
 
+The subsequent user-requested precision extension of B is documented in
+[New C + B with additive precision AdaLN](NEW_C_MU_PIT_PRECISION.md).
+
 Implements the 2026-11-01 specification. B is the main candidate: received mu
 drives Q/K and per-pixel AdaLN, while AE pixel features provide V. A is a
 matched control: mu drives the same AdaLN, but compact pixel features provide

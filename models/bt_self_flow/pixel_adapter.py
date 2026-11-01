@@ -334,10 +334,17 @@ class MuPiTBlock(nn.Module):
         self.adaLN_modulation = nn.Sequential(nn.Linear(context_dim, patch_size ** 2 * 6 * pixel_dim))
 
     def forward(self, pixels, content, position):
+        precision = None
+        if isinstance(content, tuple):
+            content, precision = content
         batch, count, area, width = pixels.shape
         # Region-local pixel order matches v1: [region, pixel, six groups, channel].
         shift_a, scale_a, gate_a, shift_m, scale_m, gate_m = self.adaLN_modulation(content).reshape(
             batch, count, area, 6 * width).chunk(6, -1)
+        if precision is not None:
+            shift_p_a, scale_p_a, shift_p_m, scale_p_m = self.precision_modulation(precision).unsqueeze(-2).chunk(4, -1)
+            shift_a, scale_a = shift_a + shift_p_a, scale_a + scale_p_a
+            shift_m, scale_m = shift_m + shift_p_m, scale_m + scale_p_m
         normalized = self.norm1(pixels) * (1 + scale_a) + shift_a
         compact = self.compress_to_attn(normalized.flatten(-2))
         attended = self.attn(compact, content, position)
@@ -402,4 +409,41 @@ class MuPixelAdapter(PixelDecoderAdapter):
         if height % self.patch_size or width % self.patch_size:
             raise ValueError("AE output grid must be divisible by the PiT patch size")
         condition = self.condition(mu, (height // self.patch_size, width // self.patch_size))
+        return self.apply_condition(features, condition, return_features, checkpoint_blocks)
+
+
+class PrecisionMuPixelAdapter(MuPixelAdapter):
+    """B plus region-shared precision additions to the four AdaLN affine terms."""
+
+    def __init__(self, *args, **kwargs):
+        if kwargs.get("qk_source", "mu") != "mu":
+            raise ValueError("precision AdaLN extends main B with mu Q/K")
+        super().__init__(*args, **kwargs)
+        self.register_buffer("precision_adaln_version", torch.tensor(1, dtype=torch.uint8))
+        # Append after the entire old B has been initialized. All old tensors
+        # therefore retain their identical seeded values, including block 2.
+        for block in self.blocks:
+            block.precision_modulation = nn.Linear(128, 4 * self.pixel_dim)
+            nn.init.zeros_(block.precision_modulation.weight)
+            nn.init.zeros_(block.precision_modulation.bias)
+
+    def precision_condition(self, features, region_hw):
+        if features.ndim != 4 or features.shape[1] != 128:
+            raise ValueError("precision AdaLN requires C's shared 128-channel precision embedding")
+        rh, rw = region_hw
+        h, w = features.shape[-2:]
+        if rh < h or rw < w or rh % h or rw % w:
+            raise ValueError("each quantization cell must cover whole PiT regions")
+        # Quantization cells are discrete regions; do not blend across their
+        # boundaries or reinterpret delta as an estimate of pixel error.
+        return F.interpolate(features, size=region_hw, mode="nearest").flatten(2).transpose(1, 2)
+
+    def forward(self, features, mu, precision_features, return_features=False, checkpoint_blocks=None):
+        if features.ndim != 4 or features.shape[0] != mu.shape[0] or features.shape[0] != precision_features.shape[0]:
+            raise ValueError("precision PiT requires batch-aligned F, mu and precision features")
+        h, w = features.shape[-2:]
+        if h % self.patch_size or w % self.patch_size:
+            raise ValueError("AE output grid must be divisible by the PiT patch size")
+        grid = (h // self.patch_size, w // self.patch_size)
+        condition = (self.condition(mu, grid), self.precision_condition(precision_features, grid))
         return self.apply_condition(features, condition, return_features, checkpoint_blocks)

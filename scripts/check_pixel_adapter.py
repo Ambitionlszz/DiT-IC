@@ -15,11 +15,13 @@ import torch
 from models.bt_self_flow.checkpoint import DeploymentEMA
 from models.bt_self_flow.data import ImageDataset
 from models.bt_self_flow.experiment import (load_config, make_model, optimizer_groups,
-                                            RECEIVED_UPDATE_PIXEL_METHOD, MU_PIXEL_METHOD, MU_PIXEL_METHODS)
+                                            RECEIVED_UPDATE_PIXEL_METHOD, MU_PIXEL_METHOD, MU_PIXEL_METHODS,
+                                            PRECISION_MU_PIXEL_METHOD)
 from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.model import BTCodec
 from models.bt_self_flow.packet import RateControl
-from models.bt_self_flow.pixel_adapter import PixelDecoderAdapter, ReceivedUpdatePixelAdapter, MuPixelAdapter
+from models.bt_self_flow.pixel_adapter import (PixelDecoderAdapter, ReceivedUpdatePixelAdapter, MuPixelAdapter,
+                                              PrecisionMuPixelAdapter)
 from models.bt_self_flow.precision_conditioning import PrecisionEmbedding
 from models.bt_self_flow.training_precision import clip_grad_norm_safe_
 from train_bt_self_flow import auxiliary_update, gradient_diagnostics, seed_all, initialize_from
@@ -48,19 +50,23 @@ def check_adapter(args, device):
     config = load_config(args.config)
     use_update = config.get("decoder", {}).get("method") == RECEIVED_UPDATE_PIXEL_METHOD
     use_mu = config.get("decoder", {}).get("method") in MU_PIXEL_METHODS
+    use_precision = config.get("decoder", {}).get("method") == PRECISION_MU_PIXEL_METHOD
+    if use_precision and args.updates < 3:
+        raise ValueError("precision AdaLN preflight needs three updates to open the shared embedding gradient")
     if use_update and args.updates < 4:
         raise ValueError("PiT v2 adapter preflight needs at least four updates to open all zero-initialized exits")
     settings = dict(config.get("decoder", {}).get("pixel_adapter", {}))
     seed = settings.pop("seed", 903)
     torch.manual_seed(seed)
     if use_mu:
-        source = "mu" if config["decoder"]["method"] == MU_PIXEL_METHOD else "pixels"
-        adapter = MuPixelAdapter(128, 32, qk_source=source, **settings)
+        source = "pixels" if config["decoder"]["method"] not in (MU_PIXEL_METHOD, PRECISION_MU_PIXEL_METHOD) else "mu"
+        cls = PrecisionMuPixelAdapter if use_precision else MuPixelAdapter
+        adapter = cls(128, 32, qk_source=source, **settings)
     else:
         adapter = (ReceivedUpdatePixelAdapter(128, 32, **settings) if use_update else
                    PixelDecoderAdapter(128, 1152, **settings))
     adapter = adapter.to(device)
-    precision_embedding = PrecisionEmbedding().to(device) if use_update else None
+    precision_embedding = PrecisionEmbedding().to(device) if use_update or use_precision else None
     features = torch.randn(args.batch_size, 128, 512, 512, device=device, requires_grad=True)
     tokens = torch.randn(args.batch_size, 256, 1152, device=device, requires_grad=True)
     mu = torch.randn(args.batch_size, 32, 16, 16, device=device, requires_grad=True) if use_update or use_mu else None
@@ -68,7 +74,7 @@ def check_adapter(args, device):
     s_data = torch.tensor(1., device=device)
     delta = torch.full((args.batch_size, 1, 8, 8), 1.5, device=device, requires_grad=True)
     parameters = list(adapter.parameters())
-    if use_update:
+    if use_update or use_precision:
         parameters += list(precision_embedding.parameters())
     optimizer = torch.optim.AdamW(parameters, lr=1e-4, weight_decay=0)
     steps = []
@@ -80,7 +86,9 @@ def check_adapter(args, device):
         if use_update:
             mu.grad = update.grad = None
         with autocast(device):
-            if use_mu:
+            if use_precision:
+                updated = adapter(features, mu, precision_embedding(delta.log()))
+            elif use_mu:
                 updated = adapter(features, mu)
             else:
                 updated = (adapter(features, mu, update, precision_embedding(delta.log()), s_data) if use_update else
@@ -100,6 +108,11 @@ def check_adapter(args, device):
                                                  ("adaln", block.adaLN_modulation[0].weight),
                                                  ("mlp", block.mlp[0].weight))}
             gradients["content"] = float(adapter.content_projection.weight.grad.float().norm())
+            if use_precision:
+                gradients.update({f"block_{index}_precision": float(block.precision_modulation.weight.grad.float().norm())
+                                  for index, block in enumerate(adapter.blocks)})
+                if step >= 2 and not any(p.grad.abs().sum() > 0 for p in precision_embedding.parameters()):
+                    raise AssertionError("precision AdaLN did not open gradients into C's embedding")
         else:
             gradients = {"block_0": float(adapter.blocks[0].attn.qkv.weight.grad.float().norm()),
                          "block_1": float(adapter.blocks[1].attn.qkv.weight.grad.float().norm())}
@@ -166,6 +179,12 @@ def check_full(args, device):
         if not torch.isfinite(loss) or not torch.isfinite(norm):
             raise FloatingPointError("nonfinite full-backbone loss/gradient")
         gradients = gradient_diagnostics(model)
+        if config.get("decoder", {}).get("method") == PRECISION_MU_PIXEL_METHOD:
+            for index, block in enumerate(model.pixel_adapter.blocks):
+                value = float(block.precision_modulation.weight.grad.float().norm())
+                gradients[f"pixel_precision_{index}"] = value
+                if step >= 1 and (not torch.isfinite(torch.tensor(value)) or value <= 0):
+                    raise AssertionError("missing full-model precision AdaLN gradient")
         optimizer.step()
         auxiliary_update(model.codec, aux_optimizer, 1)
         ema.update(model)

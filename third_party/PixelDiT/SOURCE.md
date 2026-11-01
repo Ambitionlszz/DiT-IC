@@ -28,3 +28,6 @@ compact-attend-expand layout, but uses ordinary LayerNorm and no Q/K head norm.
 It introduces separate Q/K/V projections, with an experimental option to take
 Q/K from received mu. These are task-specific changes, not an unmodified
 official PixelDiT block. The older implementations remain available.
+The v4 precision extension retains B's mu Q/K and gates and adds a zero-initialized
+128-to-64 projection per block to supplement its four AdaLN affine terms using
+the codec's shared precision embedding. This is a local adaptation.
