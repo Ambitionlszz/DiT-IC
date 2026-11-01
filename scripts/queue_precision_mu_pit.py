@@ -1,4 +1,4 @@
-"""Prepare an audited B+precision run, then wait for physical GPU2 and train.
+"""Prepare an audited B+precision run, then use the first idle authorized GPU.
 
 Preparation uses CPU only. The detached watcher does not import torch or
 allocate CUDA memory while waiting. A full batch-8 preflight and an actual
@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 METHOD = "precision_consistent_mu_qk_precision_adaln_pixel_adapter_v4"
 GPU_UUID = "GPU-820974f0-0aed-b2b3-236a-04bacb2df8e8"
+GPU_IDENTITIES = {1: "GPU-ccb69b0d-acbb-96eb-9f08-b91776b96d65", 2: GPU_UUID}
 
 
 def now():
@@ -47,7 +48,7 @@ def command_output(command):
     return subprocess.check_output(command, text=True, timeout=30).strip()
 
 
-def prepare(root, initialization):
+def prepare(root, initialization, gpus=(1, 2)):
     sys.path.insert(0, str(ROOT))
     import torch
     import yaml
@@ -126,7 +127,8 @@ def prepare(root, initialization):
                 initialization=str(initialization), initialization_sha256=audit["initialization_sha256"],
                 config=str(root / "b_joint.resolved.yaml"), config_sha256=digest(root / "b_joint.resolved.yaml"),
                 audit_sha256=digest(root / "strict_ablation_audit.json"), contract=contract, assets=assets,
-                gpu_index=2, gpu_uuid=GPU_UUID, poll_seconds=5, max_idle_memory_mib=256,
+                gpu_candidates=[dict(index=index, uuid=GPU_IDENTITIES[index]) for index in gpus],
+                poll_seconds=5, max_idle_memory_mib=256,
                 required_idle_polls=2, target_updates=200000, method=METHOD)
     write_json(root / "plan.json", plan)
     print(json.dumps(audit, indent=2), flush=True)
@@ -137,8 +139,12 @@ class Supervisor:
         self.root, self.plan = root, plan
         self.child = None
         self.stopping = False
-        self.state = dict(supervisor_pid=os.getpid(), started=now(), gpu_index=2,
-                          gpu_uuid=plan["gpu_uuid"], decoder_method=METHOD)
+        # Old GPU2-only plans remain usable. One supervisor chooses once, then
+        # keeps the same physical device for both preflight and formal training.
+        self.devices = plan.get("gpu_candidates", [dict(index=plan.get("gpu_index"), uuid=plan.get("gpu_uuid"))])
+        self.selected_gpu = None
+        self.state = dict(supervisor_pid=os.getpid(), started=now(), gpu_candidates=self.devices,
+                          decoder_method=METHOD)
 
     def publish(self, stage, **values):
         changed = self.state.get("stage") != stage
@@ -159,30 +165,41 @@ class Supervisor:
             self.stop()
         return self.stopping
 
-    def gpu(self):
-        values = command_output(["nvidia-smi", "-i", self.plan["gpu_uuid"],
+    def gpu(self, device):
+        values = command_output(["nvidia-smi", "-i", device["uuid"],
             "--query-gpu=index,uuid,memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"]).split(",")
         index, uuid, used, total, utilization = [v.strip() for v in values]
-        if int(index) != 2 or uuid != GPU_UUID:
-            raise ValueError("physical GPU2 identity changed")
+        if int(index) != device["index"] or uuid != GPU_IDENTITIES.get(int(index)):
+            raise ValueError("authorized physical GPU identity changed")
         return dict(index=int(index), uuid=uuid, used_mib=int(used), total_mib=int(total), utilization=int(utilization))
 
     def wait_idle(self):
-        idle = 0
+        devices = [self.selected_gpu] if self.selected_gpu else self.devices
+        idle = {device["index"]: 0 for device in devices}
         while not self.check_stop():
-            gpu = self.gpu()
-            idle = idle + 1 if gpu["used_mib"] <= self.plan["max_idle_memory_mib"] and gpu["utilization"] <= 5 else 0
-            self.publish("waiting_for_gpu2", gpu=gpu, consecutive_idle_polls=idle)
-            if idle >= self.plan["required_idle_polls"]:
-                return True
+            observations = []
+            for device in devices:
+                gpu = self.gpu(device)
+                index = device["index"]
+                idle[index] = idle[index] + 1 if gpu["used_mib"] <= self.plan["max_idle_memory_mib"] and gpu["utilization"] <= 5 else 0
+                observations.append(gpu)
+                if idle[index] >= self.plan["required_idle_polls"]:
+                    self.selected_gpu = device
+                    write_json(self.root / "selected_gpu.json", dict(**device, selected=now()))
+                    self.publish("gpu_selected", gpu_index=index, gpu_uuid=device["uuid"],
+                                 gpu=gpu, consecutive_idle_polls=idle)
+                    return True
+            self.publish("waiting_for_gpu", gpu_observations=observations, consecutive_idle_polls=idle)
             time.sleep(self.plan["poll_seconds"])
         return False
 
     def environment(self):
+        if self.selected_gpu is None:
+            raise ValueError("select one idle authorized GPU before launching a child")
         env = os.environ.copy()
         for key in ("WORLD_SIZE", "RANK", "LOCAL_RANK", "LOCAL_WORLD_SIZE", "MASTER_ADDR", "MASTER_PORT"):
             env.pop(key, None)
-        env.update(CUDA_VISIBLE_DEVICES=self.plan["gpu_uuid"], OMP_NUM_THREADS="4", MKL_NUM_THREADS="4",
+        env.update(CUDA_VISIBLE_DEVICES=self.selected_gpu["uuid"], OMP_NUM_THREADS="4", MKL_NUM_THREADS="4",
                    HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", PYTORCH_ALLOC_CONF="expandable_segments:True",
                    C_V3_SUPERVISOR_PID=str(os.getpid()))
         return env
@@ -205,7 +222,9 @@ class Supervisor:
         return code
 
     def verify_plan(self):
-        if self.plan["method"] != METHOD or self.plan["gpu_uuid"] != GPU_UUID or self.plan["gpu_index"] != 2:
+        if (self.plan["method"] != METHOD or not self.devices
+                or len({device["index"] for device in self.devices}) != len(self.devices)
+                or any(device["uuid"] != GPU_IDENTITIES.get(device["index"]) for device in self.devices)):
             raise ValueError("unexpected experiment or device")
         if command_output(["git", "rev-parse", "HEAD"]) != self.plan["commit"]:
             raise ValueError("source commit changed")
@@ -286,13 +305,17 @@ def main():
     mode.add_argument("--prepare-only", action="store_true")
     mode.add_argument("--watch", action="store_true")
     parser.add_argument("--init-checkpoint")
+    parser.add_argument("--gpus", type=int, nargs="+", choices=(1, 2), default=[1, 2],
+                        help="physical candidates for a new plan; select exactly one when it becomes idle")
     args = parser.parse_args()
     root = Path(args.run_root).resolve()
     os.chdir(ROOT)
     if args.prepare_only:
         if not args.init_checkpoint:
             parser.error("--prepare-only requires --init-checkpoint")
-        prepare(root, Path(args.init_checkpoint).resolve())
+        if len(args.gpus) != len(set(args.gpus)):
+            parser.error("GPU candidates must be unique")
+        prepare(root, Path(args.init_checkpoint).resolve(), args.gpus)
         return
     with (root / "supervisor.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

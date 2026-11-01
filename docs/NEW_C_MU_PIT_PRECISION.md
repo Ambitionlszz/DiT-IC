@@ -62,11 +62,14 @@ the existing pixel-adapter optimizer group and deployment EMA.
 The de13052 numerical repairs remain unchanged. Full AE-tail/perceptual
 checkpointing and the existing BF16/recovery policies remain active.
 
-## GPU2 queue
+## First-free GPU1/GPU2 queue
 
-`scripts/queue_precision_mu_pit.py` supports the user-authorized physical GPU2
-on this host (`GPU-820974f0-0aed-b2b3-236a-04bacb2df8e8`). Use a dedicated
-pinned, clean checkout; the run plan records its commit and file hashes.
+`scripts/queue_precision_mu_pit.py` monitors the user-authorized physical GPU1
+(`GPU-ccb69b0d-acbb-96eb-9f08-b91776b96d65`) and GPU2
+(`GPU-820974f0-0aed-b2b3-236a-04bacb2df8e8`) on this host. One supervisor
+selects the first idle card and launches exactly one experiment. Preflight and
+formal training stay on that same physical card. Use a dedicated pinned, clean
+checkout; the run plan records its commit and file hashes.
 
 Preparation is CPU-only and compares native C and v4's actual initialized
 codec/LoRA/conditioner tensors, constructor RNG, pretrained assets, training
@@ -76,8 +79,13 @@ contract, data order, learning rates and new-head initialization:
 source /data1/ls/activate_cvpr.sh
 python scripts/queue_precision_mu_pit.py --prepare-only \
   --run-root /data1/ls/code/runs/newc_mu_pit_b_precision_gpu2_20261101 \
+  --gpus 1 2 \
   --init-checkpoint /data1/ls/code/runs/newc_pit_gpu0_20261029/backend_init.pt
 ```
+
+The existing run-root name is retained for continuity; it does not restrict
+device selection. `--gpus 1` or `--gpus 2` limits a newly prepared plan to one
+card. For `--watch`, the candidates come from the saved plan.
 
 Start `--watch` from the same checkout in a detached process, with stdout and
 stderr redirected to `supervisor.log`. It polls every five seconds and holds
@@ -96,6 +104,7 @@ extra recovery checkpoint at update 10. It never selects A or the earlier B.
 Status and logs are under the run root:
 
 - `status.json`, `supervisor.pid`, `supervisor.log`: watcher state and identity.
+- `selected_gpu.json`: the one physical card selected for this experiment.
 - `plan.json`, `strict_ablation_audit.json`: source/init/config/data identity.
 - `preflight/full_batch8.json` and `.log`: actual GPU preflight result.
 - `joint/train.jsonl`, `train.stdout.log`: formal updates and trainer output.
@@ -112,16 +121,18 @@ Tests cover exact old-B initialization, additive affine/broadcast math, unchange
 mu Q/K, three-step gradient opening, FP32/BF16 checkpointed tuple conditions,
 whole decoder and joint loss, six native packet qualities, a fresh-process
 receiver, strict checkpoint/EMA boundaries and exact trainer continuation.
-Queue tests simulate busy/idle transitions, failed preflight, wrong trainer
-contract/source/method, successful startup gate and cancellation.
+Queue tests simulate busy/idle transitions, either card becoming idle first,
+retaining that card after preflight, rejecting unauthorized or duplicate cards,
+failed preflight, wrong trainer contract/source/method, successful startup gate
+and cancellation.
 
 Production-width adapter results are recorded in
 [the CPU report](validation/newc_mu_pit_precision_adapter_cpu_20261101.json).
-The full pretrained batch-8 GPU preflight is deferred until GPU2 becomes free;
+The full pretrained batch-8 GPU preflight is deferred until GPU1 or GPU2 becomes free;
 no RD gain is established by these engineering checks.
 
 Completed on 2026-11-01: CPU regression **187 passed, 13 skipped**; CUDA
-supplement **51 passed**; latest queue checks **9 passed**. An independent
+supplement **51 passed**; latest queue checks **12 passed**. An independent
 subagent found no blocking issue and ran 12 targeted CPU checks. Validation
 counts overlap and should not be added as distinct cases. Details are in
 [the validation record](validation/newc_mu_pit_precision_validation_20261101.json).

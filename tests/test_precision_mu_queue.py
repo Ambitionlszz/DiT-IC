@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.queue_precision_mu_pit import Supervisor, METHOD, GPU_UUID, write_json
+from scripts.queue_precision_mu_pit import Supervisor, METHOD, GPU_UUID, GPU_IDENTITIES, write_json
 
 
 def plan(tmp_path):
@@ -25,8 +25,41 @@ def test_waits_for_two_idle_polls_without_torch_or_cuda(tmp_path):
     with patch.object(watcher, "gpu", side_effect=observations) as gpu:
         assert watcher.wait_idle()
     assert gpu.call_count == 5
-    assert json.loads((tmp_path / "status.json").read_text())["consecutive_idle_polls"] == 2
+    assert json.loads((tmp_path / "status.json").read_text())["consecutive_idle_polls"] == {"2": 2}
     assert watcher.environment()["CUDA_VISIBLE_DEVICES"] == GPU_UUID
+
+
+@pytest.mark.parametrize("winner", [1, 2])
+def test_first_idle_candidate_wins_and_stays_pinned(tmp_path, winner):
+    values = plan(tmp_path)
+    values["gpu_candidates"] = [dict(index=i, uuid=GPU_IDENTITIES[i]) for i in (1, 2)]
+    watcher = Supervisor(tmp_path, values)
+    with pytest.raises(ValueError, match="select one"):
+        watcher.environment()
+    def observation(device):
+        return dict(index=device["index"], uuid=device["uuid"], used_mib=16 if device["index"] == winner else 24000,
+                    utilization=0)
+    with patch.object(watcher, "gpu", side_effect=observation):
+        assert watcher.wait_idle()
+    assert watcher.selected_gpu["index"] == winner
+    assert watcher.environment()["CUDA_VISIBLE_DEVICES"] == GPU_IDENTITIES[winner]
+    assert json.loads((tmp_path / "selected_gpu.json").read_text())["index"] == winner
+    # Even if the other GPU becomes free after preflight, formal training must
+    # use the card on which the full batch-8 preflight actually passed.
+    with patch.object(watcher, "gpu", side_effect=observation) as query:
+        assert watcher.wait_idle()
+    assert all(call.args[0]["index"] == winner for call in query.call_args_list)
+
+
+def test_rejects_unauthorized_or_duplicate_physical_devices(tmp_path):
+    values = plan(tmp_path)
+    for candidates in ([dict(index=0, uuid="GPU0")], [],
+                       [dict(index=1, uuid=GPU_UUID)],
+                       [dict(index=2, uuid=GPU_UUID), dict(index=2, uuid=GPU_UUID)]):
+        values["gpu_candidates"] = candidates
+        watcher = Supervisor(tmp_path, values)
+        with pytest.raises(ValueError, match="unexpected experiment or device"):
+            watcher.verify_plan()
 
 
 @pytest.mark.parametrize("failure", ["preflight", "initialization", "contract", "method", "source", "readiness"])
