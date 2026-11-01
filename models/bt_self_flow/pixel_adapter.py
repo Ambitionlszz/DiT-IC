@@ -281,3 +281,125 @@ class ReceivedUpdatePixelAdapter(PixelDecoderAdapter):
         condition = self.condition(mu, update, precision_features, s_data,
                                    (height // self.patch_size, width // self.patch_size))
         return self.apply_condition(features, condition, return_features, checkpoint_blocks)
+
+
+class MuGuidedAttention(nn.Module):
+    """A/B matched projections: Q/K from mu or compact pixels; V from pixels.
+
+    No Q/K head normalization. Channel normalization belongs to the shared
+    mu content and the pre-AdaLN pixel paths, using ordinary LayerNorm.
+    """
+
+    def __init__(self, width=256, heads=4, qk_source="mu"):
+        super().__init__()
+        if width % heads or (width // heads) % 4:
+            raise ValueError("PiT attention requires a head dimension divisible by four")
+        if qk_source not in ("mu", "pixels"):
+            raise ValueError("Q/K source must be mu or pixels")
+        self.heads, self.head_dim = heads, width // heads
+        self.qk_source = qk_source
+        self.q = nn.Linear(width, width, bias=False)
+        self.k = nn.Linear(width, width, bias=False)
+        self.v = nn.Linear(width, width, bias=False)
+        self.proj = nn.Linear(width, width)
+
+    def forward(self, tokens, content, position):
+        batch, count, width = tokens.shape
+        source = content if self.qk_source == "mu" else tokens
+        shape = (batch, count, self.heads, self.head_dim)
+        query, key = self.q(source).reshape(shape), self.k(source).reshape(shape)
+        value = self.v(tokens).reshape(shape)
+        query, key = apply_rotary(query, key, position)
+        attended = F.scaled_dot_product_attention(query.transpose(1, 2), key.transpose(1, 2),
+                                                  value.transpose(1, 2), dropout_p=0.)
+        return self.proj(attended.transpose(1, 2).reshape(batch, count, width))
+
+
+class MuPiTBlock(nn.Module):
+    """Six-way pixel AdaLN, LN throughout, content-guided region attention."""
+
+    def __init__(self, pixel_dim=16, context_dim=256, patch_size=16, attention_dim=256,
+                 heads=4, qk_source="mu"):
+        super().__init__()
+        if context_dim != attention_dim:
+            raise ValueError("mu PiT uses equal content/attention widths for the matched A/B projections")
+        self.pixel_dim, self.patch_size = pixel_dim, patch_size
+        self.norm1 = nn.LayerNorm(pixel_dim, eps=1e-6)
+        self.norm2 = nn.LayerNorm(pixel_dim, eps=1e-6)
+        self.compress_to_attn = nn.Linear(patch_size ** 2 * pixel_dim, attention_dim)
+        self.attn = MuGuidedAttention(attention_dim, heads, qk_source)
+        self.expand_from_attn = nn.Linear(attention_dim, patch_size ** 2 * pixel_dim)
+        self.mlp = nn.Sequential(nn.Linear(pixel_dim, 4 * pixel_dim), nn.GELU(),
+                                 nn.Linear(4 * pixel_dim, pixel_dim))
+        self.adaLN_modulation = nn.Sequential(nn.Linear(context_dim, patch_size ** 2 * 6 * pixel_dim))
+
+    def forward(self, pixels, content, position):
+        batch, count, area, width = pixels.shape
+        # Region-local pixel order matches v1: [region, pixel, six groups, channel].
+        shift_a, scale_a, gate_a, shift_m, scale_m, gate_m = self.adaLN_modulation(content).reshape(
+            batch, count, area, 6 * width).chunk(6, -1)
+        normalized = self.norm1(pixels) * (1 + scale_a) + shift_a
+        compact = self.compress_to_attn(normalized.flatten(-2))
+        attended = self.attn(compact, content, position)
+        expanded = self.expand_from_attn(attended).reshape_as(pixels)
+        pixels = pixels + gate_a * expanded
+        return pixels + gate_m * self.mlp(self.norm2(pixels) * (1 + scale_m) + shift_m)
+
+
+class MuPixelAdapter(PixelDecoderAdapter):
+    """Receiver mu-only adapter; two modes differ only in the Q/K source.
+
+    Uses the existing pixel packing/positions/checkpointing/writeback path,
+    without v2's output RMSNorm, update condition, precision gate or fixed scale.
+    """
+
+    def __init__(self, feature_channels, latent_channels, depth=2, pixel_dim=16, patch_size=16,
+                 context_dim=256, attention_dim=256, heads=4, checkpoint_blocks=True, qk_source="mu"):
+        nn.Module.__init__(self)
+        sizes = (feature_channels, latent_channels, depth, pixel_dim, patch_size,
+                 context_dim, attention_dim, heads)
+        if any(not isinstance(v, int) or isinstance(v, bool) or v < 1 for v in sizes):
+            raise ValueError("PiT dimensions and depth must be positive integers")
+        if pixel_dim % 4:
+            raise ValueError("PiT sinusoidal pixel width must be divisible by four")
+        self.patch_size, self.pixel_dim = patch_size, pixel_dim
+        self.checkpoint_blocks = bool(checkpoint_blocks)
+        # Persistent mode identity also prevents silent A/B state interchange:
+        # their learned tensor shapes are intentionally identical.
+        self.register_buffer("qk_source_code", torch.tensor(1 if qk_source == "mu" else 0, dtype=torch.uint8))
+        self.content_projection = nn.Conv2d(latent_channels, context_dim, 1)
+        self.content_norm = nn.LayerNorm(context_dim, eps=1e-6)
+        self.pixel_input = nn.Linear(feature_channels, pixel_dim)
+        self.blocks = nn.ModuleList(
+            MuPiTBlock(pixel_dim, context_dim, patch_size, attention_dim, heads, qk_source)
+            for _ in range(depth))
+        self.pixel_output = nn.Linear(pixel_dim, feature_channels)
+        # All internal projections/gates retain nn.Linear/Conv2d defaults.
+        nn.init.zeros_(self.pixel_output.weight)
+        nn.init.zeros_(self.pixel_output.bias)
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        code = state_dict.get(prefix + "qk_source_code")
+        if code is not None and (code.shape != self.qk_source_code.shape
+                                 or code.item() != self.qk_source_code.item()):
+            error_msgs.append("mu PiT Q/K source differs; A/B checkpoints cannot be interchanged")
+            return
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+                                      missing_keys, unexpected_keys, error_msgs)
+
+    def condition(self, mu, region_hw):
+        if mu.ndim != 4 or mu.shape[1] != self.content_projection.in_channels:
+            raise ValueError("mu PiT requires received mu on its canonical latent grid")
+        content = self.content_projection(mu)
+        content = F.interpolate(content, size=region_hw, mode="bilinear", align_corners=False)
+        return self.content_norm(content.flatten(2).transpose(1, 2))
+
+    def forward(self, features, mu, return_features=False, checkpoint_blocks=None):
+        if features.ndim != 4 or features.shape[0] != mu.shape[0]:
+            raise ValueError("PiT requires batch-aligned AE features and mu")
+        height, width = features.shape[-2:]
+        if height % self.patch_size or width % self.patch_size:
+            raise ValueError("AE output grid must be divisible by the PiT patch size")
+        condition = self.condition(mu, (height // self.patch_size, width // self.patch_size))
+        return self.apply_condition(features, condition, return_features, checkpoint_blocks)

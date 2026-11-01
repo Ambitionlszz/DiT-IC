@@ -15,11 +15,11 @@ import torch
 from models.bt_self_flow.checkpoint import DeploymentEMA
 from models.bt_self_flow.data import ImageDataset
 from models.bt_self_flow.experiment import (load_config, make_model, optimizer_groups,
-                                            RECEIVED_UPDATE_PIXEL_METHOD)
+                                            RECEIVED_UPDATE_PIXEL_METHOD, MU_PIXEL_METHOD, MU_PIXEL_METHODS)
 from models.bt_self_flow.losses import ImageLoss, reconstruction_objective
 from models.bt_self_flow.model import BTCodec
 from models.bt_self_flow.packet import RateControl
-from models.bt_self_flow.pixel_adapter import PixelDecoderAdapter, ReceivedUpdatePixelAdapter
+from models.bt_self_flow.pixel_adapter import PixelDecoderAdapter, ReceivedUpdatePixelAdapter, MuPixelAdapter
 from models.bt_self_flow.precision_conditioning import PrecisionEmbedding
 from models.bt_self_flow.training_precision import clip_grad_norm_safe_
 from train_bt_self_flow import auxiliary_update, gradient_diagnostics, seed_all, initialize_from
@@ -47,17 +47,23 @@ def autocast(device):
 def check_adapter(args, device):
     config = load_config(args.config)
     use_update = config.get("decoder", {}).get("method") == RECEIVED_UPDATE_PIXEL_METHOD
+    use_mu = config.get("decoder", {}).get("method") in MU_PIXEL_METHODS
     if use_update and args.updates < 4:
         raise ValueError("PiT v2 adapter preflight needs at least four updates to open all zero-initialized exits")
     settings = dict(config.get("decoder", {}).get("pixel_adapter", {}))
     seed = settings.pop("seed", 903)
     torch.manual_seed(seed)
-    adapter = (ReceivedUpdatePixelAdapter(128, 32, **settings) if use_update else
-               PixelDecoderAdapter(128, 1152, **settings)).to(device)
+    if use_mu:
+        source = "mu" if config["decoder"]["method"] == MU_PIXEL_METHOD else "pixels"
+        adapter = MuPixelAdapter(128, 32, qk_source=source, **settings)
+    else:
+        adapter = (ReceivedUpdatePixelAdapter(128, 32, **settings) if use_update else
+                   PixelDecoderAdapter(128, 1152, **settings))
+    adapter = adapter.to(device)
     precision_embedding = PrecisionEmbedding().to(device) if use_update else None
     features = torch.randn(args.batch_size, 128, 512, 512, device=device, requires_grad=True)
     tokens = torch.randn(args.batch_size, 256, 1152, device=device, requires_grad=True)
-    mu = torch.randn(args.batch_size, 32, 16, 16, device=device, requires_grad=True) if use_update else None
+    mu = torch.randn(args.batch_size, 32, 16, 16, device=device, requires_grad=True) if use_update or use_mu else None
     update = torch.randn_like(mu, requires_grad=True) if use_update else None
     s_data = torch.tensor(1., device=device)
     delta = torch.full((args.batch_size, 1, 8, 8), 1.5, device=device, requires_grad=True)
@@ -69,11 +75,16 @@ def check_adapter(args, device):
     for step in range(args.updates):
         optimizer.zero_grad(set_to_none=True)
         features.grad = tokens.grad = delta.grad = None
+        if use_update or use_mu:
+            mu.grad = None
         if use_update:
             mu.grad = update.grad = None
         with autocast(device):
-            updated = (adapter(features, mu, update, precision_embedding(delta.log()), s_data) if use_update else
-                       adapter(features, tokens, (16, 16), delta))
+            if use_mu:
+                updated = adapter(features, mu)
+            else:
+                updated = (adapter(features, mu, update, precision_embedding(delta.log()), s_data) if use_update else
+                           adapter(features, tokens, (16, 16), delta))
             if step == 0 and not torch.equal(updated, features):
                 raise AssertionError("zero initialization changed AE features")
             loss = updated.square().mean()
@@ -81,13 +92,22 @@ def check_adapter(args, device):
         norm = clip_grad_norm_safe_(parameters, 4.)
         if not torch.isfinite(norm):
             raise FloatingPointError("nonfinite PiT gradient")
-        gradients = {"block_0": float(adapter.blocks[0].attn.qkv.weight.grad.float().norm()),
-                     "block_1": float(adapter.blocks[1].attn.qkv.weight.grad.float().norm())}
+        if use_mu:
+            gradients = {f"block_{index}_{name}": float(parameter.grad.float().norm())
+                         for index, block in enumerate(adapter.blocks)
+                         for name, parameter in (("q", block.attn.q.weight), ("k", block.attn.k.weight),
+                                                 ("v", block.attn.v.weight),
+                                                 ("adaln", block.adaLN_modulation[0].weight),
+                                                 ("mlp", block.mlp[0].weight))}
+            gradients["content"] = float(adapter.content_projection.weight.grad.float().norm())
+        else:
+            gradients = {"block_0": float(adapter.blocks[0].attn.qkv.weight.grad.float().norm()),
+                         "block_1": float(adapter.blocks[1].attn.qkv.weight.grad.float().norm())}
         if use_update:
             gradients.update(mu=float(adapter.mu_projection.weight.grad.float().norm()),
                              update=float(adapter.r_projection.weight.grad.float().norm()),
                              gate=float(adapter.gate_mlp[0].weight.grad.float().norm()))
-        else:
+        elif not use_mu:
             gradients.update(content=float(adapter.content_projection.weight.grad.float().norm()),
                              scale=float(adapter.scale_embedding.mlp[0].weight.grad.float().norm()))
         # v2 has zero writeback, modulation and gate exits: normal updates open

@@ -1,0 +1,116 @@
+{
+  "source_baseline": "0b9ac12dabd81c36b638731195294d91e9677f64",
+  "numerical_fix_port": "4a0e582b5845ec9069972d74aae912ece812bc1d",
+  "upstream_numerical_fixes": "de13052138e8061db0bd8c783fc67393344ab43a",
+  "cpu_regression": {
+    "passed": 167,
+    "failed": 0,
+    "skipped": [
+      {
+        "test": "tests.test_mu_pixel_adapter.test_checkpoint_adapter_forward_and_gradients[mu-False-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_mu_pixel_adapter.test_checkpoint_adapter_forward_and_gradients[mu-True-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_mu_pixel_adapter.test_checkpoint_adapter_forward_and_gradients[pixels-False-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_mu_pixel_adapter.test_checkpoint_adapter_forward_and_gradients[pixels-True-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_pixel_adapter.test_official_pit_forward_backward_and_position_parity",
+        "reason": "set PIXELDIT_REFERENCE to the pinned official repository"
+      },
+      {
+        "test": "tests.test_received_update_pixel_adapter.test_checkpointed_adapter_matches_values_and_input_parameter_gradients[False-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_received_update_pixel_adapter.test_checkpointed_adapter_matches_values_and_input_parameter_gradients[True-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_received_update_pixel_adapter.test_post_modulation_matches_official_forward_and_backward",
+        "reason": "set PIXELDIT_REFERENCE to upstream revision f5ed1f6"
+      },
+      {
+        "test": "tests.test_c_precision_v3.test_v3_cuda_bf16_update_and_real_packet",
+        "reason": "opt-in CUDA check; select a device with available memory"
+      },
+      {
+        "test": "tests.test_bt_attention_precision.test_cross_attention_backward_matches_float64_for_large_finite_queries[1.0-cuda]",
+        "reason": "CUDA required"
+      },
+      {
+        "test": "tests.test_bt_attention_precision.test_cross_attention_backward_matches_float64_for_large_finite_queries[1000000000000.0-cuda]",
+        "reason": "CUDA required"
+      }
+    ],
+    "files": [
+      "tests.test_bt_attention_precision",
+      "tests.test_bt_backend.EndpointAndTeacherTest",
+      "tests.test_bt_backend.SanaAdapterTest",
+      "tests.test_bt_evaluation.EvaluationTest",
+      "tests.test_bt_perceptual_precision",
+      "tests.test_bt_precision_recovery",
+      "tests.test_bt_recompute",
+      "tests.test_bt_training.TrainingTest",
+      "tests.test_c_precision_v3",
+      "tests.test_c_precision_v3_validation",
+      "tests.test_gan_discriminator_contract.GanDiscriminatorContractTest",
+      "tests.test_mu_pixel_adapter",
+      "tests.test_pixel_adapter",
+      "tests.test_precision_pixel_adapter",
+      "tests.test_received_update_pixel_adapter"
+    ]
+  },
+  "cuda_supplement": {
+    "passed": 55,
+    "failed": 0,
+    "skipped": [],
+    "files": [
+      "tests.test_bt_attention_precision",
+      "tests.test_bt_perceptual_precision",
+      "tests.test_bt_precision_recovery",
+      "tests.test_mu_pixel_adapter"
+    ]
+  },
+  "cuda_checkpoint_parity": {
+    "seed": 903,
+    "cudnn_benchmark": false,
+    "cudnn_deterministic": true,
+    "forward_bit_exact": true,
+    "cpu_gradients_bit_exact": true,
+    "cuda_gradient_tolerance": {
+      "atol": 1e-08,
+      "rtol": 0.0001
+    },
+    "max_observed_fp32_parameter_gradient_difference": 1.4551915228366852e-11,
+    "max_observed_bf16_parameter_gradient_difference": 0.0
+  },
+  "adapter_reports": [
+    "newc_mu_pit_a_adapter_cpu_20261101.json",
+    "newc_mu_pit_b_adapter_cpu_20261101.json"
+  ],
+  "independent_subagent_review": {
+    "status": "no_blocking_findings",
+    "targeted_cpu_checks_passed": 9,
+    "cuda_comparison_test_followup": "accepted"
+  },
+  "numerical_repair_files_unchanged_from_de13052": [
+    "models/bt_self_flow/perceptual.py",
+    "models/bt_self_flow/training_precision.py",
+    "tests/test_bt_attention_precision.py",
+    "tests/test_bt_perceptual_precision.py",
+    "tests/test_bt_precision_recovery.py"
+  ],
+  "limitations": [
+    "Full pretrained batch-8 GPU memory/throughput preflight not run.",
+    "No research training launched; no measured reconstruction or RD gain."
+  ]
+}

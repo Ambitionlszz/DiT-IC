@@ -17,7 +17,10 @@ from .model import BTCodec, BTCodecStage
 PIXEL_METHOD = "sana_conditioned_pixel_adapter_v1"
 PRECISION_PIXEL_METHOD = "precision_consistent_pixel_adapter_v1"
 RECEIVED_UPDATE_PIXEL_METHOD = "precision_consistent_received_update_pixel_adapter_v2"
-PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD)
+MU_PIXEL_METHOD = "precision_consistent_mu_qk_pixel_adapter_v3"
+MU_PIXEL_CONTROL_METHOD = "precision_consistent_mu_adaln_pixel_adapter_v3"
+MU_PIXEL_METHODS = (MU_PIXEL_METHOD, MU_PIXEL_CONTROL_METHOD)
+PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS)
 
 
 def validate_decoder(config):
@@ -42,7 +45,7 @@ def validate_decoder(config):
     settings = decoder.get("pixel_adapter", {})
     allowed = {"depth", "pixel_dim", "patch_size", "context_dim", "attention_dim", "heads",
                "use_quantization", "delta_ref", "checkpoint_blocks", "seed"}
-    if method == RECEIVED_UPDATE_PIXEL_METHOD:
+    if method in (RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS):
         allowed -= {"use_quantization", "delta_ref"}
     if set(settings) - allowed:
         raise ValueError("unknown pixel_adapter option")
@@ -54,6 +57,8 @@ def validate_decoder(config):
     if settings.get("pixel_dim", 16) % 4 or settings.get("context_dim", 256) % 2:
         raise ValueError("PiT sinusoidal widths must have compatible dimensions")
     width, heads = settings.get("attention_dim", 256), settings.get("heads", 4)
+    if method in MU_PIXEL_METHODS and settings.get("context_dim", 256) != width:
+        raise ValueError("mu PiT requires matched content and attention widths")
     if width % heads or (width // heads) % 4:
         raise ValueError("PiT attention head dimension must be divisible by four")
     reference = settings.get("delta_ref", 1.)
@@ -154,7 +159,10 @@ def make_model(config, device):
         constructor, decoder_options = BTCodec, {}
         method = config.get("decoder", {}).get("method", "native")
         if method in PIXEL_METHODS:
-            if method == RECEIVED_UPDATE_PIXEL_METHOD:
+            if method in MU_PIXEL_METHODS:
+                from .mu_pixel_model import MuQKCPixelCodec, MuPixelQKCPixelCodec
+                constructor = MuQKCPixelCodec if method == MU_PIXEL_METHOD else MuPixelQKCPixelCodec
+            elif method == RECEIVED_UPDATE_PIXEL_METHOD:
                 from .received_update_pixel_model import ReceivedUpdateCPixelCodec
                 constructor = ReceivedUpdateCPixelCodec
             elif method == PRECISION_PIXEL_METHOD:

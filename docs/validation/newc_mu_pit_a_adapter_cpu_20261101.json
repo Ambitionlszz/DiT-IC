@@ -1,0 +1,64 @@
+{
+  "scope": "production_width_pixel_adapter_only",
+  "pixel_parameters": 17377456,
+  "feature_shape": [
+    1,
+    128,
+    512,
+    512
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "loss": 0.9999381303787231,
+      "grad_norm": 0.03590768203139305,
+      "gradients": {
+        "block_0_q": 0.0,
+        "block_0_k": 0.0,
+        "block_0_v": 0.0,
+        "block_0_adaln": 0.0,
+        "block_0_mlp": 0.0,
+        "block_1_q": 0.0,
+        "block_1_k": 0.0,
+        "block_1_v": 0.0,
+        "block_1_adaln": 0.0,
+        "block_1_mlp": 0.0,
+        "content": 0.0
+      }
+    },
+    {
+      "step": 2,
+      "loss": 0.9997973442077637,
+      "grad_norm": 0.03584998846054077,
+      "gradients": {
+        "block_0_q": 6.181566813978634e-09,
+        "block_0_k": 6.1854876776124e-09,
+        "block_0_v": 1.0659778126864694e-07,
+        "block_0_adaln": 9.75345074039069e-07,
+        "block_0_mlp": 2.05141617470872e-07,
+        "block_1_q": 5.963904481376403e-09,
+        "block_1_k": 6.081720904660415e-09,
+        "block_1_v": 9.23837149002793e-08,
+        "block_1_adaln": 8.281728582915093e-07,
+        "block_1_mlp": 1.8496649545340915e-07,
+        "content": 3.7342638847803755e-07
+      }
+    }
+  ],
+  "zero_initialization_exact": true,
+  "saved_tensors": "device",
+  "decoder_method": "precision_consistent_mu_adaln_pixel_adapter_v3",
+  "initialization_sha256": null,
+  "status": "passed",
+  "device": "cpu",
+  "batch_size": 1,
+  "research_training": false,
+  "torch": "2.12.0.dev20260331+cu128",
+  "source_baseline": "0b9ac12dabd81c36b638731195294d91e9677f64",
+  "upstream_numerical_fixes": "de13052138e8061db0bd8c783fc67393344ab43a",
+  "config": "configs/bt_self_flow/precision_v3/mu_pit_a_joint.yaml",
+  "limitations": [
+    "Adapter-only random feature objective; no full pretrained-model RD evaluation.",
+    "CPU batch 1; no production batch-8 GPU memory or throughput measurement."
+  ]
+}

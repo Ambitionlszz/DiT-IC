@@ -22,3 +22,9 @@ RMSNorm from NVlabs/PixelDiT PR #8, merge revision
 https://github.com/NVlabs/PixelDiT/pull/8.
 Its receiver/update/precision condition interface is specific to this codec;
 the v1 six-way modulation and checkpoint shapes remain unchanged.
+
+The mu-only v3 A/B adapter retains the six-way pixel modulation and
+compact-attend-expand layout, but uses ordinary LayerNorm and no Q/K head norm.
+It introduces separate Q/K/V projections, with an experimental option to take
+Q/K from received mu. These are task-specific changes, not an unmodified
+official PixelDiT block. The older implementations remain available.

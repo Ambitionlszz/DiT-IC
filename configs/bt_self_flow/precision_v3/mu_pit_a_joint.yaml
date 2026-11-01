@@ -1,0 +1,6 @@
+# A (control): same mu AdaLN and LayerNorm, Q/K/V all from compact pixel features.
+base: mu_pit_b_joint.yaml
+decoder:
+  method: precision_consistent_mu_adaln_pixel_adapter_v3
+train:
+  output: ${NEWC_MU_PIT_RUN_ROOT:-checkpoints/newc_mu_pit}/A/joint

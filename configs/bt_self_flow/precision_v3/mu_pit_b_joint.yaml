@@ -1,0 +1,20 @@
+# B (main): mu -> Q/K and six-way pixel AdaLN; compact pixel features -> V.
+# All D normalization is LayerNorm; C/SANA precision conditioning is unchanged.
+base: c_joint.yaml
+decoder:
+  method: precision_consistent_mu_qk_pixel_adapter_v3
+  pixel_adapter:
+    depth: 2
+    pixel_dim: 16
+    patch_size: 16
+    context_dim: 256
+    attention_dim: 256
+    heads: 4
+    checkpoint_blocks: true
+    seed: 903
+execution:
+  saved_tensors: device
+train:
+  output: ${NEWC_MU_PIT_RUN_ROOT:-checkpoints/newc_mu_pit}/B/joint
+  log_every: 10
+  save_every: 2000
