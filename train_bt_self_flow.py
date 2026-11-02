@@ -20,6 +20,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
+from evaluation_protocol import source_revision
 from models.bt_self_flow.activation_storage import preserve_stride_cpu_offload
 from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, DeploymentEMA, capture_rng, clone_state,
                                             evaluation_state, prune_checkpoints, publish_checkpoint_alias, read_checkpoint,
@@ -33,7 +34,8 @@ from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
 from models.bt_self_flow.training_precision import (can_retry_fp32, clip_grad_norm_safe_, finite_state,
     full_precision_recompute, nonfinite_diagnostics, nonfinite_gradient_diagnostics, resume_requires_fp32)
-from models.bt_self_flow.validation import calibrate_interface, initialize_data_scale, validate
+from models.bt_self_flow.validation import (build_validation_identity, calibrate_interface,
+                                            initialize_data_scale, validate)
 
 
 def distributed_setup(device_arg):
@@ -85,6 +87,17 @@ def sample_control(config, step, rank, shape, device):
 
 def initialize_from(model, checkpoint, phase):
     source_phase = checkpoint["phase"]
+    if hasattr(model, "spatial_settings"):
+        if (phase != "joint" or source_phase != "backend_init" or checkpoint["backend"] != "shared"
+                or any(part in checkpoint["raw"] for part in ("pixel_adapter", "spatial_projector", "projector"))
+                or checkpoint.get("config", {}).get("decoder", {}).get("method", "native") != "native"
+                or checkpoint.get("config", {}).get("spatial_self_flow", {}).get("enabled", False)):
+            raise ValueError("spatial ablations require the same pure-C shared backend_init, without D/SF history")
+        model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
+                            initialize_pixel_adapter=True, initialize_spatial_projector=True)
+        if not model.distortion_scale.calibrated.item():
+            raise ValueError("spatial handoff requires calibrated C")
+        return
     if phase == "backend":
         if source_phase != "backend_init":
             raise ValueError("C/D backend adaptation requires the shared backend_init checkpoint")
@@ -130,6 +143,11 @@ def prepare_backend(config, source, output, device):
     target["train"]["phase"] = "joint"
     target["model"]["backend"] = "C"
     target["self_flow"] = {"enabled": False, "mixed_sampling": False}
+    # The common initialization must contain neither D nor a projector.
+    if "spatial_self_flow" in target:
+        target["decoder"] = {"method": "native"}
+        target["spatial_self_flow"]["enabled"] = False
+        target["spatial_self_flow"]["projector_enabled"] = False
     model = make_model(target, device)
     source_weights = "ema" if model.codec.precision_conditioning else "raw"
     model.load_bt_state(checkpoint[source_weights], codec_only=True)
@@ -199,6 +217,12 @@ def train(config, args, rank, world, device):
     control_group = make_control_group(world)
     settings = config["train"]
     phase = settings["phase"]
+    spatial_family = "spatial_self_flow" in config
+    if settings.get("world_size", world) != world:
+        raise ValueError("world size differs from the two-GPU ablation contract")
+    if spatial_family:
+        from models.bt_self_flow.spatial_self_flow import SpatialEMATeacher
+        from models.bt_self_flow.spatial_training import average_gradients, spatial_backward, synchronize_model
     if os.environ.get("BT_ANOMALY") == "1":
         torch.autograd.set_detect_anomaly(True)
     seed_all(settings["seed"]+rank)
@@ -218,8 +242,9 @@ def train(config, args, rank, world, device):
     dataset = ImageDataset(config["data"]["train"], config["data"]["crop"])
     validation = ImageDataset(config["data"]["valid"], config["data"].get("valid_crop", config["data"]["crop"]), False,
                                config["data"].get("valid_limit", 32))
-    validation_identity = dict(dataset_fingerprint=validation.fingerprint, images=len(validation),
-                               crop=validation.crop, actual_rate=settings.get("validation_actual_bpp", False))
+    validation_identity = build_validation_identity(
+        validation, actual_rate=settings.get("validation_actual_bpp", False), config=config)
+    source_identity = source_revision()
     model = make_model(config, device)
     seed_all(settings["seed"]+rank)
     contract = training_contract(config, dataset, world)
@@ -246,6 +271,8 @@ def train(config, args, rank, world, device):
         raise ValueError("backend/joint/Self-Flow requires an explicit stage checkpoint")
     else:
         initialize_data_scale(model, dataset, settings.get("data_scale_samples", 128), settings["seed"])
+    if spatial_family:
+        synchronize_model(model, world)
     groups, auxiliary = optimizer_groups(model, config)
     # Quantiles are auxiliary-only and manually synchronized. Exclude them from
     # DDP's main reducer rather than reusing a reducer after the main backward.
@@ -282,6 +309,10 @@ def train(config, args, rank, world, device):
         if teacher is not None:
             teacher.load_ema_state_dict(resume["teacher"])
         restore_rng(resume["rng_by_rank"][rank])
+    spatial_teacher = SpatialEMATeacher(model).to(device) if (
+        spatial_family and config["spatial_self_flow"].get("enabled", False)) else None
+    if spatial_teacher is not None:
+        spatial_teacher.load_deployment_ema(ema.state)
     with rank_zero_section(rank, control_group):
         best = BestCheckpoint(output, step, resume.get("validation_best") if resume else None,
                               identity=validation_identity) if rank == 0 else None
@@ -295,18 +326,29 @@ def train(config, args, rank, world, device):
                           actual_rate=settings.get("validation_actual_bpp", False),
                           objective=config.get("objective"), quality=config.get("quality"))
         report["_validation_identity"] = validation_identity
+        report["_metric_protocol"] = validation_identity["metric_protocol"]
+        report["_source_revision"] = source_identity
         (output/f"validation_{step:07d}.json").write_text(json.dumps(report, indent=2)+"\n")
         print(json.dumps(dict(validation_completed=step, seconds=time.monotonic()-started_validation,
                               parallel=False, images=len(validation))), flush=True)
         return report
 
-    # After an explicit validation-set migration, establish a new baseline from
-    # the resumed weights. Scores from the old dataset cannot select this best.
+    # After a validation-identity migration, establish a baseline from the exact
+    # resumed weights, including paused/complete/best aliases. Preserve training
+    # randomness even if validation or a metric initializes stochastic state.
     with rank_zero_section(rank, control_group):
-        if rank == 0 and resume and best.state is None and Path(args.resume).stem.isdecimal():
+        if rank == 0 and resume and best.state is None:
             transition = min(1., max(step-1, 0)/max(settings["steps"]-1, 1)) if phase == "backend" else 1.
-            best.consider(validation_report(transition), step)
-            best.publish(args.resume)
+            baseline_rng = capture_rng(device)
+            try:
+                report = validation_report(transition)
+            finally:
+                restore_rng(baseline_rng)
+            snapshot = output/f"{step:07d}.pt"
+            if Path(args.resume).resolve() != snapshot.resolve():
+                publish_checkpoint_alias(args.resume, snapshot)
+            best.consider(report, step)
+            best.publish(snapshot)
     sampler = CounterSampler(len(dataset), settings["seed"], rank, world, settings["batch_size"], micro_seen,
                               stream={"codec": 21, "backend": 22, "joint": 23, "self_flow": 24}[phase])
     loader = DataLoader(dataset, batch_size=settings["batch_size"], sampler=sampler,
@@ -314,8 +356,11 @@ def train(config, args, rank, world, device):
                         generator=torch.Generator().manual_seed(settings["seed"]+rank+999),
                         persistent_workers=config["data"].get("workers", 4) > 0)
     iterator = iter(loader)
+    # Spatial SF routes auxiliary gradients by parameter identity. Do not mix
+    # autograd.grad with DDP reducer hooks; all four groups use the same explicit
+    # averaged reduction after accumulation (including the no-SF controls).
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
-                                      broadcast_buffers=False) if world > 1 else model
+                                      broadcast_buffers=False) if world > 1 and not spatial_family else model
 
     last_saved = {}
 
@@ -471,43 +516,48 @@ def train(config, args, rank, world, device):
                     micro_seen += 1
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
-                context = wrapped.no_sync() if world > 1 and not synchronize else nullcontext()
+                context = wrapped.no_sync() if world > 1 and not synchronize and not spatial_family else nullcontext()
                 storage_context = (preserve_stride_cpu_offload(pin_memory=device.type == "cuda")
                                    if config.get("execution", {}).get("saved_tensors") == "stride_preserving_cpu"
                                    else nullcontext())
                 with context, storage_context, full_precision_recompute(model, full_precision_retry):
-                    with torch.autocast(device_type=device.type, dtype=amp_dtype,
+                    if spatial_family:
+                        result, loss, metrics = spatial_backward(
+                            model, spatial_teacher, image, control, image_loss, config, step, rank, world,
+                            scaler, amp_dtype, full_precision_retry, micro)
+                    else:
+                        with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                         enabled=device.type == "cuda" and not full_precision_retry,
                                         cache_enabled=not hasattr(model, "pixel_adapter")):
-                        result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
-                        loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
-                                                                 image_loss, objective=config.get("objective"),
-                                                                 quality=config.get("quality"))
-                        if teacher is not None:
-                            with torch.no_grad():
-                                high = model.codec.quantize_analysis(result.source, RateControl(1.))
-                                high_scale = model.distortion_scale(result.clean, high["mean"])
-                                target = teacher(high["mean"], model.fixed_text_embed,
-                                                 model.self_flow_timestep(image.shape[0], device), high_scale["log_rho"])
-                            sf_loss, valid_fraction = cross_rate_loss(result.feature, target,
-                                                                      high_scale["measured"], result.scale_info["measured"])
-                            sf = config["self_flow"]
-                            warmup = sf.get("warmup", 1000)
-                            ramp = max(0., min(1., (step-warmup)/sf.get("ramp", 2000)))
-                            if synchronize and step % sf.get("calibrate_every", 500) == 0:
-                                rd_gradient = torch.autograd.grad(loss, result.coarse, retain_graph=True)[0].float().norm()
-                                sf_gradient = torch.autograd.grad(sf_loss, result.coarse, retain_graph=True)[0].float().norm()
-                                norms = torch.stack([rd_gradient, sf_gradient])
-                                if world > 1:
-                                    dist.all_reduce(norms)
-                                    norms /= world
-                                ratio = (norms[0]/norms[1].clamp_min(1e-12)).item()
-                                candidate = min(10., sf.get("gradient_target", .05)*ratio)
-                                rep_weight = min(.9*rep_weight+.1*candidate, sf.get("gradient_cap", .1)*ratio)
-                            loss = loss+ramp*rep_weight*sf_loss
-                            metrics.update(sf=sf_loss, teacher_valid=valid_fraction,
-                                           sf_weight=sf_loss.new_tensor(ramp*rep_weight),
-                                           student_feature_std=result.feature.float().std(dim=1).mean())
+                            result = wrapped(image, rate_control=control, transition=transition, capture=teacher is not None)
+                            loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
+                                                                     image_loss, objective=config.get("objective"),
+                                                                     quality=config.get("quality"))
+                            if teacher is not None:
+                                with torch.no_grad():
+                                    high = model.codec.quantize_analysis(result.source, RateControl(1.))
+                                    high_scale = model.distortion_scale(result.clean, high["mean"])
+                                    target = teacher(high["mean"], model.fixed_text_embed,
+                                                     model.self_flow_timestep(image.shape[0], device), high_scale["log_rho"])
+                                sf_loss, valid_fraction = cross_rate_loss(result.feature, target,
+                                                                          high_scale["measured"], result.scale_info["measured"])
+                                sf = config["self_flow"]
+                                warmup = sf.get("warmup", 1000)
+                                ramp = max(0., min(1., (step-warmup)/sf.get("ramp", 2000)))
+                                if synchronize and step % sf.get("calibrate_every", 500) == 0:
+                                    rd_gradient = torch.autograd.grad(loss, result.coarse, retain_graph=True)[0].float().norm()
+                                    sf_gradient = torch.autograd.grad(sf_loss, result.coarse, retain_graph=True)[0].float().norm()
+                                    norms = torch.stack([rd_gradient, sf_gradient])
+                                    if world > 1:
+                                        dist.all_reduce(norms)
+                                        norms /= world
+                                    ratio = (norms[0]/norms[1].clamp_min(1e-12)).item()
+                                    candidate = min(10., sf.get("gradient_target", .05)*ratio)
+                                    rep_weight = min(.9*rep_weight+.1*candidate, sf.get("gradient_cap", .1)*ratio)
+                                loss = loss+ramp*rep_weight*sf_loss
+                                metrics.update(sf=sf_loss, teacher_valid=valid_fraction,
+                                               sf_weight=sf_loss.new_tensor(ramp*rep_weight),
+                                               student_feature_std=result.feature.float().std(dim=1).mean())
                     finite = torch.isfinite(loss).to(torch.int32)
                     if world > 1:
                         dist.all_reduce(finite, op=dist.ReduceOp.MIN)
@@ -518,13 +568,16 @@ def train(config, args, rank, world, device):
                                           **nonfinite_diagnostics(result, metrics))
                         print(json.dumps({"nonfinite_forward": diagnostic, "rank": rank}), flush=True)
                         break
-                    scaler.scale(loss/settings["accumulation_steps"]).backward()
+                    if not spatial_family:
+                        scaler.scale(loss/settings["accumulation_steps"]).backward()
                 for key, value in metrics.items():
                     metrics_sum[key] = metrics_sum.get(key, 0.)+value.detach()/settings["accumulation_steps"]
             if nonfinite_forward:
                 del result, loss, metrics
                 recover_nonfinite(diagnostic, "loss")
                 continue
+            if spatial_family:
+                average_gradients([p for group in optimizer.param_groups for p in group["params"]], world)
             scaler.unscale_(optimizer)
             try:
                 norm = clip_grad_norm_safe_(
@@ -566,6 +619,8 @@ def train(config, args, rank, world, device):
             auxiliary_update(model.codec, aux_optimizer, world)
             scheduler.step()
             ema.update(model)
+            if spatial_teacher is not None:
+                spatial_teacher.load_deployment_ema(ema.state)
             if teacher is not None:
                 teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner, .9999)
             step += 1
@@ -699,7 +754,9 @@ def main():
     config = load_config(args.config)
     if args.run_root:
         phase = config["train"]["phase"]
-        if phase == "codec":
+        if "spatial_self_flow" in config:
+            suffix = config["train"]["variant"]
+        elif phase == "codec":
             suffix = "common"
         elif phase == "self_flow":
             suffix = "E" if config["self_flow"].get("enabled") else "D_mix"

@@ -1,0 +1,7 @@
+# Capacity control: identical main-path P, no teacher and no SF loss.
+base: common.yaml
+spatial_self_flow:
+  projector_enabled: true
+train:
+  variant: c_p
+  output: ${SPATIAL_SF_RUN_ROOT:-checkpoints/spatial_sf}/c_p

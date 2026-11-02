@@ -1,118 +1,160 @@
-'''
-# --------------------------------------------------------------------------------
-#   (Modified) Evaluate script from MS-ILLM (https://github.com/facebookresearch/NeuralCompression/blob/main/projects/illm/eval_folder_example.py)
-# --------------------------------------------------------------------------------
-'''
+"""Evaluate saved RGB images with explicit pairing and metric metadata.
 
-import sys
-import tqdm
-import pyiqa
+Adapted from the MS-ILLM folder evaluation script. Paired evaluation retains
+FID/256, which requires both image dimensions to be at least 256 pixels.
+"""
+
 import argparse
-from PIL import Image
+import json
 from pathlib import Path
-# from neuralcompression.metrics import update_patch_fid
-from ._update_patch_fid import update_patch_fid
+import sys
 
+import numpy as np
+from PIL import Image
 import torch
-from torchvision.transforms import ToTensor
-from torchmetrics.image import (
-    FrechetInceptionDistance,
-    KernelInceptionDistance,
-    LearnedPerceptualImagePatchSimilarity,
+import tqdm
+
+from evaluation_protocol import (
+    dataset_content_fingerprint,
+    metric_protocol,
+    psnr,
+    source_revision,
+    structure_metrics,
+)
+from .image_pairs import collect_image_pairs
+from .distribution_metrics import (
+    FID_PATCH_SIZE,
+    build_distribution_metrics,
+    compute_distribution_metrics,
+    distribution_metric_protocol,
 )
 
 
-def evaluate(recon_dir, gt_dir, ntest):
+def _build_metrics(device, paired):
+    # Keep heavyweight dependencies and weight loading after input validation.
+    import pyiqa
 
-    device = torch.device("cuda")
-    totensor = ToTensor()
+    no_reference = {name: pyiqa.create_metric(name).eval().to(device)
+                    for name in ("clipiqa", "musiq", "niqe")}
+    paired_metrics = {}
+    fid_metric = kid_metric = update_patch_fid = None
+    if paired:
+        from torchmetrics.image import (
+            LearnedPerceptualImagePatchSimilarity,
+        )
+        from ._update_patch_fid import update_patch_fid
 
-    metric_dict = {}
-    metric_dict["clipiqa"] = pyiqa.create_metric('clipiqa').to(device)
-    metric_dict["musiq"] = pyiqa.create_metric('musiq').to(device)
-    metric_dict["niqe"] = pyiqa.create_metric('niqe').to(device)
-    # metric_dict["maniqa"] = pyiqa.create_metric('maniqa').to(device)
-    metric_paired_dict = {}
-    recon_dir = Path(recon_dir) if not isinstance(recon_dir, Path) else recon_dir
-    assert recon_dir.is_dir()
-    
-    gt_path_list = None
+        paired_metrics = {"psnr": psnr, "dists": pyiqa.create_metric("dists").eval().to(device)}
+        paired_metrics["lpips"] = LearnedPerceptualImagePatchSimilarity(
+            net_type="alex", normalize=True).eval().to(device)
+        fid_metric, kid_metric = build_distribution_metrics(device)
+    return no_reference, paired_metrics, fid_metric, kid_metric, update_patch_fid
+
+
+def _read_tensor(path, device):
+    with Image.open(path) as image:
+        array = np.array(image.convert("RGB"), dtype=np.uint8, copy=True)
+    return torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0).to(device=device, dtype=torch.float32) / 255.0
+
+
+@torch.inference_mode()
+def evaluate(recon_dir, gt_dir=None, ntest=None, *, strip_recon_index_prefix=False,
+             output_json=None, device="cuda"):
+    """Return the historical list of printable results; optionally save JSON.
+
+    Saved images are evaluated after their RGB uint8 decode. ``ms_ssim`` now
+    aliases RGB MS-SSIM; the historical Y-channel value is ``ms_ssim_y``.
+    """
+    pairs = collect_image_pairs(recon_dir, gt_dir, ntest,
+                                strip_recon_index_prefix=strip_recon_index_prefix)
     if gt_dir is not None:
-        gt_dir = Path(gt_dir) if not isinstance(gt_dir, Path) else gt_dir
-        gt_path_list = sorted([x for x in gt_dir.glob("*.[jpJP][pnPN]*[gG]")])
-        if ntest is not None: gt_path_list = gt_path_list[:ntest]
-        metric_paired_dict["psnr"] = pyiqa.create_metric('psnr').to(device)
-        metric_paired_dict["dists"] = pyiqa.create_metric('dists').to(device)
-        metric_paired_dict["ms_ssim"] = pyiqa.create_metric('ms_ssim').to(device)
-        metric_paired_dict["lpips"] = LearnedPerceptualImagePatchSimilarity(net_type='alex', normalize=True).to(device) # lpips-alexnet 
-        fid_metric = FrechetInceptionDistance().to(device)
-        kid_metric = KernelInceptionDistance().to(device)
-        
-    recon_path_list = sorted([x for x in recon_dir.glob("*.[jpJP][pnPN]*[gG]")])
+        for pair in pairs:
+            if min(pair.size) < FID_PATCH_SIZE:
+                raise ValueError(f"Paired folder evaluation includes FID/256 and requires images of at least "
+                                 f"256 x 256 pixels; {pair.reconstruction} has size {pair.size}")
+    device = torch.device(device)
+    metric_dict, metric_paired_dict, fid_metric, kid_metric, update_patch_fid = _build_metrics(
+        device, gt_dir is not None)
 
-    if ntest is not None: recon_path_list = recon_path_list[:ntest]
-    
-    print(f'Find {len(recon_path_list)} images in {recon_dir}')
+    print(f"Find {len(pairs)} images in {Path(recon_dir)}")
     result = {}
-    for i in tqdm.tqdm(range(len(recon_path_list))):
-        recon_path = str(recon_path_list[i])
-        gt_path = str(gt_path_list[i]) if gt_path_list is not None else None
-        
-        with open(recon_path, "rb") as f:
-            image_recon = Image.open(f)
-            image_recon = image_recon.convert("RGB")
-        recon_tensor = totensor(image_recon).unsqueeze(0).to(device)
-
-        print('=========')
-        print(recon_path, )
-        for key, metric in metric_dict.items():
-            value = metric(recon_tensor).item()
+    per_image = []
+    patch_count = 0
+    for pair in tqdm.tqdm(pairs):
+        recon_tensor = _read_tensor(pair.reconstruction, device)
+        values = {key: float(metric(recon_tensor).item()) for key, metric in metric_dict.items()}
+        if pair.ground_truth is not None:
+            gt_tensor = _read_tensor(pair.ground_truth, device)
+            patch_count += update_patch_fid(gt_tensor, recon_tensor,
+                                            fid_metric=fid_metric, kid_metric=kid_metric, patch_size=FID_PATCH_SIZE)
+            values.update({key: float(metric(recon_tensor, gt_tensor).item())
+                           for key, metric in metric_paired_dict.items()})
+            values.update({key: float(value.item())
+                           for key, value in structure_metrics(recon_tensor, gt_tensor).items()})
+        print(pair.reconstruction)
+        for key, value in values.items():
             print(key, value)
-            result[key] = result.get(key, 0) + value
-        
-        if gt_dir is not None:
-            with open(gt_path, "rb") as f:
-                image_gt = Image.open(f)
-                image_gt = image_gt.convert("RGB")
-            gt_tensor = totensor(image_gt).unsqueeze(0).to(device)
+            result[key] = result.get(key, 0.0) + value
+        per_image.append({"reconstruction": str(pair.reconstruction.resolve()),
+                          "ground_truth": str(pair.ground_truth.resolve()) if pair.ground_truth else None,
+                          "width": pair.size[0], "height": pair.size[1], **values})
 
-            update_patch_fid(gt_tensor, recon_tensor, fid_metric=fid_metric, kid_metric=kid_metric)    
-            
-            for key, metric in metric_paired_dict.items():
-                value = metric(recon_tensor, gt_tensor).item()
-                print(key, value)
-                result[key] = result.get(key, 0) + value
-
-    result['fid'] = float(fid_metric.compute())
-    if gt_dir is not None and len(recon_path_list) > 50:
-        kid_tuple = kid_metric.compute()
-        result['kid_mean'], result['kid_std'] = float(kid_tuple[0]), float(kid_tuple[1])
+    # Ordinary image metrics use an equal weight per image, regardless of size.
+    result = {key: total / len(pairs) for key, total in result.items()}
+    distribution_values, unavailable = compute_distribution_metrics(fid_metric, kid_metric, patch_count)
+    result.update(distribution_values)
 
     print_results = []
-    for key, res in result.items():
-        if key == 'fid':
-            print(f"{key}: {res:.2f}")
-            print_results.append(f"{key}: {res:.2f}")
-        elif key == 'kid_mean' or key == 'kid_std':
-            print(f"{key}: {res:.7f}")
-            print_results.append(f"{key}: {res:.7f}")
-        else:
-            print(f"{key}: {res/len(recon_path_list):.5f}")
-            print_results.append(f"{key}: {res/len(recon_path_list):.5f}")
+    for key, value in result.items():
+        digits = 2 if key == "fid" else 7 if key in ("kid_mean", "kid_std") else 5
+        line = f"{key}: {value:.{digits}f}"
+        print(line)
+        print_results.append(line)
+    for key, reason in unavailable.items():
+        print(f"{key}: unavailable ({reason})")
+
+    protocol = metric_protocol(pixel_domain="uint8_roundtrip", ms_ssim_alias="rgb")
+    protocol.update({"quantization": "decoded stored RGB uint8 / 255; producer rounding is unknown",
+                     "pairing": "exact_case_sensitive_stem",
+                     "strip_recon_index_prefix": strip_recon_index_prefix,
+                     **distribution_metric_protocol(patch_count),
+                     "unavailable_metrics": unavailable})
+    print("Metric protocol:", json.dumps(protocol, sort_keys=True))
+    if output_json is not None:
+        output_path = Path(output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps({"num_images": len(pairs), "metrics": result,
+                                          "metric_protocol": protocol, "images": per_image,
+                                          "source_revision": source_revision(),
+                                          "dataset_fingerprints": {
+                                              "reconstruction": dataset_content_fingerprint(
+                                                  pair.reconstruction for pair in pairs),
+                                              "ground_truth": dataset_content_fingerprint(
+                                                  pair.ground_truth for pair in pairs)
+                                              if gt_dir is not None else None}},
+                                         indent=2) + "\n")
     return print_results
 
 
 def parse_args(argv):
-    parser = argparse.ArgumentParser(description="Example evaluation script.")
-    parser.add_argument("--recon_dir", type=str)
-    parser.add_argument("--gt_dir", type=str)
-    args = parser.parse_args(argv)
-    return args
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--recon_dir", "--recon-dir", type=str, required=True)
+    parser.add_argument("--gt_dir", "--gt-dir", type=str)
+    parser.add_argument("--ntest", type=int)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--strip-recon-index-prefix", action="store_true",
+                        help="Explicitly map 00000_source.png reconstructions to source.* targets.")
+    parser.add_argument("--output-json", type=str,
+                        help="Save means, per-image source identities, and the evaluation protocol.")
+    return parser.parse_args(argv)
 
 
 def main(argv):
     args = parse_args(argv)
-    print_results = evaluate(args.recon_dir, args.gt_dir, None)
+    return evaluate(args.recon_dir, args.gt_dir, args.ntest,
+                    strip_recon_index_prefix=args.strip_recon_index_prefix,
+                    output_json=args.output_json, device=args.device)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])

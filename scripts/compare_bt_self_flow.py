@@ -12,8 +12,23 @@ def compare(c, d, targets=None):
     for key in ("dataset_fingerprint", "images", "metric_protocol", "weights", "step", "phase"):
         if key not in c or c[key] != d.get(key):
             raise ValueError(f"C/D comparison requires identical {key}")
+    protocol = c["metric_protocol"]
+    modern = isinstance(protocol, dict) and protocol.get("version") == "image_quality_rgb_y_v2"
+    if modern or "dataset_content_sha256" in c or "dataset_content_sha256" in d:
+        digest = c.get("dataset_content_sha256")
+        if (not isinstance(digest, str) or len(digest) != 64 or
+                any(char not in "0123456789abcdef" for char in digest.lower()) or
+                digest != d.get("dataset_content_sha256")):
+            raise ValueError("C/D comparison requires identical dataset_content_sha256")
     if c["backend"] != "C" or d["backend"] != "D":
         raise ValueError("provide C followed by D")
+    metrics = ["psnr", "lpips", "dists"]
+    all_rows = [row for source in (c, d) for row in source["summary"].values()]
+    for metric in ("ms_ssim", "ms_ssim_rgb", "ms_ssim_y"):
+        if any(metric in row for row in all_rows):
+            if not all(metric in row for row in all_rows):
+                raise ValueError(f"every quality point must report {metric} before comparing it")
+            metrics.append(metric)
     curves = {}
     for name, source in (("C", c), ("D", d)):
         rows = sorted(source["summary"].values(), key=lambda item: item["bpp"])
@@ -23,7 +38,9 @@ def compare(c, d, targets=None):
         # Average ties, retaining every measured quality point.
         unique = np.unique(rates)
         curves[name] = (unique, {metric: np.array([np.mean([row[metric] for row in rows if row["bpp"] == rate])
-                                                  for rate in unique]) for metric in ("psnr", "lpips", "dists")})
+                                                  for rate in unique]) for metric in metrics})
+        if any(not np.all(np.isfinite(values)) for values in curves[name][1].values()):
+            raise ValueError("comparison quality metrics must be finite")
     lo = max(values[0].min() for values in curves.values())
     hi = min(values[0].max() for values in curves.values())
     if not lo < hi:
@@ -34,14 +51,15 @@ def compare(c, d, targets=None):
     rows = []
     for target in sorted(targets):
         row = {"bpp": float(target)}
-        for metric in ("psnr", "lpips", "dists"):
+        for metric in metrics:
             for name, (rate, values) in curves.items():
                 row[f"{name}_{metric}"] = float(np.interp(np.log(target), np.log(rate), values[metric]))
             row[f"D_minus_C_{metric}"] = row[f"D_{metric}"]-row[f"C_{metric}"]
         rows.append(row)
     return {"comparison": "linear interpolation in log(actual total bpp), including all packet overhead; no extrapolation",
-            "interpretation": "positive PSNR delta and negative LPIPS/DISTS delta favor D; interpolated estimates require inspection of raw curves",
+            "interpretation": "positive PSNR/MS-SSIM delta and negative LPIPS/DISTS delta favor D; interpolated estimates require inspection of raw curves",
             "overlap_bpp": [float(lo), float(hi)], "weights": c["weights"], "phase": c["phase"], "step": c["step"],
+            "metric_protocol": c["metric_protocol"], "dataset_content_sha256": c.get("dataset_content_sha256"),
             "C_checkpoint_sha256": c["checkpoint_sha256"], "D_checkpoint_sha256": d["checkpoint_sha256"], "rows": rows}
 
 

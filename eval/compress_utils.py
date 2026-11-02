@@ -4,6 +4,7 @@ from pathlib import Path
 import PIL.Image as Image
 
 import torch
+from torch.nn import functional as F
 from torchvision.transforms import ToPILImage
 
 
@@ -80,3 +81,11 @@ def filesize(filepath: str) -> int:
 
 def torch2img(x: torch.Tensor) -> Image.Image:
     return ToPILImage()(x.clamp_(0, 1).squeeze())
+
+
+def pad_image_to_multiple(image: torch.Tensor, multiple: int = 256) -> torch.Tensor:
+    """Pad right/bottom, with a valid fallback for images smaller than padding."""
+    height, width = image.shape[-2:]
+    pad_h, pad_w = (-height) % multiple, (-width) % multiple
+    mode = "reflect" if pad_h < height and pad_w < width else "replicate"
+    return F.pad(image, (0, pad_w, 0, pad_h), mode=mode)

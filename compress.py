@@ -1,10 +1,7 @@
 import torch
 import torch.utils.checkpoint
-import torch.nn.functional as F
 from torchvision import transforms
 from torchmetrics.image import (
-    FrechetInceptionDistance,
-    KernelInceptionDistance,
     LearnedPerceptualImagePatchSimilarity,
 )
 
@@ -33,7 +30,23 @@ from codec_packet import (
 from eval.compress_utils import *
 from eval.testing_utils import parse_args_testing
 from eval._update_patch_fid import update_patch_fid
+from eval.distribution_metrics import (
+    FID_PATCH_SIZE,
+    build_distribution_metrics,
+    compute_distribution_metrics,
+    distribution_metric_protocol,
+)
 from config_compat import load_pure_sana_config, prepare_inference_config
+from evaluation_protocol import (
+    PADDING_PROTOCOL,
+    dataset_content_fingerprint,
+    metric_protocol,
+    psnr,
+    quantize_image,
+    save_image,
+    source_revision,
+    structure_metrics,
+)
 
 class TeeLogger:
     """
@@ -467,14 +480,13 @@ def main(args):
     
     # define Reference Model
     metric_paired_dict = {}
-    metric_paired_dict["psnr"] = pyiqa.create_metric('psnr').to(device) # [0-1] input
     metric_paired_dict["dists"] = pyiqa.create_metric('dists').to(device) # [0-1] input
-    metric_paired_dict["ms_ssim"] = pyiqa.create_metric('ms_ssim').to(device) # [0-1] input
     metric_paired_dict["lpips"] = LearnedPerceptualImagePatchSimilarity(net_type='alex', normalize=True).to(device) # [0-1] input
+    for metric in (*metric_dict.values(), *metric_paired_dict.values()):
+        metric.eval()
     
     # define Distribution Model
-    fid_metric = FrechetInceptionDistance().to(device)
-    kid_metric = KernelInceptionDistance().to(device)
+    fid_metric, kid_metric = build_distribution_metrics(device)
     
     # load model
     params = config.get("model", {}).get("params", {})
@@ -493,10 +505,16 @@ def main(args):
     ])
     
     bpp = []
-    images = glob.glob(args.img_path + '/*.png')
+    images = sorted(glob.glob(args.img_path + '/*.png'))
+    if not images:
+        raise ValueError(f"no PNG images found in {args.img_path}")
+    domain = getattr(args, "metric_domain", "float")
+    protocol = metric_protocol(pixel_domain="uint8_roundtrip" if domain == "uint8" else "float")
     print(f'\nFind {str(len(images))} images in {args.img_path}\n')
 
     result = {}
+    result_counts = {}
+    patch_count = 0
     per_image_results = []  # Detailed per-image metrics for saving
 
     # Performance tracking variables
@@ -511,9 +529,7 @@ def main(args):
         img = preprocess_image(img_path, transform).cuda().unsqueeze(0)
         ori_h, ori_w = img.shape[2:]
 
-        pad_h = (math.ceil(ori_h / 256)) * 256 - ori_h
-        pad_w = (math.ceil(ori_w / 256)) * 256 - ori_w
-        img_padded = F.pad(img, pad=(0, pad_w, 0, pad_h), mode='reflect') # [-1,1]
+        img_padded = pad_image_to_multiple(img) # [-1,1]
 
         # Start timing and memory tracking
         torch.cuda.synchronize()
@@ -555,6 +571,9 @@ def main(args):
         
         out_img = out_img.clamp(0.0, 1.0) # [0, 1]
         gt_img = (img * 0.5 + 0.5).float().detach()
+        if domain == "uint8":
+            out_img = quantize_image(out_img, input_range="zero_one")
+            gt_img = quantize_image(gt_img, input_range="zero_one")
         
         # compute metrics
         print(f'=============={fname}==============')
@@ -568,6 +587,7 @@ def main(args):
             'inference_time_s': inference_time,
             'memory_used_mb': mem_used,
             'peak_memory_mb': peak_mem,
+            'metric_domain': domain,
         }
 
         # Record performance stats
@@ -592,15 +612,29 @@ def main(args):
             value = metric(out_img).item()
             print(key, value)
             result[key] = result.get(key, 0) + value
+            result_counts[key] = result_counts.get(key, 0) + 1
             per_image_record[key] = float(value)
 
-        update_patch_fid(gt_img, out_img, fid_metric=fid_metric, kid_metric=kid_metric)
+        image_patches = 0
+        if min(ori_h, ori_w) >= FID_PATCH_SIZE:
+            image_patches = update_patch_fid(gt_img, out_img, fid_metric=fid_metric,
+                                             kid_metric=kid_metric, patch_size=FID_PATCH_SIZE)
+            patch_count += image_patches
+        per_image_record["distribution_patches"] = image_patches
 
         for key, metric in metric_paired_dict.items():
             value = metric(out_img, gt_img).item()
             print(key, value)
             result[key] = result.get(key, 0) + value
+            result_counts[key] = result_counts.get(key, 0) + 1
             per_image_record[key] = float(value)
+
+        for key, value in {"psnr": psnr(out_img, gt_img), **structure_metrics(out_img, gt_img)}.items():
+            value = float(value)
+            print(key, value)
+            result[key] = result.get(key, 0) + value
+            result_counts[key] = result_counts.get(key, 0) + 1
+            per_image_record[key] = value
 
         try:
             bpp.append(rate.cpu().numpy())
@@ -611,8 +645,7 @@ def main(args):
         per_image_results.append(per_image_record)
 
         if args.save_img:
-            output_pil = transforms.ToPILImage()(out_img[0].cpu()) 
-            output_pil.save(outf)
+            save_image(out_img, outf, input_range="zero_one")
         
         # Clear cache periodically to avoid memory fragmentation
         if (img_idx + 1) % 10 == 0:
@@ -620,11 +653,10 @@ def main(args):
             gc.collect()
     
     print(f'==============The Avg. Results w/ {str(len(images))} images==============')
-    result['fid'] = float(fid_metric.compute())
-
-    if len(images) > 50:
-        kid_tuple = kid_metric.compute()
-        result['kid_mean'], result['kid_std'] = float(kid_tuple[0]), float(kid_tuple[1])
+    distribution_values, unavailable = compute_distribution_metrics(fid_metric, kid_metric, patch_count)
+    result.update(distribution_values)
+    for key, reason in unavailable.items():
+        print(f"{key}: unavailable ({reason})")
 
     # Build summary dict
     avg_bpp = float(np.mean(bpp))
@@ -639,11 +671,23 @@ def main(args):
         'entropy_estimation': args.entropy_estimation,
         'quality_index': args.quality_index,
         'timestamp': timestamp,
+        'dataset_content_sha256': dataset_content_fingerprint(images),
+        'metric_protocol': protocol,
+        'padding': PADDING_PROTOCOL,
+        'source_revision': source_revision(),
+        'structure_metric_images': result_counts.get('ms_ssim_rgb', 0),
+        'distribution_metric_protocol': {
+            **distribution_metric_protocol(patch_count),
+            'eligible_images': sum(row['distribution_patches'] > 0 for row in per_image_results),
+            'skipped_small_images': sum(row['distribution_patches'] == 0 for row in per_image_results),
+            'minimum_image_side': FID_PATCH_SIZE,
+            'unavailable_metrics': unavailable,
+        },
     }
 
     print_results = []
     for key, res in result.items():
-        avg_val = res if (key in ('fid', 'kid_mean', 'kid_std')) else res / len(images)
+        avg_val = res if (key in ('fid', 'kid_mean', 'kid_std')) else res / result_counts[key]
         if key == 'fid':
             print(f"{key}: {avg_val:.2f}")
         elif key == 'kid_mean' or key == 'kid_std':
@@ -678,7 +722,7 @@ def main(args):
         if per_image_results:
             csv_path = os.path.join(run_dir, "per_image_metrics.csv")
             import csv
-            all_keys = list(per_image_results[0].keys())
+            all_keys = list(dict.fromkeys(key for row in per_image_results for key in row))
             with open(csv_path, 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=all_keys)
                 writer.writeheader()
@@ -777,9 +821,7 @@ def main(args):
                 img = preprocess_image(img_path, transform).cuda().unsqueeze(0)
                 ori_h, ori_w = img.shape[2:]
                 
-                pad_h = (math.ceil(ori_h / 256)) * 256 - ori_h
-                pad_w = (math.ceil(ori_w / 256)) * 256 - ori_w
-                img_padded = F.pad(img, pad=(0, pad_w, 0, pad_h), mode='reflect')
+                img_padded = pad_image_to_multiple(img)
                 
                 # Start timing
                 torch.cuda.synchronize()

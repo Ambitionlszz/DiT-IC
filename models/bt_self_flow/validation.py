@@ -6,11 +6,25 @@ from pathlib import Path
 
 import torch
 
+from evaluation_protocol import (PADDING_PROTOCOL, dataset_content_fingerprint,
+                                 metric_protocol, psnr, structure_metrics)
 from .checkpoint import evaluation_state
 from .data import counter_seed
 from .losses import rate_beta, reconstruction_objective
 from .model import pad_image
 from .packet import BTImagePacket, RateControl, fixed_side_bits, pack_codes
+
+
+def build_validation_identity(dataset, actual_rate=False, config=None):
+    """Keep validation/selection scores bound to pixels, metrics and objective."""
+    config = config or {}
+    return dict(dataset_fingerprint=dataset.fingerprint,
+                dataset_content_sha256=dataset_content_fingerprint(dataset.paths),
+                images=len(dataset), crop=dataset.crop, actual_rate=bool(actual_rate),
+                weights="deployment_ema", padding=PADDING_PROTOCOL,
+                metric_protocol=metric_protocol(pixel_domain="float"),
+                selection_objective={key: config.get(key, {}) for key in
+                                     ("image_loss", "objective", "quality")})
 
 
 @torch.no_grad()
@@ -70,6 +84,7 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
     device = next(model.parameters()).device
     qualities = qualities or (0., .2, .4, .6, .8, 1.)
     sums_by_quality = {str(quality): {} for quality in qualities}
+    counts_by_quality = {str(quality): {} for quality in qualities}
     with evaluation_state(model, state):
         for index in range(len(dataset)):
             image = dataset[index].unsqueeze(0).to(device)
@@ -85,9 +100,9 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                     result.image = result.image[..., :height, :width]
                 loss, metrics = reconstruction_objective(result, image, control, model.distortion_scale.s_data,
                                                          image_loss, objective=objective, quality=quality)
-                if result.image is not None and min(height, width) > 160:
-                    from pytorch_msssim import ms_ssim
-                    metrics["ms_ssim"] = ms_ssim((result.image+1)/2, (image+1)/2, data_range=1., size_average=True)
+                if result.image is not None:
+                    metrics["psnr"] = psnr(result.image, image, input_range="minus_one_one")
+                    metrics.update(structure_metrics(result.image, image, input_range="minus_one_one"))
                 packet = None
                 if actual_rate:
                     # Encode the frontend without a second SANA forward. D's
@@ -110,6 +125,8 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                     metrics["scale_saturation"] = result.scale_info["saturation"]
                 for name, value in metrics.items():
                     sums[name] = sums.get(name, 0.)+value.detach()
+                    counts = counts_by_quality[str(q)]
+                    counts[name] = counts.get(name, 0)+1
                 if index < packet_samples and hasattr(model, "DiT") and transition == 1:
                     packet = packet if packet is not None else model.compress(image, control)
                     decoded = model.decompress(BTImagePacket.from_bytes(packet.to_bytes()))
@@ -119,5 +136,6 @@ def validate(model, dataset, image_loss=None, state=None, transition=1., packet_
                     sums["packet_forward_max_error"] = max(sums.get("packet_forward_max_error", 0.), hard_error)
                     sums["packet_bpp"] = sums.get("packet_bpp", 0.)+8*len(packet.to_bytes())/(image.shape[-2]*image.shape[-1])
     return {quality: {name: float(value)/(1 if name == "packet_forward_max_error" else
-                                        min(packet_samples, len(dataset)) if name == "packet_bpp" else len(dataset))
+                                        min(packet_samples, len(dataset)) if name == "packet_bpp" else
+                                        counts_by_quality[quality][name])
                       for name, value in sums.items()} for quality, sums in sums_by_quality.items()}

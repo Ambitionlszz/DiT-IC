@@ -38,6 +38,15 @@ class ImageLoss(nn.Module):
             # directly so this loss follows normal nn.Module.to() semantics.
             self.dists = pyiqa.create_metric("dists", as_loss=True, device="cpu").net.requires_grad_(False).eval()
 
+    def train(self, mode=True):
+        super().train(mode)
+        # These networks define fixed losses even when a parent enters train
+        # mode. Keep dropout/statistics fixed without disabling image gradients.
+        for metric in (self.lpips, self.dists):
+            if metric is not None:
+                metric.eval()
+        return self
+
     def forward(self, predicted, target):
         if self.checkpoint_features and torch.is_grad_enabled() and predicted.requires_grad:
             return checkpoint(self._forward, predicted, target, use_reentrant=False)

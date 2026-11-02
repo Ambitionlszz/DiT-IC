@@ -63,6 +63,15 @@ class LPIPSWithDiscriminator(nn.Module):
         if pp_style:
             print("Using pp_style for reconstruction loss")
 
+    def train(self, mode=True):
+        super().train(mode)
+        # Parent model.train() must not reactivate LPIPS dropout or change
+        # perceptual statistics. Only the discriminator follows training mode;
+        # frozen perceptual weights still propagate gradients to the images.
+        self.perceptual_loss.eval()
+        self.dists.eval()
+        return self
+
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
         if last_layer is None or not last_layer.requires_grad:
             return torch.as_tensor(

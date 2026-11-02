@@ -5,10 +5,18 @@ import json
 from pathlib import Path
 import time
 
-from PIL import Image
 import torch
 from torch.nn import functional as F
 
+from evaluation_protocol import (
+    dataset_content_fingerprint,
+    metric_protocol,
+    psnr,
+    quantize_image,
+    save_image,
+    source_revision,
+    structure_metrics,
+)
 from models.bt_self_flow.checkpoint import read_checkpoint, sha256_file
 from models.bt_self_flow.data import ImageDataset
 from models.bt_self_flow.experiment import asset_identity, make_model
@@ -16,13 +24,6 @@ from models.bt_self_flow.losses import ImageLoss
 from models.bt_self_flow.model import pad_image
 from models.bt_self_flow.packet import BTImagePacket, RateControl, unpack_codes
 from models.bt_self_flow.router import allocation_from_codes
-
-
-def save_image(tensor, path):
-    array = tensor[0].detach().float().clamp(-1, 1).add(1).mul(127.5).round().byte().permute(1, 2, 0).cpu().numpy()
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(array).save(path)
 
 
 def synchronize(device):
@@ -68,6 +69,8 @@ def evaluate(args):
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     dataset = ImageDataset(args.input, crop=None, training=False, limit=args.limit)
+    domain = getattr(args, "metric_domain", "float")
+    protocol = metric_protocol(pixel_domain="uint8_roundtrip" if domain == "uint8" else "float")
     metric = ImageLoss().to(device).eval()
     rows = []
     for quality in args.qualities:
@@ -95,25 +98,28 @@ def evaluate(args):
             nfe = model.prediction_calls-before
             if nfe != 1:
                 raise RuntimeError(f"expected 1 NFE, got {nfe}")
-            _, values = metric(reconstructed, image)
-            if min(image.shape[-2:]) > 160:
-                from pytorch_msssim import ms_ssim
-                values["ms_ssim"] = ms_ssim((reconstructed+1)/2, (image+1)/2, data_range=1., size_average=True)
+            metric_image, metric_reference = reconstructed, image
+            if domain == "uint8":
+                metric_image = quantize_image(reconstructed, input_range="minus_one_one").mul(2).sub(1)
+                metric_reference = quantize_image(image, input_range="minus_one_one").mul(2).sub(1)
+            _, values = metric(metric_image, metric_reference)
+            values["psnr"] = psnr(metric_image, metric_reference, input_range="minus_one_one")
+            values.update(structure_metrics(metric_image, metric_reference, input_range="minus_one_one"))
             h, w = image.shape[-2:]
             yh, yw = packet.y_shape
             allocation = torch.tensor(unpack_codes(packet.allocation, 3, yh*yw), device=device).reshape(1, 1, yh, yw)
             delta = model.codec.steps(received.rate_control(device), allocation_from_codes(allocation))
             pixel_delta = F.interpolate(delta, size=(yh*64, yw*64), mode="nearest")[..., :h, :w]
             precise = (pixel_delta <= pixel_delta.flatten().quantile(.25)).float()
-            region_mse = ((reconstructed-image).square()*precise).sum()/(3*precise.sum()).clamp_min(1)
+            region_mse = ((metric_image-metric_reference).square()*precise).sum()/(3*precise.sum()).clamp_min(1)/4
             row = {"image": str(source_path), "lambda": control.value, "lambda_code": control.low_code,
                    "height": h, "width": w, "bytes": len(data), "bpp": 8*len(data)/(h*w),
                    "bytes_by_component": packet.byte_breakdown(), "encode_seconds": encode_seconds,
                    "byte_fractions": {name: count/len(data) for name, count in packet.byte_breakdown().items()},
-                   "decode_seconds": decode_seconds, "nfe": nfe,
+                   "decode_seconds": decode_seconds, "nfe": nfe, "metric_domain": domain,
                    "peak_memory_bytes": torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0,
                    "high_precision_area_fraction": precise.mean().item(),
-                   "high_precision_psnr": -10*torch.log10(region_mse.clamp_min(1e-12)/4).item(),
+                   "high_precision_psnr": -10*torch.log10(region_mse.clamp_min(1e-12)).item(),
                    **{name: float(value) for name, value in values.items()}, **model.last_compress_stats,
                    **model.last_decode_stats}
             if args.check_forward:
@@ -139,12 +145,15 @@ def evaluate(args):
         code = RateControl(quality).low_code
         subset = [row for row in rows if row["lambda_code"] == code]
         keys = ("bpp", "psnr", "lpips", "dists", "encode_seconds", "decode_seconds", "peak_memory_bytes")
-        if "ms_ssim" in subset[0]:
-            keys += ("ms_ssim",)
         keys += ("base_latent_mse", "repair_latent_rms", "high_precision_psnr", "high_precision_area_fraction")
         if "scale_saturation" in subset[0]:
             keys += ("scale_saturation",)
         summary[str(code)] = {key: sum(row[key] for row in subset)/len(subset) for key in keys}
+        for key in ("ms_ssim", "ms_ssim_rgb", "ms_ssim_y"):
+            eligible = [row[key] for row in subset if key in row]
+            if eligible:
+                summary[str(code)][key] = sum(eligible)/len(eligible)
+        summary[str(code)]["structure_metric_images"] = sum("ms_ssim_rgb" in row for row in subset)
         summary[str(code)]["bytes_by_component"] = {
             name: sum(row["bytes_by_component"][name] for row in subset)/len(subset)
             for name in subset[0]["bytes_by_component"]}
@@ -154,7 +163,9 @@ def evaluate(args):
     manifest = {"checkpoint": str(Path(args.checkpoint).resolve()), "checkpoint_sha256": sha256_file(args.checkpoint),
                 "weights": args.weights, "backend": model.backend, "step": checkpoint["step"], "phase": checkpoint["phase"],
                 "dataset_fingerprint": dataset.fingerprint, "images": len(dataset),
-                "metric_protocol": "float RGB [-1,1], PSNR dynamic range 2, LPIPS alex, DISTS [0,1]",
+                "dataset_content_sha256": dataset_content_fingerprint(dataset.paths),
+                "metric_protocol": protocol,
+                "source_revision": source_revision(),
                 "padding": "right/bottom to 256, reflect when possible else replicate, original-pixel bpp",
                 "codec_precision": "fp32", "nfe": 1, "summary": summary}
     manifest["high_precision_region"] = "nearest-upsampled transmitted step <= original-image 25th percentile, ties included"
@@ -172,6 +183,8 @@ def main():
     parser.add_argument("--limit", type=int)
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--save-images", action="store_true")
+    parser.add_argument("--metric-domain", choices=("float", "uint8"), default="float",
+                        help="score decoder floats (default) or the rounded 8-bit pixels written to PNG")
     parser.add_argument("--sana-path", help="map pretrained assets to this host, retaining hash verification")
     parser.add_argument("--text-path", help="map the fixed text embedding to this host")
     parser.add_argument("--check-forward", action="store_true")

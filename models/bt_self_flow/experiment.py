@@ -24,6 +24,37 @@ MU_PIXEL_METHODS = (MU_PIXEL_METHOD, MU_PIXEL_CONTROL_METHOD, PRECISION_MU_PIXEL
 PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS)
 
 
+def validate_spatial_self_flow(config):
+    settings = config.get("spatial_self_flow")
+    if settings is None:
+        return
+    allowed = {"enabled", "projector_enabled", "student_layer", "teacher_layer", "epsilon",
+               "bypass_probability", "teacher_stream", "bypass_stream", "coefficient"}
+    if set(settings) - allowed:
+        raise ValueError("unknown spatial Self-Flow setting")
+    for name in ("enabled", "projector_enabled"):
+        if name in settings and not isinstance(settings[name], bool):
+            raise ValueError(f"spatial_self_flow.{name} must be boolean")
+    enabled = settings.get("enabled", False)
+    if enabled and not settings.get("projector_enabled", enabled):
+        raise ValueError("spatial SF supervision requires its main-path projector")
+    if settings.get("coefficient", 1.) != 1.:
+        raise ValueError("spatial SF coefficient is fixed at one")
+    epsilon = settings.get("epsilon", 1e-6)
+    probability = settings.get("bypass_probability", .1)
+    if not math.isfinite(epsilon) or epsilon <= 0 or not math.isfinite(probability) or not 0 <= probability <= 1:
+        raise ValueError("invalid spatial normalization epsilon or bypass probability")
+    low, high = settings.get("student_layer", 8), settings.get("teacher_layer", 20)
+    if any(not isinstance(x, int) or isinstance(x, bool) for x in (low, high)) or not 1 <= low < high:
+        raise ValueError("spatial feature depths must be ordered positive integers")
+    if (config["train"]["phase"] != "joint" or config["model"]["backend"] != "C"
+            or not config["model"].get("codec", {}).get("precision_consistent")
+            or config["self_flow"].get("enabled") or config["self_flow"].get("mixed_sampling")):
+        raise ValueError("spatial SF requires pure precision-consistent joint C and no legacy SF")
+    if config.get("decoder", {}).get("method", "native") not in ("native", PRECISION_MU_PIXEL_METHOD):
+        raise ValueError("spatial ablation fixes D to precision-conditioned mu-QK PiT v4")
+
+
 def validate_decoder(config):
     decoder = config.get("decoder", {})
     method = decoder.get("method", "native")
@@ -95,6 +126,7 @@ def load_config(path):
             raise ValueError(f"train.{key} must be positive")
     config = expand_environment(config)
     validate_decoder(config)
+    validate_spatial_self_flow(config)
     storage = config.get("execution", {}).get("saved_tensors", "device")
     if storage not in ("device", "stride_preserving_cpu"):
         raise ValueError("unknown saved tensor storage policy")
@@ -147,6 +179,7 @@ def merge(base, override):
 
 def make_model(config, device):
     validate_decoder(config)
+    validate_spatial_self_flow(config)
     model = config["model"]
     phase = config["train"]["phase"]
     torch.manual_seed(config["train"]["seed"])
@@ -159,7 +192,13 @@ def make_model(config, device):
     else:
         constructor, decoder_options = BTCodec, {}
         method = config.get("decoder", {}).get("method", "native")
-        if method in PIXEL_METHODS:
+        if "spatial_self_flow" in config:
+            from .spatial_model import SpatialAblationCodec
+            constructor = SpatialAblationCodec
+            decoder_options["spatial_config"] = config["spatial_self_flow"]
+            decoder_options["pixel_config"] = (config["decoder"].get("pixel_adapter", {})
+                                                if method == PRECISION_MU_PIXEL_METHOD else None)
+        elif method in PIXEL_METHODS:
             if method in MU_PIXEL_METHODS:
                 from .mu_pixel_model import MuQKCPixelCodec, MuPixelQKCPixelCodec, PrecisionMuQKCPixelCodec
                 constructor = {MU_PIXEL_METHOD: MuQKCPixelCodec, MU_PIXEL_CONTROL_METHOD: MuPixelQKCPixelCodec,

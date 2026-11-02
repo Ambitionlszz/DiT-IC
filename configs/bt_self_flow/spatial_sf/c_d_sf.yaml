@@ -1,0 +1,7 @@
+base: c_d.yaml
+spatial_self_flow:
+  enabled: true
+  projector_enabled: true
+train:
+  variant: c_d_sf
+  output: ${SPATIAL_SF_RUN_ROOT:-checkpoints/spatial_sf}/c_d_sf

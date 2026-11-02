@@ -8,7 +8,13 @@ from pathlib import Path
 
 
 QUALITY_NAMES = tuple(f"q{index}" for index in range(6))
-LIC_SUMMARY_SCHEMA_VERSION = 1
+LIC_SUMMARY_SCHEMA_VERSION = 2
+LEGACY_METRIC_PROTOCOL = {
+    "version": "legacy_pyiqa_y_float_unverified_v1",
+    "pixel_domain": "float",
+    "ms_ssim_alias": "ms_ssim_y",
+    "provenance": "inferred from historical evaluators; metric implementation and package versions were not recorded",
+}
 
 
 def load_json(path):
@@ -38,14 +44,66 @@ def validated_sha256(value, label):
     return value
 
 
+def evaluation_contract(summary, lic=False):
+    """Read protocol identity without importing training or metric packages.
+
+    Historical LIC schema 1 and Plain summaries omitted protocol metadata.
+    Preserve their original workflow with an explicit unverified legacy marker;
+    they cannot be compared with newly measured, fully specified reports.
+    """
+    schema = int(summary.get("summary_schema_version", 0))
+    if lic and schema not in (1, LIC_SUMMARY_SCHEMA_VERSION):
+        raise ValueError("LIC summary must use schema 1 or 2")
+    protocol = summary.get("metric_protocol")
+    if protocol is None and schema != LIC_SUMMARY_SCHEMA_VERSION:
+        return {"metric_protocol": dict(LEGACY_METRIC_PROTOCOL), "dataset_content_sha256": None}
+    if not isinstance(protocol, dict):
+        raise ValueError("schema 2 evaluation requires a structured metric_protocol")
+    if protocol.get("version") != "image_quality_rgb_y_v2":
+        raise ValueError("unsupported metric_protocol version")
+    if protocol.get("pixel_domain") not in ("float", "uint8_roundtrip"):
+        raise ValueError("metric_protocol pixel_domain must be float or uint8_roundtrip")
+    if protocol.get("ms_ssim_alias") != "ms_ssim_rgb":
+        raise ValueError("schema 2 metric_protocol must alias ms_ssim to ms_ssim_rgb")
+    for name in ("ms_ssim_rgb", "ms_ssim_y"):
+        if not isinstance(protocol.get(name), dict):
+            raise ValueError(f"metric_protocol is missing the {name} definition")
+    content = validated_sha256(summary.get("dataset_content_sha256"), "dataset_content_sha256")
+    return {"metric_protocol": protocol, "dataset_content_sha256": content}
+
+
+def validate_ms_ssim_alias(values, protocol, label):
+    if protocol == LEGACY_METRIC_PROTOCOL:
+        return
+    alias = protocol["ms_ssim_alias"]
+    # Both explicit channels must be present in new dual-channel reports.
+    for name in ("ms_ssim_rgb", "ms_ssim_y"):
+        if name not in values:
+            raise ValueError(f"{label} is missing {name}")
+        finite(values[name], f"{label}.{name}")
+    actual = finite(values.get("ms_ssim"), f"{label}.ms_ssim")
+    expected = finite(values[alias], f"{label}.{alias}")
+    if not math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-12):
+        raise ValueError(f"{label}.ms_ssim disagrees with metric_protocol alias {alias}")
+
+
+def require_matching_contracts(reference, candidate, label):
+    if reference["metric_protocol"] != candidate["metric_protocol"]:
+        raise ValueError(f"{label} metric protocols differ (channel, pixel domain, or implementation)")
+    if reference["dataset_content_sha256"] != candidate["dataset_content_sha256"]:
+        raise ValueError(f"{label} were not evaluated on the same image set (dataset_content_sha256 differs)")
+
+
 def direct_lic_metrics(summary_path):
     summary = load_json(summary_path)
+    contract = evaluation_contract(summary, lic=True)
     qualities = summary.get("qualities", {})
     metrics = {}
     for quality in QUALITY_NAMES:
         if quality not in qualities:
             raise ValueError(f"{summary_path} is missing {quality}")
         result = qualities[quality]
+        validate_ms_ssim_alias(result, contract["metric_protocol"], quality)
         metrics[quality] = {
             key: finite(result[key], f"{quality}.{key}")
             for key in ("bpp", "psnr", "lpips", "dists", "ms_ssim")
@@ -66,10 +124,7 @@ def validate_lic_evaluation_binding(
         raise ValueError(
             f"LIC summary {summary_path} is not the summary for {evaluation_dir}"
         )
-    if int(summary.get("summary_schema_version", 0)) != LIC_SUMMARY_SCHEMA_VERSION:
-        raise ValueError(
-            f"LIC summary must use schema {LIC_SUMMARY_SCHEMA_VERSION}"
-        )
+    contract = evaluation_contract(summary, lic=True)
     if summary.get("weights") != "ema":
         raise ValueError("Gate A requires EMA LIC evaluation weights")
     summary_checkpoint = Path(summary.get("checkpoint", "")).resolve()
@@ -94,6 +149,7 @@ def validate_lic_evaluation_binding(
         "image_manifest_sha256": image_manifest_sha256,
         "num_images": num_images,
         "weights": "ema",
+        **contract,
     }
 
 
@@ -206,6 +262,8 @@ def select_lic(args):
             }
         )
 
+    for candidate in candidates[1:]:
+        require_matching_contracts(candidates[0], candidate, "LIC candidates")
     evaluation_sets = {
         (candidate["image_manifest_sha256"], candidate["num_images"])
         for candidate in candidates
@@ -223,6 +281,7 @@ def select_lic(args):
             "q0_max_bpp": args.q0_max_bpp,
             "q5_bpp_range": [args.q5_min_bpp, args.q5_max_bpp],
             "selection": "highest PSNR interpolated over the common real-BPP interval, then lower mean LPIPS, DISTS, BPP",
+            "matching_metric_protocol_and_image_contents": True,
         },
         "candidates": candidates,
     }
@@ -255,10 +314,14 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def collect_files(root):
+def collect_files(root, expected_count=None):
     root = Path(root)
     if not root.is_dir():
         raise ValueError(f"missing bitstream directory: {root}")
+    if expected_count is not None and (
+        isinstance(expected_count, bool) or not isinstance(expected_count, int) or expected_count < 1
+    ):
+        raise ValueError("bitstream num_images must be a positive integer")
     files = {}
     for path in sorted(root.rglob("*")):
         if not path.is_file():
@@ -271,6 +334,12 @@ def collect_files(root):
                 f"duplicate bitstream identity after normalizing .bin suffix: {name}"
             )
         files[name] = (path.stat().st_size, sha256(path))
+    if not files:
+        raise ValueError(f"no bitstream files found in {root}")
+    if expected_count is not None and len(files) != expected_count:
+        raise ValueError(
+            f"bitstream file count in {root} is {len(files)}, but num_images is {expected_count}"
+        )
     return files
 
 
@@ -284,14 +353,23 @@ def plain_metrics(root, quality):
 
 
 def verify_p0(args):
-    _, lic = direct_lic_metrics(args.lic_summary)
+    lic_summary, lic = direct_lic_metrics(args.lic_summary)
+    lic_contract = evaluation_contract(lic_summary, lic=True)
     p0_root = Path(args.p0_root)
-    report = {"gate": "B_frozen_lic_bitstream", "qualities": {}}
+    report = {"gate": "B_frozen_lic_bitstream", "qualities": {}, **lic_contract}
     p0_bpp = []
     for quality in QUALITY_NAMES:
         summary_path, summary = plain_metrics(p0_root, quality)
-        reference = collect_files(Path(args.lic_eval_dir) / quality / "bin")
-        candidate = collect_files(p0_root / quality / "bin")
+        plain_contract = evaluation_contract(summary)
+        require_matching_contracts(lic_contract, plain_contract, f"LIC and Plain {quality}")
+        validate_ms_ssim_alias(summary, plain_contract["metric_protocol"], f"Plain {quality}")
+        # Older Plain reports may omit num_images. Use either available count
+        # for both directories; equal, partially deleted sets must not pass.
+        lic_count, plain_count = lic_summary.get("num_images"), summary.get("num_images")
+        reference = collect_files(Path(args.lic_eval_dir) / quality / "bin",
+                                  expected_count=lic_count if lic_count is not None else plain_count)
+        candidate = collect_files(p0_root / quality / "bin",
+                                  expected_count=plain_count if plain_count is not None else lic_count)
         if reference != candidate:
             raise SystemExit(f"Gate B failed: {quality} bitstreams are not byte-identical")
         metrics = {
@@ -303,6 +381,7 @@ def verify_p0(args):
             "lic_bpp": lic[quality]["bpp"],
             "p0": metrics,
             "plain_summary": str(summary_path.resolve()),
+            "bitstream_files": len(reference),
             "byte_identical": True,
         }
     if any(left >= right for left, right in zip(p0_bpp, p0_bpp[1:])):

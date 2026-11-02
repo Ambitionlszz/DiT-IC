@@ -1,7 +1,6 @@
 import argparse
 import hashlib
 import json
-import math
 from pathlib import Path
 from time import perf_counter
 
@@ -9,10 +8,20 @@ import lpips
 from PIL import Image
 import pyiqa
 import torch
-import torch.nn.functional as F
 from torchvision.transforms import functional as TF
 
 from codec_packet import read_codec_packet, write_codec_packet
+from eval.compress_utils import pad_image_to_multiple
+from evaluation_protocol import (
+    PADDING_PROTOCOL,
+    dataset_content_fingerprint,
+    metric_protocol,
+    psnr,
+    quantize_image,
+    save_image,
+    source_revision,
+    structure_metrics,
+)
 from train_variable_rate_lic_ddp import (
     STAGE_NAME,
     VariableRateLICStage,
@@ -24,7 +33,7 @@ from train_variable_rate_lic_ddp import (
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
-SUMMARY_SCHEMA_VERSION = 1
+SUMMARY_SCHEMA_VERSION = 2
 
 
 def file_sha256(path):
@@ -76,14 +85,11 @@ def load_stage(config, checkpoint_path, weights, device):
 def load_image(path, device):
     image = TF.to_tensor(Image.open(path).convert("RGB"))
     image = image.mul(2).sub(1).unsqueeze(0).to(device)
-    height, width = image.shape[-2:]
-    pad_h = math.ceil(height / 256) * 256 - height
-    pad_w = math.ceil(width / 256) * 256 - width
-    return image, F.pad(image, (0, pad_w, 0, pad_h), mode="reflect")
+    return image, pad_image_to_multiple(image)
 
 
 @torch.no_grad()
-def evaluate_quality(stage, image_paths, output_dir, quality_index, metrics, device):
+def evaluate_quality(stage, image_paths, output_dir, quality_index, metrics, device, metric_domain="float"):
     quality_dir = output_dir / f"q{quality_index}"
     bin_dir = quality_dir / "bin"
     rec_dir = quality_dir / "rec"
@@ -121,42 +127,50 @@ def evaluate_quality(stage, image_paths, output_dir, quality_index, metrics, dev
 
         reference_01 = reference.add(1).mul(0.5).clamp(0, 1)
         reconstruction_01 = reconstruction.add(1).mul(0.5).clamp(0, 1)
-        mse = F.mse_loss(reconstruction_01, reference_01).item()
+        metric_reference, metric_reconstruction = reference, reconstruction
+        if metric_domain == "uint8":
+            reference_01 = quantize_image(reference_01)
+            reconstruction_01 = quantize_image(reconstruction_01)
+            metric_reference = reference_01.mul(2).sub(1)
+            metric_reconstruction = reconstruction_01.mul(2).sub(1)
         result = {
             "image": image_path.name,
             "bytes": packet_path.stat().st_size,
             "bpp": packet_path.stat().st_size * 8.0 / (height * width),
-            "psnr": -10.0 * math.log10(max(mse, 1e-12)),
-            "ms_ssim": metrics["ms_ssim"](
-                reconstruction_01, reference_01
-            ).item(),
-            "lpips": metrics["lpips"](reconstruction, reference).mean().item(),
+            "psnr": float(psnr(reconstruction_01, reference_01)),
+            "lpips": metrics["lpips"](metric_reconstruction, metric_reference).mean().item(),
             "dists": metrics["dists"](
                 reconstruction_01, reference_01
             ).mean().item(),
             "encode_seconds": encode_seconds,
             "decode_seconds": decode_seconds,
+            "metric_domain": metric_domain,
+            **{name: float(value) for name, value in structure_metrics(reconstruction_01, reference_01).items()},
         }
         per_image.append(result)
-        TF.to_pil_image(reconstruction_01[0].cpu()).save(
-            rec_dir / f"{image_path.stem}.png"
-        )
+        save_image(reconstruction_01, rec_dir / f"{image_path.stem}.png", input_range="zero_one")
 
     averages = {
         key: sum(item[key] for item in per_image) / len(per_image)
         for key in (
             "bpp",
             "psnr",
-            "ms_ssim",
             "lpips",
             "dists",
             "encode_seconds",
             "decode_seconds",
         )
     }
+    for key in ("ms_ssim", "ms_ssim_rgb", "ms_ssim_y"):
+        eligible = [item[key] for item in per_image if key in item]
+        if eligible:
+            averages[key] = sum(eligible) / len(eligible)
     report = {
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "quality_index": quality_index,
         "num_images": len(per_image),
+        "structure_metric_images": sum("ms_ssim_rgb" in item for item in per_image),
+        "metric_protocol": metric_protocol(pixel_domain="uint8_roundtrip" if metric_domain == "uint8" else "float"),
         "averages": averages,
         "per_image": per_image,
     }
@@ -174,6 +188,8 @@ def main():
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--weights", choices=("ema", "model"), default="ema")
+    parser.add_argument("--metric-domain", choices=("float", "uint8"), default="float",
+                        help="score decoder floats (default) or the rounded 8-bit pixels written to PNG")
     parser.add_argument(
         "--quality_indices", type=int, nargs="+", default=list(range(6))
     )
@@ -193,13 +209,12 @@ def main():
     config = load_config(args.config, calibration_confirmed=True)
     stage = load_stage(config, args.checkpoint, args.weights, device)
     metrics = {
-        "ms_ssim": pyiqa.create_metric("ms_ssim").to(device).eval(),
         "lpips": lpips.LPIPS(net="alex").to(device).eval(),
         "dists": pyiqa.create_metric("dists").to(device).eval(),
     }
     output_dir = Path(args.output_dir)
     reports = [
-        evaluate_quality(stage, image_paths, output_dir, index, metrics, device)
+        evaluate_quality(stage, image_paths, output_dir, index, metrics, device, args.metric_domain)
         for index in args.quality_indices
     ]
     summary = {
@@ -209,6 +224,10 @@ def main():
         "weights": args.weights,
         "image_dir": str(Path(args.image_dir).resolve()),
         "image_manifest_sha256": image_manifest_sha256(image_paths),
+        "dataset_content_sha256": dataset_content_fingerprint(image_paths),
+        "metric_protocol": metric_protocol(pixel_domain="uint8_roundtrip" if args.metric_domain == "uint8" else "float"),
+        "padding": PADDING_PROTOCOL,
+        "source_revision": source_revision(),
         "num_images": len(image_paths),
         "qualities": {
             f"q{report['quality_index']}": report["averages"]

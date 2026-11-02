@@ -1,0 +1,38 @@
+# Paired C / C+D / C+SF / C+D+SF: two ranks, four images each, no accumulation.
+base: ../precision_v3/c_joint.yaml
+data:
+  train:
+    - ${DITIC_DATA_ROOT:-/data1/ls/data}/DIV2K_train_HR_clean
+    - ${DITIC_DATA_ROOT:-/data1/ls/data}/Flickr2K/Flickr2K_png
+    - ${DITIC_DATA_ROOT:-/data1/ls/data}/LSDIR
+    - ${DITIC_DATA_ROOT:-/data1/ls/data}/clic_professional_train_2020/clic_professional_train_2020_png
+  valid: ["${DITIC_DATA_ROOT:-/data1/ls/data}/Kodak"]
+model:
+  sana_path: ${DITIC_SANA_PATH:-/data1/ls/pretrained/pretrained/Sana_600M_1024px_diffusers}
+  text_path: ${DITIC_TEXT_PATH:-/data1/ls/pretrained/pretrained/fixed_text_embed_gemma.pt}
+decoder:
+  method: native
+execution:
+  frozen_encoder_batch_size: 0
+  saved_tensors: device
+spatial_self_flow:
+  enabled: false
+  projector_enabled: false
+  student_layer: 8
+  teacher_layer: 20
+  epsilon: 0.000001
+  coefficient: 1.0
+  bypass_probability: 0.1
+  teacher_stream: 3903
+  bypass_stream: 4903
+train:
+  variant: c
+  world_size: 2
+  batch_size: 4
+  accumulation_steps: 1
+  effective_batch: 8
+  steps: 200000
+  seed: 903
+  output: ${SPATIAL_SF_RUN_ROOT:-checkpoints/spatial_sf}/c
+  log_every: 10
+  save_every: 2000

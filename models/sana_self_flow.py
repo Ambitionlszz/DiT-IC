@@ -179,6 +179,9 @@ def quality_conditioned_sana_forward(
     continuous_conditioning=False,
     checkpoint_blocks=False,
     precision_embedding=None,
+    spatial_projector=None,
+    projector_layer=None,
+    projector_mask=None,
 ):
     """Run SANA with spatial q conditioning and optionally expose one layer."""
     batch_size, _, height, width = hidden_states.shape
@@ -250,6 +253,9 @@ def quality_conditioned_sana_forward(
                 post_patch_height,
                 post_patch_width,
             )
+        if spatial_projector is not None and layer_index == projector_layer:
+            hidden_states = spatial_projector(
+                hidden_states, post_patch_height, post_patch_width, projector_mask)
         if layer_index == capture_layer:
             captured = hidden_states
         if layer_index == stop_layer:

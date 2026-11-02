@@ -5,6 +5,7 @@ import io
 import itertools
 import json
 from pathlib import Path
+import random
 import tempfile
 import time
 from types import SimpleNamespace
@@ -169,6 +170,20 @@ def ddp_nonfinite_worker(rank, directory):
 
 
 class TrainingTest(unittest.TestCase):
+    def assert_nested_equal(self, expected, actual):
+        if isinstance(expected, torch.Tensor):
+            self.assertTrue(torch.equal(expected, actual))
+        elif isinstance(expected, dict):
+            self.assertEqual(expected.keys(), actual.keys())
+            for key in expected:
+                self.assert_nested_equal(expected[key], actual[key])
+        elif isinstance(expected, (list, tuple)):
+            self.assertEqual(len(expected), len(actual))
+            for left, right in zip(expected, actual):
+                self.assert_nested_equal(left, right)
+        else:
+            self.assertEqual(expected, actual)
+
     def test_nonfinite_last_microbatch_on_one_rank_recovers_both_ranks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -299,6 +314,104 @@ class TrainingTest(unittest.TestCase):
             self.assertEqual(final["step"], 3)
             self.assertEqual(final["validation_best"]["step"], 2)
             self.assertEqual(final["validation_best"]["score"], 1.)
+
+    def test_paused_identity_migration_preserves_optimizer_rng_and_next_update(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.random.default_rng(909).integers(
+                0, 256, (270, 270, 3), dtype=np.uint8)).save(root/"images/one.png")
+            config = small_config(root)
+            config["train"].update(eval_every=1, save_every=1)
+            qualities = ("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")
+
+            def stochastic_validation(*args, **kwargs):
+                # A metric constructor or validation extension may use any of
+                # these generators. Baseline migration must preserve all three.
+                random.random()
+                np.random.random()
+                torch.rand(3)
+                return {quality: {"loss": 1.} for quality in qualities}
+
+            args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=1)
+            with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+                 patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
+                 patch.object(trainer, "validate", side_effect=stochastic_validation), \
+                 redirect_stdout(io.StringIO()):
+                trainer.train(config, args, 0, 1, torch.device("cpu"))
+                legacy = read_checkpoint(root/"codec/paused.pt")
+                legacy["validation_best"]["validation_identity"] = {"legacy": True}
+                migrated = deepcopy(config)
+                migrated["train"]["output"] = str(root/"migrated")
+                resume_path = root/"migrated/paused.pt"
+                save_atomic(resume_path, legacy)
+                source_digest = trainer.sha256_file(resume_path)
+
+                args.resume, args.max_updates = str(root/"codec/paused.pt"), None
+                trainer.train(config, args, 0, 1, torch.device("cpu"))
+                args.resume = str(resume_path)
+                trainer.train(migrated, args, 0, 1, torch.device("cpu"))
+
+            self.assertEqual(trainer.sha256_file(root/"migrated/0000001.pt"), source_digest)
+            baseline = json.loads((root/"migrated/validation_0000001.json").read_text())
+            best = json.loads((root/"migrated/best.json").read_text())
+            self.assertEqual(best["step"], 1)
+            self.assertEqual(best["validation_identity"], baseline["_validation_identity"])
+            expected = read_checkpoint(root/"codec/complete.pt")
+            actual = read_checkpoint(root/"migrated/complete.pt")
+            for key in ("raw", "ema", "optimizer", "aux_optimizer", "scheduler", "scaler",
+                        "rng_by_rank", "step", "micro_seen", "attempts"):
+                self.assert_nested_equal(expected[key], actual[key])
+
+    def test_completed_identity_migration_republishes_exact_resumed_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"images").mkdir()
+            Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8)).save(root/"images/one.png")
+            config = small_config(root)
+            qualities = ("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")
+
+            def stochastic_validation(*args, **kwargs):
+                random.random()
+                np.random.random()
+                torch.rand(3)
+                return {quality: {"loss": 1.} for quality in qualities}
+
+            args = SimpleNamespace(resume=None, init_checkpoint=None, max_updates=None)
+            with patch.object(trainer, "make_model", side_effect=make_tiny_stage), \
+                 patch.object(trainer, "asset_identity", return_value={"test": "tiny-frozen-AE"}), \
+                 patch.object(trainer, "validate", side_effect=stochastic_validation) as validation, \
+                 redirect_stdout(io.StringIO()):
+                trainer.train(config, args, 0, 1, torch.device("cpu"))
+                source = read_checkpoint(root/"codec/complete.pt")
+                source["validation_best"]["validation_identity"] = {"legacy": True}
+                # Both user-facing aliases and the existing numeric path must
+                # work when no optimizer update remains to trigger validation.
+                for name in ("complete.pt", "best.pt", "0000002.pt"):
+                    with self.subTest(resume_name=name):
+                        resumed = deepcopy(config)
+                        output = root/name.replace(".pt", "_migration")
+                        resumed["train"]["output"] = str(output)
+                        resume_path = output/name
+                        save_atomic(resume_path, source)
+                        source_digest = trainer.sha256_file(resume_path)
+                        args.resume = str(resume_path)
+                        calls = validation.call_count
+                        # Endpoint calibration is already present in the source;
+                        # keep this test focused on identity migration state.
+                        with patch.object(trainer, "calibrate_interface", return_value=source["calibration"]):
+                            trainer.train(resumed, args, 0, 1, torch.device("cpu"))
+                        self.assertEqual(validation.call_count, calls+1)
+                        self.assertEqual(trainer.sha256_file(output/"0000002.pt"), source_digest)
+                        self.assertEqual(trainer.sha256_file(output/"best.pt"), source_digest)
+                        best = json.loads((output/"best.json").read_text())
+                        report = json.loads((output/"validation_0000002.json").read_text())
+                        self.assertEqual(best["step"], 2)
+                        self.assertEqual(best["validation_identity"], report["_validation_identity"])
+                        actual = read_checkpoint(output/"complete.pt")
+                        for key in ("raw", "ema", "optimizer", "aux_optimizer", "scheduler", "scaler",
+                                    "rng_by_rank", "step", "micro_seen", "attempts"):
+                            self.assert_nested_equal(source[key], actual[key])
 
     def test_cross_rate_trainer_runs_both_global_and_mixed_updates(self):
         with tempfile.TemporaryDirectory() as directory:

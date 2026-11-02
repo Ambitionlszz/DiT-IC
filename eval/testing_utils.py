@@ -28,6 +28,8 @@ def parse_args_testing(input_args=None):
     parser.add_argument("--save_img", action="store_true",)
     parser.add_argument("--use_merge", action="store_true", default=None)
     parser.add_argument("--entropy_estimation", action="store_true",)
+    parser.add_argument("--metric-domain", "--metric_domain", choices=("float", "uint8"), default="float",
+                       help="Score decoder floats (default) or rounded 8-bit PNG pixels.")
     
     # results output
     parser.add_argument("--results_dir", type=str, default="results",
