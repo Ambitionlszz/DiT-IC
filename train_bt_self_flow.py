@@ -87,6 +87,16 @@ def sample_control(config, step, rank, shape, device):
 
 def initialize_from(model, checkpoint, phase):
     source_phase = checkpoint["phase"]
+    if hasattr(model, "endpoint_settings"):
+        from models.bt_self_flow.experiment import validate_endpoint_initialization
+        if phase != "joint":
+            raise ValueError("endpoint ablations require joint training")
+        validate_endpoint_initialization(checkpoint)
+        model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
+                            initialize_pixel_adapter=True)
+        if not model.distortion_scale.calibrated.item():
+            raise ValueError("endpoint handoff requires calibrated C")
+        return
     if hasattr(model, "spatial_settings"):
         if (phase != "joint" or source_phase != "backend_init" or checkpoint["backend"] != "shared"
                 or any(part in checkpoint["raw"] for part in ("pixel_adapter", "spatial_projector", "projector"))
@@ -148,6 +158,9 @@ def prepare_backend(config, source, output, device):
         target["decoder"] = {"method": "native"}
         target["spatial_self_flow"]["enabled"] = False
         target["spatial_self_flow"]["projector_enabled"] = False
+    if "endpoint_self_flow" in target:
+        target["decoder"] = {"method": "native"}
+        target["endpoint_self_flow"]["enabled"] = False
     model = make_model(target, device)
     source_weights = "ema" if model.codec.precision_conditioning else "raw"
     model.load_bt_state(checkpoint[source_weights], codec_only=True)
@@ -218,11 +231,16 @@ def train(config, args, rank, world, device):
     settings = config["train"]
     phase = settings["phase"]
     spatial_family = "spatial_self_flow" in config
+    endpoint_family = "endpoint_self_flow" in config
+    manual_gradients = spatial_family or endpoint_family
     if settings.get("world_size", world) != world:
         raise ValueError("world size differs from the two-GPU ablation contract")
     if spatial_family:
         from models.bt_self_flow.spatial_self_flow import SpatialEMATeacher
         from models.bt_self_flow.spatial_training import average_gradients, spatial_backward, synchronize_model
+    if endpoint_family:
+        from models.bt_self_flow.endpoint_self_flow import EndpointEMATeacher
+        from models.bt_self_flow.endpoint_training import average_gradients, endpoint_backward, synchronize_model
     if os.environ.get("BT_ANOMALY") == "1":
         torch.autograd.set_detect_anomaly(True)
     seed_all(settings["seed"]+rank)
@@ -271,7 +289,7 @@ def train(config, args, rank, world, device):
         raise ValueError("backend/joint/Self-Flow requires an explicit stage checkpoint")
     else:
         initialize_data_scale(model, dataset, settings.get("data_scale_samples", 128), settings["seed"])
-    if spatial_family:
+    if manual_gradients:
         synchronize_model(model, world)
     groups, auxiliary = optimizer_groups(model, config)
     # Quantiles are auxiliary-only and manually synchronized. Exclude them from
@@ -313,6 +331,11 @@ def train(config, args, rank, world, device):
         spatial_family and config["spatial_self_flow"].get("enabled", False)) else None
     if spatial_teacher is not None:
         spatial_teacher.load_deployment_ema(ema.state)
+    endpoint_teacher = EndpointEMATeacher(model).to(device) if (
+        endpoint_family and config["endpoint_self_flow"].get("enabled", False)
+        and config["endpoint_self_flow"].get("target", "adjacent_ema") != "clean_latent") else None
+    if endpoint_teacher is not None:
+        endpoint_teacher.load_deployment_ema(ema.state)
     with rank_zero_section(rank, control_group):
         best = BestCheckpoint(output, step, resume.get("validation_best") if resume else None,
                               identity=validation_identity) if rank == 0 else None
@@ -356,11 +379,11 @@ def train(config, args, rank, world, device):
                         generator=torch.Generator().manual_seed(settings["seed"]+rank+999),
                         persistent_workers=config["data"].get("workers", 4) > 0)
     iterator = iter(loader)
-    # Spatial SF routes auxiliary gradients by parameter identity. Do not mix
+    # SF routes auxiliary gradients by parameter identity. Do not mix
     # autograd.grad with DDP reducer hooks; all four groups use the same explicit
     # averaged reduction after accumulation (including the no-SF controls).
     wrapped = DistributedDataParallel(model, device_ids=[device.index] if device.type == "cuda" else None,
-                                      broadcast_buffers=False) if world > 1 and not spatial_family else model
+                                      broadcast_buffers=False) if world > 1 and not manual_gradients else model
 
     last_saved = {}
 
@@ -516,12 +539,16 @@ def train(config, args, rank, world, device):
                     micro_seen += 1
                 image = pending_images[micro].to(device, non_blocking=True)
                 synchronize = micro == settings["accumulation_steps"]-1
-                context = wrapped.no_sync() if world > 1 and not synchronize and not spatial_family else nullcontext()
+                context = wrapped.no_sync() if world > 1 and not synchronize and not manual_gradients else nullcontext()
                 storage_context = (preserve_stride_cpu_offload(pin_memory=device.type == "cuda")
                                    if config.get("execution", {}).get("saved_tensors") == "stride_preserving_cpu"
                                    else nullcontext())
                 with context, storage_context, full_precision_recompute(model, full_precision_retry):
-                    if spatial_family:
+                    if endpoint_family:
+                        result, loss, metrics = endpoint_backward(
+                            model, endpoint_teacher, image, control, image_loss, config, step, rank, world,
+                            scaler, amp_dtype, full_precision_retry, micro)
+                    elif spatial_family:
                         result, loss, metrics = spatial_backward(
                             model, spatial_teacher, image, control, image_loss, config, step, rank, world,
                             scaler, amp_dtype, full_precision_retry, micro)
@@ -568,7 +595,7 @@ def train(config, args, rank, world, device):
                                           **nonfinite_diagnostics(result, metrics))
                         print(json.dumps({"nonfinite_forward": diagnostic, "rank": rank}), flush=True)
                         break
-                    if not spatial_family:
+                    if not manual_gradients:
                         scaler.scale(loss/settings["accumulation_steps"]).backward()
                 for key, value in metrics.items():
                     metrics_sum[key] = metrics_sum.get(key, 0.)+value.detach()/settings["accumulation_steps"]
@@ -576,7 +603,7 @@ def train(config, args, rank, world, device):
                 del result, loss, metrics
                 recover_nonfinite(diagnostic, "loss")
                 continue
-            if spatial_family:
+            if manual_gradients:
                 average_gradients([p for group in optimizer.param_groups for p in group["params"]], world)
             scaler.unscale_(optimizer)
             try:
@@ -621,6 +648,8 @@ def train(config, args, rank, world, device):
             ema.update(model)
             if spatial_teacher is not None:
                 spatial_teacher.load_deployment_ema(ema.state)
+            if endpoint_teacher is not None:
+                endpoint_teacher.load_deployment_ema(ema.state)
             if teacher is not None:
                 teacher.update_from_student(model.DiT, model.text_proj, model.quality_conditioner, .9999)
             step += 1
@@ -754,7 +783,7 @@ def main():
     config = load_config(args.config)
     if args.run_root:
         phase = config["train"]["phase"]
-        if "spatial_self_flow" in config:
+        if "spatial_self_flow" in config or "endpoint_self_flow" in config:
             suffix = config["train"]["variant"]
         elif phase == "codec":
             suffix = "common"

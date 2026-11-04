@@ -24,6 +24,63 @@ MU_PIXEL_METHODS = (MU_PIXEL_METHOD, MU_PIXEL_CONTROL_METHOD, PRECISION_MU_PIXEL
 PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS)
 
 
+def validate_endpoint_initialization(checkpoint):
+    """The launcher and direct trainer require the same calibrated pure C."""
+    config = checkpoint.get("config", {})
+    raw = checkpoint.get("raw", {})
+    if (checkpoint.get("phase") != "backend_init" or checkpoint.get("backend") != "shared"
+            or checkpoint.get("step", 0) != 0 or config.get("model", {}).get("backend") != "C"
+            or not config.get("model", {}).get("codec", {}).get("precision_consistent")
+            or config.get("decoder", {}).get("method", "native") != "native"
+            or any(name in raw for name in ("pixel_adapter", "spatial_projector", "projector"))
+            or config.get("self_flow", {}).get("enabled", False)
+            or config.get("self_flow", {}).get("mixed_sampling", False)
+            or config.get("spatial_self_flow", {}).get("enabled", False)
+            or config.get("spatial_self_flow", {}).get("projector_enabled", False)
+            or config.get("endpoint_self_flow", {}).get("enabled", False)):
+        raise ValueError("use the common pure-C backend_init without trained D/SF/projector history")
+    calibration = checkpoint.get("calibration", {})
+    calibrated = raw.get("distortion_scale", {}).get("calibrated", False)
+    if (not bool(calibrated) or not calibration.get("rate_span_pass")
+            or not calibration.get("quality_span_pass")):
+        raise ValueError("common C initialization must retain distortion, rate-span and quality-span calibration")
+
+
+def validate_endpoint_self_flow(config):
+    """One end-to-end endpoint objective; reject legacy/P recipe mixtures."""
+    if "endpoint_self_flow" not in config:
+        return
+    settings = config["endpoint_self_flow"]
+    allowed = {"enabled", "coefficient", "epsilon", "decoder_capture_block", "target"}
+    if not isinstance(settings, dict) or set(settings) - allowed:
+        raise ValueError("unknown endpoint Self-Flow setting")
+    if not isinstance(settings.get("enabled", False), bool):
+        raise ValueError("endpoint_self_flow.enabled must be boolean")
+    coefficient = settings.get("coefficient", 1.)
+    if isinstance(coefficient, bool) or coefficient != 1.:
+        raise ValueError("endpoint SF coefficient is fixed at one")
+    epsilon = settings.get("epsilon", 1e-6)
+    if isinstance(epsilon, bool) or not isinstance(epsilon, (int, float)) or not math.isfinite(epsilon) or epsilon <= 0:
+        raise ValueError("endpoint spatial normalization epsilon must be positive and finite")
+    capture = settings.get("decoder_capture_block", 3)
+    if isinstance(capture, bool) or not isinstance(capture, int) or capture != 3:
+        raise ValueError("endpoint SF captures DC-AE up_blocks[3] at H/8")
+    if settings.get("target", "adjacent_ema") not in ("adjacent_ema", "same_rate_ema", "clean_latent"):
+        raise ValueError("unknown endpoint SF reference target")
+    if ("spatial_self_flow" in config or config["train"]["phase"] != "joint"
+            or config["model"]["backend"] != "C"
+            or not config["model"].get("codec", {}).get("precision_consistent")
+            or config["self_flow"].get("enabled") or config["self_flow"].get("mixed_sampling")):
+        raise ValueError("endpoint SF requires pure precision-consistent joint C without legacy/spatial SF")
+    if config.get("decoder", {}).get("method", "native") not in ("native", PRECISION_MU_PIXEL_METHOD):
+        raise ValueError("endpoint ablations use native decoding or precision mu-QK PiT v4")
+    if config.get("quality", {}).get("values") != [0., .2, .4, .6, .8, 1.]:
+        raise ValueError("endpoint SF requires the six shared quality levels")
+    train = config["train"]
+    if tuple(train.get(name) for name in ("world_size", "batch_size", "accumulation_steps", "effective_batch")) != (2, 4, 1, 8):
+        raise ValueError("endpoint ablations require two GPUs, batch four per rank, accumulation one")
+
+
 def validate_spatial_self_flow(config):
     settings = config.get("spatial_self_flow")
     if settings is None:
@@ -127,6 +184,7 @@ def load_config(path):
     config = expand_environment(config)
     validate_decoder(config)
     validate_spatial_self_flow(config)
+    validate_endpoint_self_flow(config)
     storage = config.get("execution", {}).get("saved_tensors", "device")
     if storage not in ("device", "stride_preserving_cpu"):
         raise ValueError("unknown saved tensor storage policy")
@@ -180,6 +238,7 @@ def merge(base, override):
 def make_model(config, device):
     validate_decoder(config)
     validate_spatial_self_flow(config)
+    validate_endpoint_self_flow(config)
     model = config["model"]
     phase = config["train"]["phase"]
     torch.manual_seed(config["train"]["seed"])
@@ -192,7 +251,13 @@ def make_model(config, device):
     else:
         constructor, decoder_options = BTCodec, {}
         method = config.get("decoder", {}).get("method", "native")
-        if "spatial_self_flow" in config:
+        if "endpoint_self_flow" in config:
+            from .endpoint_model import EndpointAblationCodec
+            constructor = EndpointAblationCodec
+            decoder_options["endpoint_config"] = config["endpoint_self_flow"]
+            decoder_options["pixel_config"] = (config["decoder"].get("pixel_adapter", {})
+                                                if method == PRECISION_MU_PIXEL_METHOD else None)
+        elif "spatial_self_flow" in config:
             from .spatial_model import SpatialAblationCodec
             constructor = SpatialAblationCodec
             decoder_options["spatial_config"] = config["spatial_self_flow"]
