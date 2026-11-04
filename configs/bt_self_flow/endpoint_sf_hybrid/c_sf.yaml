@@ -1,0 +1,6 @@
+base: common.yaml
+endpoint_self_flow:
+  enabled: true
+train:
+  variant: c_sf
+  output: ${ENDPOINT_SF_RUN_ROOT:-checkpoints/endpoint_sf}/hybrid/c_sf

@@ -16,7 +16,7 @@ sys.path.insert(0, str(REPO))
 
 from models.bt_self_flow.checkpoint import read_checkpoint, sha256_file
 from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config,
-                                            validate_endpoint_initialization)
+                                            validate_endpoint_initialization, AE_HYBRID_PIXEL_METHOD)
 
 
 PRIMARY_VARIANTS = ("c", "c_d", "c_sf", "c_d_sf")
@@ -30,6 +30,8 @@ VARIANTS = {
     "c_d_gt_sf": (True, True, "clean_latent"),
 }
 D_METHOD = "precision_consistent_mu_qk_precision_adaln_pixel_adapter_v4"
+FAMILIES = {"legacy": ("endpoint_sf", D_METHOD),
+            "hybrid": ("endpoint_sf_hybrid", AE_HYBRID_PIXEL_METHOD)}
 
 
 def shared_signature(config):
@@ -43,8 +45,11 @@ def shared_signature(config):
     return shared
 
 
-def ablation_configs(seed=903):
-    configs = {name: load_config(REPO / f"configs/bt_self_flow/endpoint_sf/{name}.yaml")
+def ablation_configs(seed=903, family="legacy"):
+    if family not in FAMILIES:
+        raise ValueError("unknown endpoint decoder family")
+    directory, d_method = FAMILIES[family]
+    configs = {name: load_config(REPO / f"configs/bt_self_flow/{directory}/{name}.yaml")
                for name in VARIANTS}
     signatures, d_settings = [], []
     for name, config in configs.items():
@@ -54,7 +59,7 @@ def ablation_configs(seed=903):
         settings = config["endpoint_self_flow"]
         expected = {"enabled": sf, "coefficient": 1., "epsilon": 1e-6,
                     "decoder_capture_block": 3, "target": target}
-        if settings != expected or config["decoder"]["method"] != (D_METHOD if d else "native"):
+        if settings != expected or config["decoder"]["method"] != (d_method if d else "native"):
             raise ValueError(f"{name} disagrees with its endpoint ablation contract")
         if config["self_flow"] != {"enabled": False, "mixed_sampling": False} or "spatial_self_flow" in config:
             raise ValueError("endpoint recipes must contain no legacy SF or spatial projector settings")
@@ -144,12 +149,15 @@ def check_shared_identity(path, expected, write=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--variant", choices=VARIANTS, required=True)
+    parser.add_argument("--family", choices=FAMILIES, default="legacy",
+                        help="hybrid selects two AE-conditioned SA+CA blocks; legacy retains mu-QK v4")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--init-checkpoint", type=Path)
     source.add_argument("--resume", type=Path)
     parser.add_argument("--gpus", default="0,1", help="exactly two distinct CUDA device indices or UUIDs")
     parser.add_argument("--seed", type=int, default=903)
-    parser.add_argument("--run-root", type=Path, default=Path(os.environ.get("ENDPOINT_SF_RUN_ROOT", "checkpoints/endpoint_sf")))
+    parser.add_argument("--run-root", type=Path, default=Path(os.environ.get("ENDPOINT_SF_RUN_ROOT", "checkpoints/endpoint_sf")),
+                        help="hybrid runs use a separate hybrid/ namespace below this root")
     parser.add_argument("--preflight", action="store_true", help="two real updates in an isolated preflight output")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="validate and print the plan; this is the default")
@@ -160,9 +168,11 @@ def main():
         parser.error("--gpus must select exactly two distinct devices")
     if args.preflight and args.resume:
         parser.error("preflight starts from common initialization; resume formal runs separately")
-    configs = ablation_configs(args.seed)
+    configs = ablation_configs(args.seed, args.family)
     config = configs[args.variant]
     root = args.run_root.resolve()
+    if args.family == "hybrid":
+        root = root / "hybrid"
     output = root / f"seed_{args.seed}" / ("preflight" if args.preflight else "runs") / args.variant
     config["train"]["output"] = str(output)
     source_path = (args.init_checkpoint or args.resume).resolve()
@@ -177,8 +187,9 @@ def main():
         source_config = checkpoint.get("config", {})
         if (checkpoint.get("phase") != "joint"
                 or source_config.get("train", {}).get("variant") != args.variant
+                or source_config.get("decoder", {"method": "native"}) != config["decoder"]
                 or source_config.get("endpoint_self_flow") != config["endpoint_self_flow"]):
-            raise ValueError("resume must preserve the endpoint variant and its exact target/loss settings")
+            raise ValueError("resume must preserve the endpoint decoder, variant and exact target/loss settings")
         initialization_hash = checkpoint.get("source_sha256")
         if not initialization_hash:
             raise ValueError("resume checkpoint has no common initialization identity")
@@ -190,6 +201,9 @@ def main():
     signature = json.dumps(shared_signature(config), sort_keys=True, separators=(",", ":")).encode()
     shared = {"initialization_sha256": initialization_hash, "source_sha256": identity["sha256"],
               "shared_config_sha256": hashlib.sha256(signature).hexdigest()}
+    if args.family == "hybrid":
+        # Preserve existing legacy identities while making the additive family explicit.
+        shared["decoder_family"] = args.family
     identity_path = root / "ablation_identity.json"
     check_shared_identity(identity_path, shared)
     command = [sys.executable, "-m", "torch.distributed.run", "--standalone", "--nnodes=1", "--nproc-per-node=2",
@@ -197,7 +211,7 @@ def main():
                "--resume" if args.resume else "--init-checkpoint", str(source_path)]
     if args.preflight:
         command += ["--max-updates", "2"]
-    manifest = dict(variant=args.variant, target=config["endpoint_self_flow"]["target"], devices=gpu_ids,
+    manifest = dict(family=args.family, variant=args.variant, target=config["endpoint_self_flow"]["target"], devices=gpu_ids,
                     world_size=2, batch_per_rank=4, accumulation=1, effective_batch=8, seed=args.seed,
                     source=str(source_path), checkpoint_sha256=sha256_file(source_path),
                     initialization_sha256=initialization_hash, code_sha256=identity["sha256"],

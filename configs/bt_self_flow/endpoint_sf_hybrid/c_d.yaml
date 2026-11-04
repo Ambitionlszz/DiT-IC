@@ -1,0 +1,15 @@
+base: common.yaml
+decoder:
+  method: ae_conditioned_hybrid_pit_v1
+  pixel_adapter:
+    depth: 2
+    pixel_dim: 16
+    patch_size: 16
+    context_dim: 256
+    attention_dim: 256
+    heads: 4
+    checkpoint_blocks: true
+    seed: 903
+train:
+  variant: c_d
+  output: ${ENDPOINT_SF_RUN_ROOT:-checkpoints/endpoint_sf}/hybrid/c_d

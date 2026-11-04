@@ -20,8 +20,11 @@ RECEIVED_UPDATE_PIXEL_METHOD = "precision_consistent_received_update_pixel_adapt
 MU_PIXEL_METHOD = "precision_consistent_mu_qk_pixel_adapter_v3"
 MU_PIXEL_CONTROL_METHOD = "precision_consistent_mu_adaln_pixel_adapter_v3"
 PRECISION_MU_PIXEL_METHOD = "precision_consistent_mu_qk_precision_adaln_pixel_adapter_v4"
+AE_HYBRID_PIXEL_METHOD = "ae_conditioned_hybrid_pit_v1"
 MU_PIXEL_METHODS = (MU_PIXEL_METHOD, MU_PIXEL_CONTROL_METHOD, PRECISION_MU_PIXEL_METHOD)
-PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS)
+ENDPOINT_PIXEL_METHODS = (PRECISION_MU_PIXEL_METHOD, AE_HYBRID_PIXEL_METHOD)
+PIXEL_METHODS = (PIXEL_METHOD, PRECISION_PIXEL_METHOD, RECEIVED_UPDATE_PIXEL_METHOD,
+                 *MU_PIXEL_METHODS, AE_HYBRID_PIXEL_METHOD)
 
 
 def validate_endpoint_initialization(checkpoint):
@@ -72,8 +75,8 @@ def validate_endpoint_self_flow(config):
             or not config["model"].get("codec", {}).get("precision_consistent")
             or config["self_flow"].get("enabled") or config["self_flow"].get("mixed_sampling")):
         raise ValueError("endpoint SF requires pure precision-consistent joint C without legacy/spatial SF")
-    if config.get("decoder", {}).get("method", "native") not in ("native", PRECISION_MU_PIXEL_METHOD):
-        raise ValueError("endpoint ablations use native decoding or precision mu-QK PiT v4")
+    if config.get("decoder", {}).get("method", "native") not in ("native", *ENDPOINT_PIXEL_METHODS):
+        raise ValueError("endpoint ablations use native, precision mu-QK v4, or AE-conditioned hybrid PiT")
     if config.get("quality", {}).get("values") != [0., .2, .4, .6, .8, 1.]:
         raise ValueError("endpoint SF requires the six shared quality levels")
     train = config["train"]
@@ -121,6 +124,8 @@ def validate_decoder(config):
         return
     if method not in PIXEL_METHODS:
         raise ValueError("unknown decoder method")
+    if method == AE_HYBRID_PIXEL_METHOD and "endpoint_self_flow" not in config:
+        raise ValueError("AE-conditioned hybrid PiT requires the native endpoint decoder family")
     if set(decoder) - {"method", "pixel_adapter"}:
         raise ValueError("unknown PiT decoder settings")
     if (config["model"]["backend"] != "C" or config["train"]["phase"] not in ("codec", "joint")
@@ -134,7 +139,7 @@ def validate_decoder(config):
     settings = decoder.get("pixel_adapter", {})
     allowed = {"depth", "pixel_dim", "patch_size", "context_dim", "attention_dim", "heads",
                "use_quantization", "delta_ref", "checkpoint_blocks", "seed"}
-    if method in (RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS):
+    if method in (RECEIVED_UPDATE_PIXEL_METHOD, *MU_PIXEL_METHODS, AE_HYBRID_PIXEL_METHOD):
         allowed -= {"use_quantization", "delta_ref"}
     if set(settings) - allowed:
         raise ValueError("unknown pixel_adapter option")
@@ -146,8 +151,11 @@ def validate_decoder(config):
     if settings.get("pixel_dim", 16) % 4 or settings.get("context_dim", 256) % 2:
         raise ValueError("PiT sinusoidal widths must have compatible dimensions")
     width, heads = settings.get("attention_dim", 256), settings.get("heads", 4)
-    if method in MU_PIXEL_METHODS and settings.get("context_dim", 256) != width:
-        raise ValueError("mu PiT requires matched content and attention widths")
+    if method in (*MU_PIXEL_METHODS, AE_HYBRID_PIXEL_METHOD) and settings.get("context_dim", 256) != width:
+        raise ValueError("content-conditioned PiT requires matched content and attention widths")
+    if method == AE_HYBRID_PIXEL_METHOD and (settings.get("depth", 2) != 2
+                                           or settings.get("patch_size", 16) != 16):
+        raise ValueError("hybrid PiT v1 fixes two blocks and 16-pixel regions for AE H/8 conditioning")
     if width % heads or (width // heads) % 4:
         raise ValueError("PiT attention head dimension must be divisible by four")
     reference = settings.get("delta_ref", 1.)
@@ -256,7 +264,9 @@ def make_model(config, device):
             constructor = EndpointAblationCodec
             decoder_options["endpoint_config"] = config["endpoint_self_flow"]
             decoder_options["pixel_config"] = (config["decoder"].get("pixel_adapter", {})
-                                                if method == PRECISION_MU_PIXEL_METHOD else None)
+                                                if method in ENDPOINT_PIXEL_METHODS else None)
+            if method in ENDPOINT_PIXEL_METHODS:
+                decoder_options["pixel_method"] = method
         elif "spatial_self_flow" in config:
             from .spatial_model import SpatialAblationCodec
             constructor = SpatialAblationCodec

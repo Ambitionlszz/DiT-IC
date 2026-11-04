@@ -100,6 +100,11 @@ perceptual/structural improvement follows from normalization alone.
 
 ## Six matched recipes
 
+The recipes below retain the original v4 D. The additive two-block SA+CA D
+uses the separate `endpoint_sf_hybrid/` family and `--family hybrid`; see
+[AE-conditioned hybrid PiT](hybrid_pixel_adapter.md) for its architecture,
+initialization and isolated launch contract. Endpoint SF itself is unchanged.
+
 | Recipe | D | SF | Target, below top quality |
 | --- | --- | --- | --- |
 | `c` | absent | off | none |

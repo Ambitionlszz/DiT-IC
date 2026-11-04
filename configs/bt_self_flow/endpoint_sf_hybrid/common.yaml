@@ -1,0 +1,5 @@
+# Same calibrated C, losses, quality stream and optimizer as the legacy family.
+# Select --family hybrid in launch_endpoint_sf.py to isolate source/run identities.
+base: ../endpoint_sf/common.yaml
+train:
+  output: ${ENDPOINT_SF_RUN_ROOT:-checkpoints/endpoint_sf}/hybrid/c

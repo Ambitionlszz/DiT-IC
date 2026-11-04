@@ -117,7 +117,7 @@ def decode_latent_prefix(vae, latent, checkpoint_blocks=False):
 
 
 def decode_latent_with_endpoint_feature(vae, latent, adapter=None, conditions=(),
-                                      checkpoint_blocks=False):
+                                      checkpoint_blocks=False, condition_on_endpoint=False):
     """One actual AE decode, explicitly returning its live H/8 intermediate.
 
     Capturing a tensor outside checkpoint closures avoids mutable forward-hook
@@ -133,6 +133,11 @@ def decode_latent_with_endpoint_feature(vae, latent, adapter=None, conditions=()
         hidden = decoder.norm_out(hidden.movedim(1, -1)).movedim(-1, 1)
         hidden = decoder.conv_act(hidden)
         return _endpoint_run(decoder.conv_out, hidden, checkpoint_blocks), feature
+
+    if condition_on_endpoint:
+        # This is the actual live student intermediate. Make it an explicit
+        # checkpoint input rather than a mutable hook/cache or detached target.
+        conditions = (feature, *conditions)
 
     def rgb_tail(value, *received):
         options = {"checkpoint_blocks": False} if checkpoint_blocks else {}

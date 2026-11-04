@@ -447,3 +447,186 @@ class PrecisionMuPixelAdapter(MuPixelAdapter):
         grid = (h // self.patch_size, w // self.patch_size)
         condition = (self.condition(mu, grid), self.precision_condition(precision_features, grid))
         return self.apply_condition(features, condition, return_features, checkpoint_blocks)
+
+
+class SharedPixelStateAdaLN(nn.Module):
+    """Two pixel-wise triplets, generated from shared content and current state.
+
+    The small convolutions generate parameters on the whole pixel grid. They
+    never replace the normalized pixels being modulated by the main branch.
+    """
+
+    def __init__(self, pixel_dim=16, context_dim=256, patch_size=16):
+        super().__init__()
+        self.patch_size = patch_size
+        self.content = nn.Linear(context_dim, 64)
+        self.spatial = nn.ModuleList(
+            nn.Conv2d(pixel_dim, pixel_dim, 3, padding=1, groups=pixel_dim)
+            for _ in range(2))
+        self.state = nn.ModuleList(nn.Linear(pixel_dim, 64, bias=False) for _ in range(2))
+        self.output = nn.ModuleList(nn.Linear(64, 3 * pixel_dim) for _ in range(2))
+        for convolution in self.spatial:
+            nn.init.dirac_(convolution.weight, groups=pixel_dim)
+            nn.init.zeros_(convolution.bias)
+
+    def forward(self, normalized, content_code, region_hw, branch):
+        batch, count, area, width = normalized.shape
+        rh, rw = region_hw
+        patch = self.patch_size
+        if count != rh * rw or area != patch ** 2:
+            raise ValueError("pixel AdaLN requires the actual two-dimensional region grid")
+        grid = normalized.reshape(batch, rh, rw, patch, patch, width)
+        grid = grid.permute(0, 5, 1, 3, 2, 4).reshape(batch, width, rh * patch, rw * patch)
+        local = self.spatial[branch](grid)
+        local = local.reshape(batch, width, rh, patch, rw, patch)
+        local = local.permute(0, 2, 4, 3, 5, 1).reshape_as(normalized)
+        hidden = F.silu(self.state[branch](local) + content_code.unsqueeze(-2))
+        return self.output[branch](hidden).chunk(3, -1)
+
+
+class RegionAttention(nn.Module):
+    """Region queries read region memory, with native PiT rotary coordinates."""
+
+    def __init__(self, width=256, heads=4):
+        super().__init__()
+        self.heads, self.head_dim = heads, width // heads
+        self.q = nn.Linear(width, width, bias=False)
+        self.k = nn.Linear(width, width, bias=False)
+        self.v = nn.Linear(width, width, bias=False)
+        self.proj = nn.Linear(width, width)
+
+    def forward(self, tokens, memory, position):
+        batch, count, width = tokens.shape
+        if memory.shape != tokens.shape:
+            raise ValueError("hybrid PiT memory must use the same aligned region grid")
+        shape = (batch, count, self.heads, self.head_dim)
+        query = self.q(tokens).reshape(shape)
+        key, value = self.k(memory).reshape(shape), self.v(memory).reshape(shape)
+        query, key = apply_rotary(query, key, position)
+        attended = F.scaled_dot_product_attention(
+            query.transpose(1, 2), key.transpose(1, 2), value.transpose(1, 2), dropout_p=0.)
+        return self.proj(attended.transpose(1, 2).reshape(batch, count, width))
+
+
+class HybridRegionAttention(nn.Module):
+    """SA updates the CA query; return only their combined region update."""
+
+    def __init__(self, width=256, heads=4):
+        super().__init__()
+        self.head_dim = width // heads
+        self.self_norm = nn.LayerNorm(width, eps=1e-6)
+        self.cross_norm = nn.LayerNorm(width, eps=1e-6)
+        self.self_attn = RegionAttention(width, heads)
+        self.cross_attn = RegionAttention(width, heads)
+
+    def forward(self, tokens, content, position):
+        normalized = self.self_norm(tokens)
+        self_update = self.self_attn(normalized, normalized, position)
+        cross_update = self.cross_attn(self.cross_norm(tokens + self_update), content, position)
+        # Expand once in the caller: expanding each update separately repeats
+        # both the expensive projection and its bias.
+        return self_update + cross_update
+
+
+class HybridPiTBlock(nn.Module):
+    """One compact/expand pair for sequential SA/CA, followed by pixel MLP."""
+
+    def __init__(self, pixel_dim=16, context_dim=256, patch_size=16, attention_dim=256, heads=4):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(pixel_dim, eps=1e-6)
+        self.norm2 = nn.LayerNorm(pixel_dim, eps=1e-6)
+        self.modulation = SharedPixelStateAdaLN(pixel_dim, context_dim, patch_size)
+        self.compress_to_attn = nn.Linear(patch_size ** 2 * pixel_dim, attention_dim)
+        self.attn = HybridRegionAttention(attention_dim, heads)
+        self.expand_from_attn = nn.Linear(attention_dim, patch_size ** 2 * pixel_dim)
+        self.mlp = nn.Sequential(nn.Linear(pixel_dim, 4 * pixel_dim), nn.GELU(),
+                                 nn.Linear(4 * pixel_dim, pixel_dim))
+
+    def forward(self, pixels, condition, position):
+        content, region_hw = condition
+        code = self.modulation.content(content)
+        normalized = self.norm1(pixels)
+        shift, scale, gate = self.modulation(normalized, code, region_hw, 0)
+        compact = self.compress_to_attn((normalized * (1 + scale) + shift).flatten(-2))
+        update = self.expand_from_attn(self.attn(compact, content, position)).reshape_as(pixels)
+        pixels = pixels + gate * update
+        normalized = self.norm2(pixels)
+        shift, scale, gate = self.modulation(normalized, code, region_hw, 1)
+        return pixels + gate * self.mlp(normalized * (1 + scale) + shift)
+
+
+class AEConditionedHybridPixelAdapter(PixelDecoderAdapter):
+    """Live AE H/8 content plus actual precision, two SA/CA pixel blocks."""
+
+    def __init__(self, feature_channels=128, content_channels=512, depth=2, pixel_dim=16,
+                 patch_size=16, context_dim=256, attention_dim=256, heads=4,
+                 checkpoint_blocks=True):
+        nn.Module.__init__(self)
+        dimensions = (feature_channels, content_channels, depth, pixel_dim, patch_size,
+                      context_dim, attention_dim, heads)
+        if any(not isinstance(value, int) or isinstance(value, bool) or value < 1 for value in dimensions):
+            raise ValueError("hybrid PiT dimensions must be positive integers")
+        if (pixel_dim % 4 or context_dim != attention_dim or attention_dim % heads
+                or (attention_dim // heads) % 4):
+            raise ValueError("invalid hybrid PiT position, content, or attention dimensions")
+        self.patch_size, self.pixel_dim = patch_size, pixel_dim
+        self.checkpoint_blocks = bool(checkpoint_blocks)
+        self.register_buffer("ae_hybrid_version", torch.tensor(1, dtype=torch.int64))
+        self.register_buffer("hybrid_architecture", torch.tensor(dimensions, dtype=torch.int64))
+        self.content_projection = nn.Linear(content_channels, context_dim)
+        self.content_norm = nn.LayerNorm(context_dim, eps=1e-6)
+        self.precision_projection = nn.Linear(128, context_dim, bias=False)
+        self.pixel_input = nn.Linear(feature_channels, pixel_dim)
+        self.blocks = nn.ModuleList(HybridPiTBlock(pixel_dim, context_dim, patch_size, attention_dim, heads)
+                                    for _ in range(depth))
+        self.pixel_output = nn.Linear(pixel_dim, feature_channels)
+        nn.init.zeros_(self.precision_projection.weight)
+        nn.init.zeros_(self.pixel_output.weight)
+        nn.init.zeros_(self.pixel_output.bias)
+
+    def validate_checkpoint(self, state):
+        for name in ("ae_hybrid_version", "hybrid_architecture"):
+            expected, actual = getattr(self, name), state.get(name)
+            if (not isinstance(actual, torch.Tensor) or actual.dtype != expected.dtype
+                    or actual.shape != expected.shape or not torch.equal(actual.cpu(), expected.cpu())):
+                raise ValueError("incompatible AE-conditioned hybrid D checkpoint")
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        try:
+            self.validate_checkpoint({name: state_dict.get(prefix + name)
+                                      for name in ("ae_hybrid_version", "hybrid_architecture")})
+        except ValueError as error:
+            error_msgs.append(str(error))
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+                                      missing_keys, unexpected_keys, error_msgs)
+
+    def condition(self, content_features, precision_features, region_hw):
+        rh, rw = region_hw
+        if (content_features.ndim != 4 or content_features.shape[1] != self.content_projection.in_features
+                or content_features.shape[-2:] != (2 * rh, 2 * rw)):
+            raise ValueError("hybrid PiT requires live AE content at twice its region-grid resolution")
+        if (precision_features.ndim != 4 or precision_features.shape[:2] != (content_features.shape[0], 128)):
+            raise ValueError("hybrid PiT requires C's batch-aligned 128-channel precision embedding")
+        ph, pw = precision_features.shape[-2:]
+        if not ph or not pw or rh % ph or rw % pw:
+            raise ValueError("each precision cell must cover whole hybrid PiT regions")
+        content = F.avg_pool2d(content_features, 2, 2).movedim(1, -1)
+        content = self.content_norm(self.content_projection(content))
+        # Project on the native coding grid before nearest upsampling.
+        precision = self.precision_projection(precision_features.movedim(1, -1)).movedim(-1, 1)
+        precision = F.interpolate(precision, size=region_hw, mode="nearest").movedim(1, -1)
+        return F.silu(content + precision).reshape(content.shape[0], rh * rw, -1)
+
+    def forward(self, features, content_features, precision_features, return_features=False,
+                checkpoint_blocks=None):
+        if (features.ndim != 4 or content_features.ndim != 4
+                or features.shape[1] != self.pixel_input.in_features
+                or features.shape[0] != content_features.shape[0]):
+            raise ValueError("hybrid PiT requires batch-aligned native AE pixel and content features")
+        height, width = features.shape[-2:]
+        if height % self.patch_size or width % self.patch_size:
+            raise ValueError("AE pixel grid must be divisible by the hybrid PiT patch size")
+        region_hw = (height // self.patch_size, width // self.patch_size)
+        condition = self.condition(content_features, precision_features, region_hw)
+        return self.apply_condition(features, (condition, region_hw), return_features, checkpoint_blocks)
