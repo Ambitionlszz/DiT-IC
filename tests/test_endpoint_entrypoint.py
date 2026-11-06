@@ -36,7 +36,8 @@ def tiny_factory(config, device="cpu"):
     # unchanged trainer exercise real tiny modules on one CPU process as well.
     torch.manual_seed(config["train"]["seed"])
     model = tiny_endpoint_model(sf=config["endpoint_self_flow"]["enabled"],
-                                d=config["decoder"]["method"] != "native", device=device)
+                                d=config["decoder"]["method"] != "native", device=device,
+                                train_rgb_head=config["model"].get("train_rgb_head", False))
     model.endpoint_settings = dict(config["endpoint_self_flow"])
     return model
 
@@ -137,6 +138,32 @@ def test_real_endpoint_training_resumes_exactly_including_ema_and_rng(tmp_path):
     assert full["step"] == split["step"] == 2
     assert "pixel_adapter" in full["raw"] and "spatial_projector" not in full["raw"]
     assert full.get("teacher") is None  # deployment EMA is the only teacher history
+
+
+def test_real_resume_weight_change_is_explicit_and_preserves_continuation_history(tmp_path):
+    config, source = setup_run(tmp_path)
+    config["endpoint_self_flow"]["coefficient"] = 1.
+    with patch.object(trainer, "make_model", side_effect=tiny_factory), \
+         patch.object(trainer, "asset_identity", return_value=ASSETS), redirect_stdout(io.StringIO()):
+        trainer.train(config, trainer_args(source, stop=1), 0, 1, torch.device("cpu"))
+        paused = tmp_path / "run" / "paused.pt"
+        initial = read_checkpoint(paused)
+        config["endpoint_self_flow"]["coefficient"] = .2
+        config["train"]["output"] = str(tmp_path / "reweighted")
+        args = trainer_args(source, resume=paused)
+        with pytest.raises(ValueError, match="resume contract"):
+            trainer.train(config, args, 0, 1, torch.device("cpu"))
+        args.resume_sf_coefficient = .2
+        trainer.train(config, args, 0, 1, torch.device("cpu"))
+    saved = read_checkpoint(tmp_path / "reweighted" / "complete.pt")
+    assert saved["step"] == saved["attempts"] == 2
+    assert saved["micro_seen"] == initial["micro_seen"] + 1
+    assert saved["scheduler"]["last_epoch"] == initial["scheduler"]["last_epoch"] + 1
+    assert saved["config"]["endpoint_self_flow"]["coefficient"] == .2
+    assert saved["objective_transitions"] == [{
+        "field": "endpoint_self_flow.coefficient", "old": 1., "new": .2,
+        "step": 1, "checkpoint": str(paused.resolve())}]
+    check_state_equal(read_checkpoint(paused), initial)
 
 
 @pytest.mark.parametrize("variant", ["c", "c_d", "c_d_gt_sf"])

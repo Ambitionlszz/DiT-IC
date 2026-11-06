@@ -9,7 +9,7 @@ import sys
 import pytest
 import torch
 
-from models.bt_self_flow.experiment import validate_endpoint_self_flow
+from models.bt_self_flow.experiment import validate_endpoint_self_flow, validate_resume_contract
 from scripts import launch_endpoint_sf as launcher
 
 
@@ -31,8 +31,9 @@ def test_primary_factorial_and_target_controls_change_only_declared_fields():
         assert "spatial_self_flow" not in config
         assert set(config["endpoint_self_flow"]) == {
             "enabled", "coefficient", "epsilon", "decoder_capture_block", "target"}
-        assert config["endpoint_self_flow"]["coefficient"] == 1.
+        assert config["endpoint_self_flow"]["coefficient"] == .2
         assert config["train"]["steps"] == 200000
+        assert config["image_loss"] == {"mse_weight": 4., "lpips_weight": 1., "dists_weight": .5}
         assert tuple(config["train"][key] for key in (
             "world_size", "batch_size", "accumulation_steps", "effective_batch")) == (2, 4, 1, 8)
     # SF changes training supervision only: the paired deployment architectures
@@ -47,7 +48,9 @@ def test_primary_factorial_and_target_controls_change_only_declared_fields():
 
 
 @pytest.mark.parametrize("change", [
-    {"coefficient": .1}, {"coefficient": True}, {"epsilon": 0},
+    {"coefficient": 0}, {"coefficient": -.2}, {"coefficient": float("nan")},
+    {"coefficient": float("inf")}, {"coefficient": "0.2"},
+    {"coefficient": True}, {"epsilon": 0},
     {"epsilon": float("nan")}, {"target": "random_high"},
     {"cosine": True}, {"projector_enabled": True}, {"student_layer": 8},
     {"bypass_probability": .1}, {"decoder_capture_block": 2},
@@ -57,6 +60,35 @@ def test_endpoint_validator_rejects_legacy_and_extra_mechanisms(change):
     config["endpoint_self_flow"].update(change)
     with pytest.raises(ValueError):
         validate_endpoint_self_flow(config)
+
+
+@pytest.mark.parametrize("coefficient", [.1, .2, 1.])
+def test_endpoint_validator_accepts_explicit_positive_weights(coefficient):
+    config = deepcopy(launcher.ablation_configs()["c_d_sf"])
+    config["endpoint_self_flow"]["coefficient"] = coefficient
+    validate_endpoint_self_flow(config)
+
+
+def test_resume_requires_explicit_permission_for_only_the_sf_coefficient():
+    old = deepcopy(launcher.ablation_configs()["c_d_sf"])
+    old["endpoint_self_flow"]["coefficient"] = 1.
+    new = deepcopy(old)
+    new["endpoint_self_flow"]["coefficient"] = .2
+    with pytest.raises(ValueError, match="resume contract"):
+        validate_resume_contract(old, new)
+    assert validate_resume_contract(old, new, .2) == {
+        "field": "endpoint_self_flow.coefficient", "old": 1., "new": .2}
+    for section, key, value in (("image_loss", "dists_weight", 1.),
+                                ("optimizer", "codec_lr", .001),
+                                ("train", "batch_size", 8),
+                                ("train", "seed", 904),
+                                ("endpoint_self_flow", "target", "same_rate_ema")):
+        changed = deepcopy(new)
+        changed[section][key] = value
+        with pytest.raises(ValueError, match="may change only"):
+            validate_resume_contract(old, changed, .2)
+    with pytest.raises(ValueError, match="must match"):
+        validate_resume_contract(old, new, .1)
 
 
 def test_endpoint_validator_rejects_spatial_mixture_and_incorrect_batch_contract():

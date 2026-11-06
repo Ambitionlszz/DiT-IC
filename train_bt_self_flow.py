@@ -6,6 +6,7 @@ Use --init-checkpoint for stage handoff; --resume restores all training state.
 
 import argparse
 from contextlib import nullcontext
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -28,7 +29,8 @@ from models.bt_self_flow.checkpoint import (METHOD, SCHEMA, BestCheckpoint, Depl
 from models.bt_self_flow.data import CounterSampler, ImageDataset, counter_seed
 from models.bt_self_flow.distributed import make_control_group, rank_zero_section
 from models.bt_self_flow.experiment import (asset_identity, check_stage_model, load_config, make_model, schedule_factor,
-                                            optimization_contract, optimizer_groups, training_contract)
+                                            optimization_contract, optimizer_groups, training_contract,
+                                            validate_resume_contract)
 from models.bt_self_flow.losses import ImageLoss, rate_beta, reconstruction_objective
 from models.bt_self_flow.model import BTCrossRateTeacher, cross_rate_loss
 from models.bt_self_flow.packet import RateControl
@@ -93,7 +95,7 @@ def initialize_from(model, checkpoint, phase):
             raise ValueError("endpoint ablations require joint training")
         validate_endpoint_initialization(checkpoint)
         model.load_bt_state(checkpoint["raw"], initialize_conditioner=True,
-                            initialize_pixel_adapter=True)
+                            initialize_pixel_adapter=True, initialize_rgb_head=True)
         if not model.distortion_scale.calibrated.item():
             raise ValueError("endpoint handoff requires calibrated C")
         return
@@ -271,11 +273,19 @@ def train(config, args, rank, world, device):
     if effective_batch != settings.get("effective_batch", effective_batch):
         raise ValueError("GPU count/batch/accumulation does not match the effective batch contract")
     resume = read_checkpoint(args.resume) if args.resume else None
+    requested_sf = getattr(args, "resume_sf_coefficient", None)
+    if requested_sf is not None and not resume:
+        raise ValueError("--resume-sf-coefficient requires --resume")
+    objective_transitions = deepcopy(resume.get("objective_transitions", [])) if resume else []
     source_hash = None
     calibration = None
     if resume:
-        if optimization_contract(resume["contract"]) != contract or resume["assets"] != assets:
-            raise ValueError("resume contract, dataset, assets, batch or training settings differ")
+        if resume["assets"] != assets:
+            raise ValueError("resume pretrained assets differ")
+        change = validate_resume_contract(resume["contract"], contract, requested_sf)
+        if change is not None and change["old"] != change["new"]:
+            objective_transitions.append(dict(change, step=resume["step"],
+                                              checkpoint=str(Path(args.resume).resolve())))
         model.load_bt_state(resume["raw"])
         source_hash, calibration = resume.get("source_sha256"), resume.get("calibration")
     elif args.init_checkpoint:
@@ -420,7 +430,8 @@ def train(config, args, rank, world, device):
                               "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(), "rng_by_rank": rngs,
                               "contract": contract, "config": config, "assets": assets, "source_sha256": source_hash,
                               "calibration": calibration, "rep_weight": rep_weight, "validation_best": best.state,
-                              "full_precision_retry": full_precision_retry}
+                              "full_precision_retry": full_precision_retry,
+                              "objective_transitions": objective_transitions}
                 if teacher is not None:
                     checkpoint["teacher"] = teacher.get_ema_state_dict()
                 save_atomic(output/name, checkpoint)
@@ -436,7 +447,11 @@ def train(config, args, rank, world, device):
                                                "rev-parse", "HEAD"], text=True).strip()
         except subprocess.SubprocessError:
             commit = "unknown"
-        (output/"resolved.json").write_text(json.dumps(dict(config=config, contract=contract, assets=assets, git_commit=commit), indent=2)+"\n")
+        (output/"resolved.json").write_text(json.dumps(dict(
+            config=config, contract=contract, assets=assets, git_commit=commit,
+            objective_transitions=objective_transitions), indent=2)+"\n")
+        if objective_transitions:
+            print(json.dumps({"objective_transitions": objective_transitions}), flush=True)
         print(json.dumps({"phase": phase, "backend": model.backend, "world_size": world,
                           "effective_batch": world*settings["batch_size"]*settings["accumulation_steps"],
                           "decoder_method": getattr(model, "decoder_method", "native"),
@@ -768,6 +783,8 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--init-checkpoint")
     group.add_argument("--resume")
+    parser.add_argument("--resume-sf-coefficient", type=float,
+                        help="explicitly allow only this endpoint SF coefficient change on resume")
     group.add_argument("--prepare-backend", metavar="COMMON_CODEC_CHECKPOINT")
     parser.add_argument("--output", help="shared backend_init output, with --prepare-backend")
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")

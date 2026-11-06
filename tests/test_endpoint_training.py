@@ -94,8 +94,10 @@ def main_loss(model, image, control, config, capture=False):
     return result, loss
 
 
-def test_endpoint_sf_changes_whole_sana_only_including_final_output_parameters():
+@pytest.mark.parametrize("normalization", ["shared_student", "independent_spatial"])
+def test_endpoint_sf_changes_whole_sana_only_including_final_output_parameters(normalization):
     model, teacher, config = TinyEndpoint(), TinyTeacher(), endpoint_config()
+    config["endpoint_self_flow"]["normalization"] = normalization
     baseline = deepcopy(model)
     image = torch.randn(4, 3, 3, 5, generator=torch.Generator().manual_seed(42))
     control = RateControl(.2)
@@ -118,6 +120,31 @@ def test_endpoint_sf_changes_whole_sana_only_including_final_output_parameters()
     assert metrics["sf_active"] == metrics["sf_weight"] == 1
     assert torch.isfinite(loss) and result.feature.requires_grad
     assert teacher.offset.grad is None and model.target_grad_modes == [False]
+
+
+@pytest.mark.parametrize("normalization", ["shared_student", "independent_spatial"])
+def test_coefficient_point_two_scales_only_sf_gradient_and_reports_raw_loss(normalization):
+    image = torch.randn(4, 3, 3, 5, generator=torch.Generator().manual_seed(712))
+    control, image_loss = RateControl(.2), ImageLoss(lpips_weight=0., dists_weight=0., mse_weight=4.)
+    unit, reduced, baseline = TinyEndpoint(), TinyEndpoint(), TinyEndpoint()
+    outputs = []
+    for model, coefficient in ((unit, 1.), (reduced, .2)):
+        config = endpoint_config()
+        config["endpoint_self_flow"]["normalization"] = normalization
+        config["endpoint_self_flow"]["coefficient"] = coefficient
+        outputs.append(endpoint_backward(model, TinyTeacher(), image, control, image_loss,
+                                          config, 0, 0, 1, disabled_scaler(), torch.bfloat16))
+    _, rd = main_loss(baseline, image, control, endpoint_config())
+    rd.backward()
+    for full, small, reference in zip(unit.parameters(), reduced.parameters(), baseline.parameters()):
+        torch.testing.assert_close(small.grad - reference.grad, .2 * (full.grad - reference.grad),
+                                   atol=2e-7, rtol=2e-5)
+    _, full_loss, full_metrics = outputs[0]
+    _, small_loss, small_metrics = outputs[1]
+    torch.testing.assert_close(small_metrics["sf_raw"], full_metrics["sf_raw"])
+    torch.testing.assert_close(small_metrics["sf"], .2 * full_metrics["sf"])
+    torch.testing.assert_close(small_loss, rd + .2 * (full_loss - rd))
+    assert small_metrics["sf_weight"].item() == pytest.approx(.2)
 
 
 @pytest.mark.parametrize("target", ["adjacent_ema", "same_rate_ema", "clean_latent"])
@@ -173,10 +200,12 @@ def test_teacher_randomness_does_not_advance_main_training_rng():
     assert torch.equal(before, torch.get_rng_state())
 
 
-def test_accumulation_and_scaling_apply_equally_to_rd_and_sf():
+@pytest.mark.parametrize("coefficient", [.2, 1.])
+def test_accumulation_and_scaling_apply_equally_to_rd_and_sf(coefficient):
     model, reference, teacher = TinyEndpoint(), TinyEndpoint(), TinyTeacher()
     config, image, control = endpoint_config(), torch.randn(2, 3, 3, 5), RateControl(.2)
     config["train"]["accumulation_steps"] = 2
+    config["endpoint_self_flow"]["coefficient"] = coefficient
     factor = 8.
     scale = SimpleNamespace(scale=lambda loss: factor * loss)
     endpoint_backward(model, teacher, image, control,
@@ -187,7 +216,7 @@ def test_accumulation_and_scaling_apply_equally_to_rd_and_sf():
         target = reference.endpoint_feature(teacher(result.clean, RateControl(.4)))
     total, count = shared_spatial_l1(result.feature, target)
     allowed = sf_parameters(reference)
-    extra = torch.autograd.grad(factor * total / count / 2, allowed, retain_graph=True)
+    extra = torch.autograd.grad(factor * coefficient * total / count / 2, allowed, retain_graph=True)
     (factor * rd / 2).backward()
     for parameter, gradient in zip(allowed, extra):
         parameter.grad.add_(gradient)
@@ -241,8 +270,9 @@ def endpoint_mean_worker(rank, directory):
                             timeout=timedelta(seconds=90))
     try:
         image = torch.randn(8, 3, 3, 5, generator=torch.Generator().manual_seed(620))
-        for quality in (.2, 1.):
+        for quality, coefficient in ((.2, 1.), (.2, .2), (1., .2)):
             model, config = TinyEndpoint(), endpoint_config()
+            config["endpoint_self_flow"]["coefficient"] = coefficient
             endpoint_backward(model, TinyTeacher(), image[rank * 4:(rank + 1) * 4], RateControl(quality),
                               ImageLoss(lpips_weight=0., dists_weight=0., mse_weight=4.), config,
                               0, rank, 2, disabled_scaler(), torch.bfloat16)

@@ -20,7 +20,7 @@ from test_precision_mu_pixel_adapter import precision_model
 torch.set_num_threads(1)
 
 
-def tiny_endpoint_model(*, sf=True, d=True, device="cpu", checkpoint_blocks=True):
+def tiny_endpoint_model(*, sf=True, d=True, device="cpu", checkpoint_blocks=True, train_rgb_head=False):
     def initialize(self, *args, **kwargs):
         base = precision_model()
         del base.pixel_adapter
@@ -29,7 +29,8 @@ def tiny_endpoint_model(*, sf=True, d=True, device="cpu", checkpoint_blocks=True
 
     pixel = dict(SMALL_PIXEL, seed=903, checkpoint_blocks=checkpoint_blocks) if d else None
     with patch.object(BTCodec, "__init__", initialize):
-        return EndpointAblationCodec(endpoint_config={"enabled": sf}, pixel_config=pixel).to(device)
+        return EndpointAblationCodec(endpoint_config={"enabled": sf}, pixel_config=pixel,
+                                    train_rgb_head=train_rgb_head).to(device)
 
 
 @pytest.mark.parametrize("checkpoint_blocks", [False, True])

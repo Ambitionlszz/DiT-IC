@@ -17,6 +17,22 @@ from .packet import RateControl, quality_code
 
 METHOD = "native_endpoint_decoder_feature_self_flow_v1"
 TARGETS = frozenset({"adjacent_ema", "same_rate_ema", "clean_latent"})
+NORMALIZATIONS = frozenset({"shared_student", "independent_spatial"})
+
+
+def endpoint_sf_coefficient(settings):
+    value = settings.get("coefficient", 1.)
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or value <= 0):
+        raise ValueError("endpoint SF coefficient must be positive and finite")
+    return float(value)
+
+
+def endpoint_sf_normalization(settings):
+    value = settings.get("normalization", "shared_student")
+    if value not in NORMALIZATIONS:
+        raise ValueError(f"unknown endpoint SF normalization: {value}")
+    return value
 
 
 def adjacent_quality(config, control):
@@ -37,7 +53,7 @@ def adjacent_quality(config, control):
     return None if index == len(codes) - 1 else RateControl(values[index + 1])
 
 
-def _shared_spatial_error(student, teacher, epsilon):
+def _validate_spatial_features(student, teacher, epsilon):
     if (student.ndim != 4 or student.shape != teacher.shape
             or any(size == 0 for size in student.shape)):
         raise ValueError("endpoint features must have matching, nonempty [B,C,H,W] shapes")
@@ -45,6 +61,10 @@ def _shared_spatial_error(student, teacher, epsilon):
         raise ValueError("endpoint features must be on the same device")
     if not math.isfinite(float(epsilon)) or epsilon <= 0:
         raise ValueError("spatial normalization epsilon must be positive and finite")
+
+
+def _shared_spatial_error(student, teacher, epsilon):
+    _validate_spatial_features(student, teacher, epsilon)
     with torch.autocast(device_type=student.device.type, enabled=False):
         value, target = student.float(), teacher.detach().float()
         # Both features use the SAME student statistics. The shared mean
@@ -56,6 +76,30 @@ def _shared_spatial_error(student, teacher, epsilon):
         variance = (reference - mean).square().mean(dim=(-2, -1), keepdim=True)
         std = torch.sqrt(variance + epsilon)
         return (value - target).abs() / std, std
+
+
+def _independent_spatial_error(student, teacher, epsilon):
+    _validate_spatial_features(student, teacher, epsilon)
+    with torch.autocast(device_type=student.device.type, enabled=False):
+        value, target = student.float(), teacher.detach().float()
+        centered = value - value.mean(dim=(-2, -1), keepdim=True)
+        target_centered = target - target.mean(dim=(-2, -1), keepdim=True)
+        # Differentiating the student's own statistics is part of this loss.
+        std = (centered.square().mean(dim=(-2, -1), keepdim=True) + epsilon).sqrt()
+        target_std = (target_centered.square().mean(dim=(-2, -1), keepdim=True) + epsilon).sqrt()
+        return (centered / std - target_centered / target_std).abs(), std, target_std
+
+
+def independent_spatial_l1(student, teacher, epsilon=1e-6):
+    """Compare per-channel spatial patterns with differentiable student moments."""
+    error, _, _ = _independent_spatial_error(student, teacher, epsilon)
+    return error.sum(), error.numel()
+
+
+def endpoint_spatial_l1(student, teacher, settings):
+    function = (independent_spatial_l1 if endpoint_sf_normalization(settings) == "independent_spatial"
+                else shared_spatial_l1)
+    return function(student, teacher, settings.get("epsilon", 1e-6))
 
 
 def shared_spatial_l1(student, teacher, epsilon=1e-6):
@@ -82,6 +126,25 @@ def shared_spatial_diagnostics(student, teacher, epsilon=1e-6):
         "sf_low_variance_fraction": low.float().mean(),
         "sf_low_variance_contribution": (channel_error * low).sum()
         / channel_error.sum().clamp_min(torch.finfo(torch.float32).tiny),
+    }
+
+
+@torch.no_grad()
+def endpoint_spatial_diagnostics(student, teacher, settings):
+    epsilon = settings.get("epsilon", 1e-6)
+    if endpoint_sf_normalization(settings) == "shared_student":
+        return shared_spatial_diagnostics(student, teacher, epsilon)
+    error, std, target_std = _independent_spatial_error(student, teacher, epsilon)
+    low = std <= 10 * math.sqrt(epsilon)
+    channel_error = error.sum(dim=(-2, -1), keepdim=True)
+    return {
+        "sf_std_min": std.min(),
+        "sf_std_median": std.flatten().median(),
+        "sf_low_variance_fraction": low.float().mean(),
+        "sf_low_variance_contribution": (channel_error * low).sum()
+        / channel_error.sum().clamp_min(torch.finfo(torch.float32).tiny),
+        "sf_teacher_std_min": target_std.min(),
+        "sf_teacher_low_variance_fraction": (target_std <= 10 * math.sqrt(epsilon)).float().mean(),
     }
 
 

@@ -3,15 +3,15 @@
 import torch
 import torch.distributed as dist
 
-from .endpoint_self_flow import (TARGETS, adjacent_quality, sf_parameters,
-                                 shared_spatial_diagnostics, shared_spatial_l1)
+from .endpoint_self_flow import (TARGETS, adjacent_quality, endpoint_sf_coefficient, sf_parameters,
+                                 endpoint_spatial_diagnostics, endpoint_spatial_l1)
 from .losses import reconstruction_objective
 from .spatial_training import average_gradients, synchronize_model
 
 
 def endpoint_backward(model, teacher, image, control, image_loss, config, step, rank, world,
                       scaler, amp_dtype, full_precision=False, micro=0):
-    """Backpropagate original RD plus unit-weight endpoint feature SF.
+    """Backpropagate original RD plus weighted endpoint feature SF.
 
     All examples/ranks use the same quality per update. At the highest quality
     every target control is RD-only, including same-rate and clean attribution
@@ -19,8 +19,7 @@ def endpoint_backward(model, teacher, image, control, image_loss, config, step, 
     """
     settings = config["endpoint_self_flow"]
     divisor = config["train"]["accumulation_steps"]
-    if settings.get("coefficient", 1.) != 1.:
-        raise ValueError("endpoint SF uses a fixed coefficient of one")
+    coefficient = endpoint_sf_coefficient(settings)
     target_kind = settings.get("target", "adjacent_ema")
     if target_kind not in TARGETS:
         raise ValueError(f"unknown endpoint SF target: {target_kind}")
@@ -48,23 +47,22 @@ def endpoint_backward(model, teacher, image, control, image_loss, config, step, 
             latent = (result.clean.detach() if target_kind == "clean_latent"
                       else teacher(result.clean, target_control))
             target = model.endpoint_feature(latent)
-        error, local_count = shared_spatial_l1(
-            result.feature, target, settings.get("epsilon", 1e-6))
+        error, local_count = endpoint_spatial_l1(result.feature, target, settings)
         count = torch.tensor(local_count, device=image.device, dtype=torch.int64)
         if world > 1:
             dist.all_reduce(count)
         # The later manual gradient average divides by world. Scaling the
         # local sum here yields the mean over all global images/elements.
         sf = error * world / count.clamp_min(1)
-        diagnostics = shared_spatial_diagnostics(
-            result.feature, target, settings.get("epsilon", 1e-6))
-    loss = main + sf
+        diagnostics = endpoint_spatial_diagnostics(result.feature, target, settings)
+    weighted_sf = coefficient * sf
+    loss = main + weighted_sf
     finite = torch.isfinite(loss.detach()).to(torch.int32)
     if world > 1:
         dist.all_reduce(finite, op=dist.ReduceOp.MIN)
     if bool(finite):
-        allowed = sf_parameters(model) if sf.requires_grad else []
-        additions = torch.autograd.grad(scaler.scale(sf / divisor), allowed,
+        allowed = sf_parameters(model) if weighted_sf.requires_grad else []
+        additions = torch.autograd.grad(scaler.scale(weighted_sf / divisor), allowed,
                                         retain_graph=True, allow_unused=True) if allowed else []
         scaler.scale(main / divisor).backward()
         for parameter, gradient in zip(allowed, additions):
@@ -73,7 +71,8 @@ def endpoint_backward(model, teacher, image, control, image_loss, config, step, 
                     parameter.grad = gradient.detach()
                 else:
                     parameter.grad.add_(gradient.detach())
-    metrics.update(sf=sf.detach(), sf_weight=main.new_tensor(1. if active else 0.),
+    metrics.update(sf=weighted_sf.detach(), sf_raw=sf.detach(),
+                   sf_weight=main.new_tensor(coefficient if active else 0.),
                    sf_active=main.new_tensor(float(active)),
                    teacher_q=main.new_tensor(target_control.value if active else control.value),
                    **diagnostics)

@@ -53,13 +53,13 @@ optimizer:
 image_loss:
   mse_weight: 4.0
   lpips_weight: 1.0
-  dists_weight: 1.0
+  dists_weight: 0.5
 self_flow:
   enabled: false
   mixed_sampling: false
 endpoint_self_flow:
   enabled: false
-  coefficient: 1.0
+  coefficient: 0.2
   epsilon: 0.000001
   decoder_capture_block: 3
   target: adjacent_ema

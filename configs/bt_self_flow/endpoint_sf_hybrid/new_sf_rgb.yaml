@@ -1,0 +1,5 @@
+base: c_d_sf.yaml
+model:
+  train_rgb_head: true
+endpoint_self_flow:
+  normalization: independent_spatial

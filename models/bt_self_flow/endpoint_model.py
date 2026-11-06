@@ -25,12 +25,17 @@ class EndpointAblationCodec(BTCodec):
     """
 
     def __init__(self, *args, endpoint_config, pixel_config=None,
-                 pixel_method=LEGACY_D_METHOD, **kwargs):
+                 pixel_method=LEGACY_D_METHOD, train_rgb_head=False, **kwargs):
         kwargs["representation"] = False
         super().__init__(*args, **kwargs)
         if self.backend != "C" or not self.codec.precision_consistent:
             raise ValueError("endpoint SF requires precision-consistent native C")
         self.endpoint_settings = dict(endpoint_config)
+        if not isinstance(train_rgb_head, bool):
+            raise ValueError("train_rgb_head must be boolean")
+        self.train_rgb_head = train_rgb_head
+        if train_rgb_head:
+            self.rgb_head.requires_grad_(True)
         self.sf_enabled = bool(endpoint_config.get("enabled", False))
         self.d_enabled = pixel_config is not None
         self.hybrid_d = self.d_enabled and pixel_method == HYBRID_D_METHOD
@@ -56,6 +61,12 @@ class EndpointAblationCodec(BTCodec):
                     self.pixel_adapter = PrecisionMuPixelAdapter(
                         int(projection.in_channels), int(sana.config.in_channels), **settings)
         self.decoder_method = pixel_method if self.d_enabled else "native"
+
+    @property
+    def rgb_head(self):
+        vae = self.vae.get_base_model() if hasattr(self.vae, "get_base_model") else self.vae
+        head = vae.decoder.conv_out
+        return head.get_base_layer() if hasattr(head, "get_base_layer") else head
 
     @contextmanager
     def decoder_switches(self, *, d=None):
@@ -135,13 +146,24 @@ class EndpointAblationCodec(BTCodec):
 
     def export_state(self):
         state = super().export_state()
+        if self.train_rgb_head:
+            state["rgb_head"] = self.rgb_head.state_dict()
         if hasattr(self, "pixel_adapter"):
             state["pixel_adapter"] = self.pixel_adapter.state_dict()
         return state
 
     def load_bt_state(self, state, codec_only=False, initialize_conditioner=False,
-                      initialize_pixel_adapter=False):
+                      initialize_pixel_adapter=False, initialize_rgb_head=False):
         if not codec_only:
+            if self.train_rgb_head and "rgb_head" not in state and not initialize_rgb_head:
+                raise ValueError("checkpoint is missing rgb_head; initialize explicitly")
+            if not self.train_rgb_head and "rgb_head" in state:
+                raise ValueError("checkpoint contains a trained RGB head absent from this model")
+            if "rgb_head" in state:
+                expected = self.rgb_head.state_dict()
+                if (set(state["rgb_head"]) != set(expected)
+                        or any(state["rgb_head"][key].shape != value.shape for key, value in expected.items())):
+                    raise ValueError("incompatible RGB head checkpoint")
             if any(name in state for name in ("spatial_projector", "projector")):
                 raise ValueError("endpoint SF cannot load a checkpoint with a feature projector")
             module = getattr(self, "pixel_adapter", None)
@@ -159,5 +181,7 @@ class EndpointAblationCodec(BTCodec):
                                 state["pixel_adapter"][key].cpu(), expected.cpu()):
                             raise ValueError("incompatible mu-QK precision D checkpoint")
         super().load_bt_state(state, codec_only, initialize_conditioner)
+        if not codec_only and "rgb_head" in state:
+            self.rgb_head.load_state_dict(state["rgb_head"], strict=True)
         if not codec_only and hasattr(self, "pixel_adapter") and "pixel_adapter" in state:
             self.pixel_adapter.load_state_dict(state["pixel_adapter"], strict=True)

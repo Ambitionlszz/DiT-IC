@@ -57,7 +57,7 @@ def ablation_configs(seed=903, family="legacy"):
         config["train"]["output"] = str(Path(config["train"]["output"]).parent / f"seed_{seed}" / name)
         d, sf, target = VARIANTS[name]
         settings = config["endpoint_self_flow"]
-        expected = {"enabled": sf, "coefficient": 1., "epsilon": 1e-6,
+        expected = {"enabled": sf, "coefficient": .2, "epsilon": 1e-6,
                     "decoder_capture_block": 3, "target": target}
         if settings != expected or config["decoder"]["method"] != (d_method if d else "native"):
             raise ValueError(f"{name} disagrees with its endpoint ablation contract")

@@ -54,14 +54,16 @@ def validate_endpoint_self_flow(config):
     if "endpoint_self_flow" not in config:
         return
     settings = config["endpoint_self_flow"]
-    allowed = {"enabled", "coefficient", "epsilon", "decoder_capture_block", "target"}
+    allowed = {"enabled", "coefficient", "epsilon", "decoder_capture_block", "target", "normalization"}
     if not isinstance(settings, dict) or set(settings) - allowed:
         raise ValueError("unknown endpoint Self-Flow setting")
     if not isinstance(settings.get("enabled", False), bool):
         raise ValueError("endpoint_self_flow.enabled must be boolean")
-    coefficient = settings.get("coefficient", 1.)
-    if isinstance(coefficient, bool) or coefficient != 1.:
-        raise ValueError("endpoint SF coefficient is fixed at one")
+    from .endpoint_self_flow import endpoint_sf_coefficient, endpoint_sf_normalization
+    endpoint_sf_coefficient(settings)
+    endpoint_sf_normalization(settings)
+    if not isinstance(config["model"].get("train_rgb_head", False), bool):
+        raise ValueError("model.train_rgb_head must be boolean")
     epsilon = settings.get("epsilon", 1e-6)
     if isinstance(epsilon, bool) or not isinstance(epsilon, (int, float)) or not math.isfinite(epsilon) or epsilon <= 0:
         raise ValueError("endpoint spatial normalization epsilon must be positive and finite")
@@ -263,6 +265,7 @@ def make_model(config, device):
             from .endpoint_model import EndpointAblationCodec
             constructor = EndpointAblationCodec
             decoder_options["endpoint_config"] = config["endpoint_self_flow"]
+            decoder_options["train_rgb_head"] = model.get("train_rgb_head", False)
             decoder_options["pixel_config"] = (config["decoder"].get("pixel_adapter", {})
                                                 if method in ENDPOINT_PIXEL_METHODS else None)
             if method in ENDPOINT_PIXEL_METHODS:
@@ -303,6 +306,8 @@ def optimizer_groups(model, config):
     opt = config["optimizer"]
     phase = config["train"]["phase"]
     groups, auxiliary, seen = [], [], set()
+    rgb_parameters = ({id(p) for p in model.rgb_head.parameters()}
+                      if getattr(model, "train_rgb_head", False) else set())
     for name, parameter in model.named_parameters():
         if not parameter.requires_grad:
             continue
@@ -314,9 +319,12 @@ def optimizer_groups(model, config):
         elif name.startswith("pixel_adapter."):
             label, lr = "pixel_adapter", opt["backend_lr"]
         elif name.startswith("vae."):
-            if "lora_" not in name or "decoder." not in name:
+            if id(parameter) in rgb_parameters:
+                label, lr = "rgb_head", opt["vae_lr"]
+            elif "lora_" in name and "decoder." in name:
+                label, lr = "vae", opt["vae_lr"]
+            else:
                 raise ValueError(f"unexpected trainable DC-AE parameter: {name}")
-            label, lr = "vae", opt["vae_lr"]
         else:
             label, lr = "backend", opt["backend_lr"]
         if id(parameter) in seen:
@@ -385,6 +393,27 @@ def optimization_contract(value):
     if not execution:
         value.pop("execution", None)
     return value
+
+
+def validate_resume_contract(previous, current, sf_coefficient=None):
+    """Keep resume strict unless one explicit endpoint-SF weight change is requested."""
+    previous, current = optimization_contract(previous), optimization_contract(current)
+    if sf_coefficient is None:
+        if previous != current:
+            raise ValueError("resume contract, dataset, batch or training settings differ")
+        return None
+    from .endpoint_self_flow import endpoint_sf_coefficient
+    requested = endpoint_sf_coefficient({"coefficient": sf_coefficient})
+    old, new = previous.get("endpoint_self_flow", {}), current.get("endpoint_self_flow", {})
+    if (not old.get("enabled") or not new.get("enabled")
+            or endpoint_sf_coefficient(new) != requested):
+        raise ValueError("explicit SF resume weight must match an enabled endpoint configuration")
+    adjusted = deepcopy(previous)
+    adjusted["endpoint_self_flow"]["coefficient"] = requested
+    if adjusted != current:
+        raise ValueError("explicit SF resume may change only endpoint_self_flow.coefficient")
+    return {"field": "endpoint_self_flow.coefficient",
+            "old": endpoint_sf_coefficient(old), "new": requested}
 
 
 def asset_identity(config):

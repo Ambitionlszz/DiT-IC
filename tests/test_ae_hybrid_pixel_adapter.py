@@ -267,7 +267,8 @@ def test_real_packet_highest_quality_and_fresh_receiver_need_no_sender_or_sf_cap
     torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
 
 
-def test_actual_endpoint_sf_adds_sana_gradients_but_preserves_hybrid_d_rd_gradients():
+@pytest.mark.parametrize("coefficient", [.2, 1.])
+def test_actual_endpoint_sf_adds_sana_gradients_but_preserves_hybrid_d_rd_gradients(coefficient):
     torch.manual_seed(77)
     model = hybrid_endpoint(sf=True, checkpoint_blocks=True).train()
     activate_output(model.pixel_adapter)
@@ -276,6 +277,7 @@ def test_actual_endpoint_sf_adds_sana_gradients_but_preserves_hybrid_d_rd_gradie
     teacher = EndpointEMATeacher(model)
     image, control = torch.randn(1, 3, 256, 256), RateControl(.4)
     config = endpoint_config()
+    config["endpoint_self_flow"]["coefficient"] = coefficient
     image_loss = ImageLoss(lpips_weight=0., dists_weight=0., mse_weight=4.)
     rng = torch.get_rng_state().clone()
     result, _, metrics = endpoint_backward(
@@ -290,6 +292,7 @@ def test_actual_endpoint_sf_adds_sana_gradients_but_preserves_hybrid_d_rd_gradie
         objective=config["objective"], quality=config["quality"])
     rd.backward()
     assert metrics["sf_active"] == 1 and metrics["sf"] > 0
+    assert metrics["sf_weight"].item() == pytest.approx(coefficient)
     assert result.feature.requires_grad
     allowed = {id(parameter) for parameter in sf_parameters(model)}
     changed = []

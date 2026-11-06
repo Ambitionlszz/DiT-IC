@@ -40,6 +40,8 @@ class DeploymentEMA:
                               conditioner=model.quality_conditioner, projector=model.representation_projector)
         if hasattr(model, "pixel_adapter"):
             components["pixel_adapter"] = model.pixel_adapter
+        if getattr(model, "train_rgb_head", False):
+            components["rgb_head"] = model.rgb_head
         if getattr(model, "spatial_projector", None) is not None:
             components["spatial_projector"] = model.spatial_projector
         self.averaged = {(part, name) for part, module in components.items() if module is not None
